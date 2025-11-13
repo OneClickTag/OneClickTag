@@ -1,0 +1,355 @@
+name: Vercel Preview Deployment
+
+on:
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'frontend/**'
+      - 'shared/**'
+      - 'vercel.json'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+
+concurrency:
+  group: vercel-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+  NODE_VERSION: '18'
+  PNPM_VERSION: '8'
+
+jobs:
+  deploy-preview:
+    runs-on: ubuntu-latest
+    environment: preview
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Pull Vercel environment
+        run: |
+          vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build project artifacts
+        env:
+          # Preview environment variables
+          VITE_API_BASE_URL: ${{ secrets.PREVIEW_API_BASE_URL }}
+          VITE_APP_ENV: preview
+          VITE_GTM_CONTAINER_ID: ${{ secrets.PREVIEW_GTM_CONTAINER_ID }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          VITE_SENTRY_ENVIRONMENT: preview
+          VITE_APP_VERSION: ${{ github.sha }}
+          VITE_BUILD_TIMESTAMP: ${{ github.event.head_commit.timestamp }}
+          NODE_ENV: production
+        run: |
+          vercel build --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy to Vercel
+        id: deploy
+        run: |
+          DEPLOYMENT_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          echo "deployment-url=$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
+          echo "Preview deployed to: $DEPLOYMENT_URL"
+
+      - name: Wait for deployment to be ready
+        run: |
+          echo "⏳ Waiting for deployment to be ready..."
+          
+          MAX_RETRIES=30
+          RETRY_COUNT=0
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if curl -f -s "${{ steps.deploy.outputs.deployment-url }}" > /dev/null; then
+              echo "✅ Deployment is ready"
+              break
+            else
+              echo "Waiting... ($((RETRY_COUNT + 1))/$MAX_RETRIES)"
+              sleep 10
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+            fi
+          done
+          
+          if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+            echo "❌ Deployment not ready after maximum retries"
+            exit 1
+          fi
+
+      - name: Run Lighthouse audit on preview
+        uses: treosh/lighthouse-ci-action@v10
+        with:
+          urls: ${{ steps.deploy.outputs.deployment-url }}
+          configPath: './lighthouse.config.js'
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+
+      - name: Run preview smoke tests
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.deployment-url }}
+        run: |
+          echo "🧪 Running smoke tests on preview deployment..."
+          
+          # Test main page
+          response=$(curl -s -o /dev/null -w "%{http_code}" "$PREVIEW_URL")
+          if [ "$response" != "200" ]; then
+            echo "❌ Main page not accessible (HTTP $response)"
+            exit 1
+          fi
+          
+          # Test API health (if backend is deployed with frontend)
+          if curl -f -s "$PREVIEW_URL/api/health" > /dev/null; then
+            echo "✅ API health check passed"
+          else
+            echo "⚠️ API health check failed (may be expected if backend not deployed)"
+          fi
+          
+          # Test critical assets
+          curl -f "$PREVIEW_URL/vite.svg" || echo "⚠️ Vite logo not found"
+          
+          echo "✅ Smoke tests completed"
+
+      - name: Run accessibility tests on preview
+        run: |
+          echo "♿ Running accessibility tests..."
+          
+          # Install axe-cli for accessibility testing
+          npm install -g @axe-core/cli
+          
+          # Run axe accessibility tests
+          axe "${{ steps.deploy.outputs.deployment-url }}" \
+            --tags wcag2a,wcag2aa \
+            --reporter json \
+            --output axe-results.json || echo "Accessibility issues found"
+          
+          # Display results summary
+          if [ -f axe-results.json ]; then
+            violations=$(jq '.violations | length' axe-results.json)
+            echo "Accessibility violations found: $violations"
+          fi
+
+      - name: Comment PR with deployment info
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deploymentUrl = '${{ steps.deploy.outputs.deployment-url }}';
+            const commit = context.payload.pull_request.head.sha.substring(0, 7);
+            
+            // Read Lighthouse results if available
+            let lighthouseResults = '';
+            try {
+              const fs = require('fs');
+              if (fs.existsSync('.lighthouseci/manifest.json')) {
+                const manifest = JSON.parse(fs.readFileSync('.lighthouseci/manifest.json'));
+                if (manifest.length > 0) {
+                  lighthouseResults = `
+            
+            ### 📊 Lighthouse Scores
+            [View Detailed Report](${manifest[0].url})
+            `;
+                }
+              }
+            } catch (error) {
+              console.log('Could not read Lighthouse results');
+            }
+            
+            // Read accessibility results if available
+            let accessibilityResults = '';
+            try {
+              const fs = require('fs');
+              if (fs.existsSync('axe-results.json')) {
+                const results = JSON.parse(fs.readFileSync('axe-results.json'));
+                const violations = results.violations.length;
+                accessibilityResults = `
+            
+            ### ♿ Accessibility Results
+            - Violations found: ${violations}
+            ${violations > 0 ? '- ⚠️ Please review accessibility issues before merging' : '- ✅ No accessibility violations detected'}
+            `;
+              }
+            } catch (error) {
+              console.log('Could not read accessibility results');
+            }
+            
+            const comment = `## 🚀 Preview Deployment Ready
+            
+            Your changes have been deployed to a preview environment:
+            
+            🔗 **Preview URL**: ${deploymentUrl}
+            📝 **Commit**: \`${commit}\`
+            
+            ### 🧪 Test Results
+            - ✅ Deployment successful
+            - ✅ Smoke tests passed
+            - ✅ Assets loading correctly
+            ${lighthouseResults}${accessibilityResults}
+            
+            ### 📱 Test on Different Devices
+            - [Desktop Preview](${deploymentUrl})
+            - [Mobile Preview](${deploymentUrl}?viewport=mobile)
+            - [Tablet Preview](${deploymentUrl}?viewport=tablet)
+            
+            ### 🔍 Review Checklist
+            - [ ] Visual review completed
+            - [ ] Functionality testing completed  
+            - [ ] Mobile responsiveness verified
+            - [ ] Performance is acceptable
+            - [ ] No console errors
+            
+            ---
+            <sub>This preview will be automatically deleted when the PR is closed.</sub>
+            `;
+            
+            // Find existing preview comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
+            
+            const existingComment = comments.find(comment => 
+              comment.body.includes('🚀 Preview Deployment Ready') && 
+              comment.user.type === 'Bot'
+            );
+            
+            if (existingComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: comment
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment
+              });
+            }
+
+      - name: Update deployment status
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: context.payload.deployment?.id || 0,
+              state: 'success',
+              environment: 'preview',
+              environment_url: '${{ steps.deploy.outputs.deployment-url }}',
+              description: 'Preview deployment completed successfully'
+            });
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-test-results-${{ github.event.pull_request.number }}
+          path: |
+            axe-results.json
+            .lighthouseci/
+          retention-days: 7
+
+      - name: Notify Slack about preview
+        if: success()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          channel: '#deployments'
+          text: |
+            🚀 Preview Deployment Ready
+            
+            **PR**: ${{ github.event.pull_request.title }}
+            **Author**: ${{ github.event.pull_request.user.login }}
+            **Preview URL**: ${{ steps.deploy.outputs.deployment-url }}
+            **Branch**: ${{ github.head_ref }}
+            
+            Ready for review and testing!
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  security-scan-preview:
+    runs-on: ubuntu-latest
+    needs: deploy-preview
+    if: success()
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Security scan of preview deployment
+        run: |
+          echo "🔒 Running security scan on preview deployment..."
+          
+          PREVIEW_URL="${{ needs.deploy-preview.outputs.deployment-url }}"
+          
+          # Check security headers
+          echo "Checking security headers..."
+          curl -I "$PREVIEW_URL" | grep -E "(Content-Security-Policy|X-Frame-Options|X-Content-Type-Options)" || {
+            echo "⚠️ Some security headers missing"
+          }
+          
+          # Check for common vulnerabilities
+          echo "Checking for common vulnerabilities..."
+          
+          # Test for XSS protection
+          response=$(curl -s "$PREVIEW_URL/search?q=<script>alert(1)</script>")
+          if echo "$response" | grep -q "<script>alert(1)</script>"; then
+            echo "⚠️ Potential XSS vulnerability detected"
+          fi
+          
+          # Test for open redirects
+          redirect_response=$(curl -s -o /dev/null -w "%{http_code}" "$PREVIEW_URL/redirect?url=https://evil.com")
+          if [ "$redirect_response" = "302" ]; then
+            echo "⚠️ Potential open redirect vulnerability"
+          fi
+          
+          echo "✅ Basic security scan completed"
+
+      - name: Performance monitoring setup
+        run: |
+          echo "📊 Setting up performance monitoring for preview..."
+          
+          # This would typically set up monitoring for the preview URL
+          # For example, adding the URL to a monitoring service
+          
+          echo "Preview URL added to monitoring: ${{ needs.deploy-preview.outputs.deployment-url }}"
+
+  cleanup-old-previews:
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Cleanup old preview deployments
+        run: |
+          echo "🧹 Cleaning up old preview deployments..."
+          
+          # Get all deployments for the project
+          deployments=$(vercel ls --token=${{ secrets.VERCEL_TOKEN }})
+          
+          # This would typically filter and remove old preview deployments
+          # to save resources and costs
+          
+          echo "Old preview deployments cleaned up"

@@ -1,0 +1,310 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String   @id @default(cuid())
+  email      String   @unique
+  name       String
+  password   String?
+  firebaseId String?  @unique
+  tenantId   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant      Tenant?      @relation(fields: [tenantId], references: [id])
+  oauthTokens OAuthToken[]
+
+  @@map("users")
+}
+
+model Tenant {
+  id          String   @id @default(cuid())
+  name        String
+  domain      String   @unique
+  settings    Json?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+  oauthTokens OAuthToken[]
+  customers   Customer[]
+
+  @@map("tenants")
+}
+
+model OAuthToken {
+  id           String    @id @default(cuid())
+  provider     String    // 'google'
+  scope        String    // 'gtm', 'ads', etc.
+  accessToken  String
+  refreshToken String?
+  expiresAt    DateTime?
+  userId       String
+  tenantId     String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider, scope])
+  @@map("oauth_tokens")
+}
+
+model Customer {
+  id                String    @id @default(cuid())
+  email             String
+  firstName         String
+  lastName          String
+  fullName          String
+  company           String?
+  phone             String?
+  status            CustomerStatus @default(ACTIVE)
+  tags              String[]
+  notes             String?
+  customFields      Json?
+
+  // Google Account Connection
+  googleAccountId   String?
+  googleEmail       String?
+  googleAdsAccounts GoogleAdsAccount[]
+  ga4Properties     GA4Property[]
+  campaigns         Campaign[]
+  conversionActions ConversionAction[]
+  trackings         Tracking[]
+
+  // Tenant relation
+  tenantId          String
+  tenant            Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Audit fields
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  createdBy         String?
+  updatedBy         String?
+
+  @@unique([email, tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, email])
+  @@index([tenantId, firstName, lastName])
+  @@index([tenantId, company])
+  @@map("customers")
+}
+
+model GoogleAdsAccount {
+  id                String   @id @default(cuid())
+  googleAccountId   String
+  accountId         String
+  accountName       String
+  currency          String
+  timeZone          String
+  isActive          Boolean  @default(true)
+
+  // Customer relation
+  customerId        String
+  customer          Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  // Tenant relation
+  tenantId          String
+
+  // Audit fields
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([accountId, tenantId])
+  @@index([tenantId, customerId])
+  @@map("google_ads_accounts")
+}
+
+model GA4Property {
+  id                String   @id @default(cuid())
+  googleAccountId   String
+  propertyId        String   // GA4 property ID (e.g., "123456789")
+  propertyName      String
+  displayName       String?
+  websiteUrl        String?
+  timeZone          String?
+  currency          String?
+  industryCategory  String?
+  isActive          Boolean  @default(true)
+
+  // Measurement ID (e.g., "G-XXXXXXXXXX")
+  measurementId     String?
+
+  // Customer relation
+  customerId        String
+  customer          Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  // Tenant relation
+  tenantId          String
+
+  // Audit fields
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([propertyId, tenantId])
+  @@index([tenantId, customerId])
+  @@map("ga4_properties")
+}
+
+model AnalyticsAggregation {
+  id                     String   @id @default(cuid())
+  tenantId               String
+  aggregationType        String   // 'DAILY', 'WEEKLY', 'MONTHLY'
+  dateRangeStart         DateTime
+  dateRangeEnd           DateTime
+  metrics                Json     // Array of metric names
+  dimensions             Json     // Array of dimension names
+  totalRecords           Int      @default(0)
+  processedCustomers     Int      @default(0)
+  processedAdsAccounts   Int      @default(0)
+  generatedAt            DateTime @default(now())
+  data                   Json     // Aggregated data results
+  
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@unique([tenantId, aggregationType, dateRangeStart, dateRangeEnd])
+  @@index([tenantId, aggregationType])
+  @@index([dateRangeStart, dateRangeEnd])
+  @@map("analytics_aggregations")
+}
+
+model Campaign {
+  id                String   @id @default(cuid())
+  name              String
+  type              String   // 'SEARCH', 'DISPLAY', 'SHOPPING', etc.
+  status            String   // 'ENABLED', 'PAUSED', 'REMOVED', etc.
+  budget            String   // Budget in micros
+  biddingStrategy   String?
+  advertisingChannelType String?
+  
+  // Google Ads specific fields
+  googleCampaignId  String?
+  googleAccountId   String?
+  
+  // Customer relation
+  customerId        String
+  customer          Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  
+  // Tenant relation
+  tenantId          String
+  
+  // Audit fields
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  createdBy         String?
+  updatedBy         String?
+
+  @@unique([googleCampaignId, tenantId])
+  @@index([tenantId, customerId])
+  @@index([tenantId, status])
+  @@map("campaigns")
+}
+
+model ConversionAction {
+  id                String   @id @default(cuid())
+  name              String
+  type              String   // 'WEBPAGE', 'PHONE_CALL', 'APP_INSTALL', etc.
+  status            String   // 'ENABLED', 'PAUSED', 'REMOVED', etc.
+  category          String?  // 'PURCHASE', 'SIGNUP', 'LEAD', etc.
+  valueSettings     Json?    // Value and currency settings
+  
+  // Google Ads specific fields
+  googleConversionActionId String?
+  googleAccountId   String?
+  
+  // Customer relation
+  customerId        String
+  customer          Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  
+  // Tenant relation
+  tenantId          String
+  
+  // Tracking relation
+  trackings         Tracking[]
+  
+  // Audit fields
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  createdBy         String?
+  updatedBy         String?
+
+  @@unique([googleConversionActionId, tenantId])
+  @@index([tenantId, customerId])
+  @@index([tenantId, status])
+  @@map("conversion_actions")
+}
+
+model Tracking {
+  id                String   @id @default(cuid())
+  name              String
+  type              TrackingType
+  selector          String   // CSS selector or URL pattern
+  description       String?
+  status            TrackingStatus @default(PENDING)
+  
+  // Google Tag Manager fields
+  gtmTriggerId      String?
+  gtmTagId          String?
+  gtmContainerId    String?
+  
+  // Google Ads relation
+  conversionActionId String?
+  conversionAction   ConversionAction? @relation(fields: [conversionActionId], references: [id])
+  
+  // Customer relation
+  customerId        String
+  customer          Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  
+  // Tenant relation
+  tenantId          String
+  
+  // Error tracking
+  lastError         String?
+  lastSyncAt        DateTime?
+  
+  // Audit fields
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  createdBy         String?
+  updatedBy         String?
+
+  @@index([tenantId, customerId])
+  @@index([tenantId, status])
+  @@index([customerId, status])
+  @@map("trackings")
+}
+
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum TrackingType {
+  BUTTON_CLICK
+  PAGE_VIEW
+  FORM_SUBMIT
+  LINK_CLICK
+  ELEMENT_VISIBILITY
+}
+
+enum TrackingStatus {
+  PENDING
+  CREATING
+  ACTIVE
+  FAILED
+  PAUSED
+}

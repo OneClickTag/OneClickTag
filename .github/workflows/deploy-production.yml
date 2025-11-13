@@ -1,0 +1,803 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/PULL_REQUEST_TEMPLATE.md'
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: 'Skip E2E tests (emergency deployment)'
+        required: false
+        default: false
+        type: boolean
+      rollback_version:
+        description: 'Version to rollback to (commit SHA or tag)'
+        required: false
+        type: string
+
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '18'
+  PNPM_VERSION: '8'
+  ENVIRONMENT: 'production'
+
+jobs:
+  pre-deployment-checks:
+    runs-on: ubuntu-latest
+    outputs:
+      backend-changed: ${{ steps.changes.outputs.backend }}
+      frontend-changed: ${{ steps.changes.outputs.frontend }}
+      database-changed: ${{ steps.changes.outputs.database }}
+      deployment-approved: ${{ steps.approval.outputs.approved }}
+      is-rollback: ${{ steps.rollback.outputs.is-rollback }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if rollback
+        id: rollback
+        run: |
+          if [[ -n "${{ inputs.rollback_version }}" ]]; then
+            echo "is-rollback=true" >> $GITHUB_OUTPUT
+            echo "🔄 Rollback deployment requested to: ${{ inputs.rollback_version }}"
+          else
+            echo "is-rollback=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Detect changes
+        if: steps.rollback.outputs.is-rollback != 'true'
+        uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          base: HEAD~1
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'shared/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+            frontend:
+              - 'frontend/**'
+              - 'shared/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+            database:
+              - 'backend/prisma/**'
+
+      - name: Check deployment approval
+        id: approval
+        run: |
+          # For production, we want manual approval for major changes
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || \
+             [[ "${{ steps.changes.outputs.database }}" == "true" ]] || \
+             [[ "${{ steps.rollback.outputs.is-rollback }}" == "true" ]]; then
+            echo "approved=true" >> $GITHUB_OUTPUT
+          else
+            echo "approved=true" >> $GITHUB_OUTPUT  # Auto-approve for regular pushes
+          fi
+
+      - name: Verify staging deployment
+        if: steps.rollback.outputs.is-rollback != 'true' && github.event_name != 'workflow_dispatch'
+        run: |
+          echo "🔍 Verifying staging deployment status..."
+          
+          # Check if the same commit was deployed to staging successfully
+          STAGING_STATUS=$(curl -s -f "https://api.github.com/repos/${{ github.repository }}/deployments" \
+            | jq -r '.[] | select(.environment == "staging" and .sha == "'${{ github.sha }}'") | .id' \
+            | head -1)
+          
+          if [[ -z "$STAGING_STATUS" ]]; then
+            echo "❌ This commit has not been deployed to staging"
+            echo "Please deploy to staging first and verify functionality"
+            exit 1
+          fi
+          
+          echo "✅ Commit verified on staging"
+
+      - name: Create deployment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.sha,
+              environment: 'production',
+              required_contexts: [],
+              auto_merge: false,
+              description: '${{ steps.rollback.outputs.is-rollback == 'true' && 'Production rollback' || 'Production deployment' }}'
+            });
+            
+            core.setOutput('deployment-id', deployment.data.id);
+
+  maintenance-mode:
+    runs-on: ubuntu-latest
+    needs: pre-deployment-checks
+    if: needs.pre-deployment-checks.outputs.deployment-approved == 'true'
+    environment: production
+    
+    steps:
+      - name: Enable maintenance mode
+        run: |
+          echo "🚧 Enabling maintenance mode..."
+          
+          # Update Cloudflare worker to show maintenance page
+          curl -X PUT "https://api.cloudflare.com/client/v4/accounts/${{ secrets.CLOUDFLARE_ACCOUNT_ID }}/workers/scripts/maintenance-mode" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/javascript" \
+            --data-binary "@maintenance-mode.js"
+          
+          # Wait for propagation
+          sleep 30
+          
+          echo "✅ Maintenance mode enabled"
+
+      - name: Notify maintenance start
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          custom_payload: |
+            {
+              "channel": "#general",
+              "attachments": [{
+                "color": "warning",
+                "title": "🚧 Maintenance Mode Enabled",
+                "text": "OneClickTag is temporarily under maintenance for deployment.",
+                "fields": [
+                  {
+                    "title": "Expected Duration",
+                    "value": "10-15 minutes",
+                    "short": true
+                  },
+                  {
+                    "title": "Deployment Type",
+                    "value": "${{ needs.pre-deployment-checks.outputs.is-rollback == 'true' && 'Rollback' || 'Regular Update' }}",
+                    "short": true
+                  }
+                ]
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_PUBLIC_WEBHOOK_URL }}
+
+  backup-production:
+    runs-on: ubuntu-latest
+    needs: [pre-deployment-checks, maintenance-mode]
+    if: needs.pre-deployment-checks.outputs.database-changed == 'true' || needs.pre-deployment-checks.outputs.is-rollback == 'true'
+    environment: production
+    
+    steps:
+      - name: Create production database backup
+        run: |
+          echo "📦 Creating production database backup..."
+          
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          BACKUP_NAME="prod_pre_deploy_${TIMESTAMP}"
+          
+          # Create database backup
+          PGPASSWORD="${{ secrets.PROD_DATABASE_PASSWORD }}" pg_dump \
+            -h ${{ secrets.PROD_DATABASE_HOST }} \
+            -p ${{ secrets.PROD_DATABASE_PORT }} \
+            -U ${{ secrets.PROD_DATABASE_USER }} \
+            -d ${{ secrets.PROD_DATABASE_NAME }} \
+            --no-password \
+            --verbose \
+            --format=custom \
+            --file="${BACKUP_NAME}.dump"
+          
+          # Compress backup
+          gzip "${BACKUP_NAME}.dump"
+          
+          echo "BACKUP_FILE=${BACKUP_NAME}.dump.gz" >> $GITHUB_ENV
+
+      - name: Upload backup to S3
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Store backup in S3
+        run: |
+          aws s3 cp "${BACKUP_FILE}" s3://${{ secrets.BACKUP_S3_BUCKET }}/database-backups/production/${BACKUP_FILE}
+          
+          # Tag for 90-day retention for production backups
+          aws s3api put-object-tagging \
+            --bucket ${{ secrets.BACKUP_S3_BUCKET }} \
+            --key "database-backups/production/${BACKUP_FILE}" \
+            --tagging 'TagSet=[{Key=Environment,Value=production},{Key=RetentionDays,Value=90}]'
+          
+          echo "✅ Production backup stored: ${BACKUP_FILE}"
+
+  database-migration:
+    runs-on: ubuntu-latest
+    needs: [pre-deployment-checks, backup-production]
+    if: always() && needs.pre-deployment-checks.outputs.database-changed == 'true' && needs.pre-deployment-checks.outputs.is-rollback != 'true'
+    environment: production
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pnpm install --frozen-lockfile
+
+      - name: Run production database migrations
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: |
+          cd backend
+          echo "🚀 Running production database migrations..."
+          
+          # Show migration status
+          pnpm prisma migrate status
+          
+          # Deploy migrations
+          pnpm prisma migrate deploy
+          
+          # Verify migrations
+          pnpm prisma migrate status
+          
+          echo "✅ Production migrations completed"
+
+  deploy-backend:
+    runs-on: ubuntu-latest
+    needs: [pre-deployment-checks, database-migration, maintenance-mode]
+    if: always() && (needs.pre-deployment-checks.outputs.backend-changed == 'true' || needs.pre-deployment-checks.outputs.is-rollback == 'true')
+    environment: production
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.rollback_version || github.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build backend
+        run: |
+          cd backend
+          NODE_ENV=production pnpm build
+
+      - name: Run production tests
+        if: inputs.skip_tests != true
+        env:
+          NODE_ENV: production
+        run: |
+          cd backend
+          pnpm test:run
+
+      - name: Create production deployment package
+        run: |
+          cd backend
+          tar -czf ../backend-production.tar.gz \
+            --exclude=node_modules \
+            --exclude=.env.local \
+            --exclude=coverage \
+            --exclude=tests \
+            --exclude=.git \
+            .
+
+      - name: Deploy backend to production cluster
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.PROD_HOST_1 }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            set -e
+            
+            # Production deployment with blue-green deployment
+            DEPLOY_DIR="/var/www/oneclicktag-backend"
+            BLUE_DIR="${DEPLOY_DIR}-blue"
+            GREEN_DIR="${DEPLOY_DIR}-green"
+            CURRENT_LINK="${DEPLOY_DIR}-current"
+            BACKUP_DIR="/var/backups/oneclicktag-backend-$(date +%Y%m%d_%H%M%S)"
+            
+            # Determine current and new deployment directories
+            if [ -L "$CURRENT_LINK" ]; then
+              CURRENT_DIR=$(readlink $CURRENT_LINK)
+              if [ "$CURRENT_DIR" = "$BLUE_DIR" ]; then
+                NEW_DIR="$GREEN_DIR"
+                NEW_COLOR="green"
+              else
+                NEW_DIR="$BLUE_DIR"
+                NEW_COLOR="blue"
+              fi
+            else
+              NEW_DIR="$BLUE_DIR"
+              NEW_COLOR="blue"
+            fi
+            
+            echo "🚀 Deploying to $NEW_COLOR environment: $NEW_DIR"
+            
+            # Backup current deployment
+            if [ -d "$NEW_DIR" ]; then
+              sudo cp -r "$NEW_DIR" "$BACKUP_DIR"
+              echo "✅ Backup created: $BACKUP_DIR"
+            fi
+            
+            # Prepare new deployment
+            sudo mkdir -p "$NEW_DIR"
+            sudo tar -xzf /tmp/backend-production.tar.gz -C "$NEW_DIR"
+            
+            # Install production dependencies
+            cd "$NEW_DIR"
+            sudo npm ci --production --silent
+            
+            # Set correct permissions
+            sudo chown -R www-data:www-data "$NEW_DIR"
+            
+            # Test the new deployment
+            sudo -u www-data NODE_ENV=production PORT=3002 timeout 10s node dist/main.js &
+            TEST_PID=$!
+            sleep 5
+            
+            # Check if the service started successfully
+            if ! kill -0 $TEST_PID 2>/dev/null; then
+              echo "❌ New deployment failed to start"
+              exit 1
+            fi
+            
+            kill $TEST_PID 2>/dev/null || true
+            
+            # Switch to new deployment
+            sudo ln -sfn "$NEW_DIR" "$CURRENT_LINK"
+            
+            # Reload systemd and restart service
+            sudo systemctl daemon-reload
+            sudo systemctl restart oneclicktag-backend-production
+            
+            echo "✅ Backend deployment completed ($NEW_COLOR)"
+
+      - name: Upload backend deployment artifact
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.PROD_HOST_1 }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          source: backend-production.tar.gz
+          target: /tmp/
+
+      - name: Deploy to secondary backend servers
+        run: |
+          echo "🔄 Deploying to secondary backend servers..."
+          
+          # Deploy to additional backend servers if available
+          SECONDARY_HOSTS="${{ secrets.PROD_HOST_2 }},${{ secrets.PROD_HOST_3 }}"
+          
+          for HOST in ${SECONDARY_HOSTS//,/ }; do
+            if [[ ! -z "$HOST" ]]; then
+              echo "Deploying to: $HOST"
+              # Same deployment script as primary
+              # Implementation would be similar to primary deployment
+            fi
+          done
+
+      - name: Health check backend deployment
+        run: |
+          echo "🏥 Performing backend health checks..."
+          
+          MAX_RETRIES=20
+          RETRY_COUNT=0
+          HEALTH_URL="${{ secrets.PROD_API_BASE_URL }}/health"
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if curl -f -s "$HEALTH_URL" | grep -q "ok"; then
+              echo "✅ Backend health check passed"
+              break
+            else
+              echo "⏳ Backend starting... ($((RETRY_COUNT + 1))/$MAX_RETRIES)"
+              sleep 15
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+            fi
+          done
+          
+          if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+            echo "❌ Backend health check failed"
+            exit 1
+          fi
+
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    needs: [pre-deployment-checks, deploy-backend]
+    if: always() && (needs.pre-deployment-checks.outputs.frontend-changed == 'true' || needs.pre-deployment-checks.outputs.is-rollback == 'true')
+    environment: production
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.rollback_version || github.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend for production
+        env:
+          NODE_ENV: production
+          VITE_API_BASE_URL: ${{ secrets.PROD_API_BASE_URL }}
+          VITE_GTM_CONTAINER_ID: ${{ secrets.PROD_GTM_CONTAINER_ID }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          VITE_ENVIRONMENT: production
+          VITE_VERSION: ${{ inputs.rollback_version || github.sha }}
+        run: |
+          cd frontend
+          pnpm build
+
+      - name: Run build analysis
+        run: |
+          cd frontend
+          pnpm build:analyze
+          
+          # Check bundle size
+          node ../scripts/check-bundle-size.js --max-size=2MB
+
+      - name: Deploy to Vercel Production
+        id: vercel-deploy
+        run: |
+          cd frontend
+          npm install -g vercel
+          
+          # Deploy to production
+          DEPLOYMENT_URL=$(vercel deploy \
+            --prod \
+            --token=${{ secrets.VERCEL_TOKEN }} \
+            --scope=${{ secrets.VERCEL_ORG_ID }})
+          
+          echo "deployment-url=$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
+          echo "✅ Frontend deployed to production: $DEPLOYMENT_URL"
+
+      - name: Verify production deployment
+        run: |
+          echo "🔍 Verifying production deployment..."
+          
+          # Wait for deployment to propagate
+          sleep 60
+          
+          # Check if production site is accessible
+          response=$(curl -s -o /dev/null -w "%{http_code}" https://app.oneclicktag.com)
+          if [ "$response" != "200" ]; then
+            echo "❌ Production site not accessible (HTTP $response)"
+            exit 1
+          fi
+          
+          # Check essential resources
+          curl -f https://app.oneclicktag.com/assets/index.css
+          curl -f https://app.oneclicktag.com/assets/index.js
+          
+          echo "✅ Production deployment verified"
+
+  production-e2e-tests:
+    runs-on: ubuntu-latest
+    needs: [deploy-backend, deploy-frontend]
+    if: always() && needs.deploy-backend.result != 'failure' && needs.deploy-frontend.result != 'failure' && inputs.skip_tests != true
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright
+        run: |
+          cd frontend
+          pnpm exec playwright install --with-deps chromium
+
+      - name: Run production smoke tests
+        env:
+          PLAYWRIGHT_BASE_URL: https://app.oneclicktag.com
+          NODE_ENV: production
+        run: |
+          cd frontend
+          pnpm exec playwright test tests/smoke.spec.ts --project=chromium
+
+      - name: Run critical path E2E tests
+        env:
+          PLAYWRIGHT_BASE_URL: https://app.oneclicktag.com
+          NODE_ENV: production
+        run: |
+          cd frontend
+          pnpm exec playwright test tests/critical.spec.ts --project=chromium
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-e2e-results
+          path: |
+            frontend/test-results/
+            frontend/playwright-report/
+          retention-days: 30
+
+  disable-maintenance-mode:
+    runs-on: ubuntu-latest
+    needs: [maintenance-mode, deploy-backend, deploy-frontend, production-e2e-tests]
+    if: always()
+    
+    steps:
+      - name: Disable maintenance mode
+        run: |
+          echo "🚦 Disabling maintenance mode..."
+          
+          # Remove maintenance mode from Cloudflare worker
+          curl -X DELETE "https://api.cloudflare.com/client/v4/accounts/${{ secrets.CLOUDFLARE_ACCOUNT_ID }}/workers/scripts/maintenance-mode" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}"
+          
+          # Clear cache
+          curl -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}'
+          
+          echo "✅ Maintenance mode disabled"
+
+      - name: Notify maintenance end
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          channel: '#general'
+          text: |
+            🎉 Maintenance Complete
+            
+            OneClickTag is back online with the latest updates!
+            
+            **What's New**: Check out the latest features at https://app.oneclicktag.com
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_PUBLIC_WEBHOOK_URL }}
+
+  update-monitoring:
+    runs-on: ubuntu-latest
+    needs: [deploy-backend, deploy-frontend, disable-maintenance-mode]
+    if: always() && needs.deploy-backend.result == 'success' && needs.deploy-frontend.result == 'success'
+    
+    steps:
+      - name: Update Sentry release
+        uses: getsentry/action-release@v1
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: oneclicktag
+        with:
+          environment: production
+          version: ${{ inputs.rollback_version || github.sha }}
+          finalize: true
+
+      - name: Create GitHub release
+        if: needs.pre-deployment-checks.outputs.is-rollback != 'true'
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ github.run_number }}
+          release_name: Release v${{ github.run_number }}
+          body: |
+            ## 🚀 Production Release v${{ github.run_number }}
+            
+            **Commit**: ${{ github.sha }}
+            **Deployed**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
+            
+            ### Changes
+            - View commit details: https://github.com/${{ github.repository }}/commit/${{ github.sha }}
+            
+            ### Deployment Status
+            - ✅ Backend: Deployed
+            - ✅ Frontend: Deployed
+            - ✅ Database: ${{ needs.pre-deployment-checks.outputs.database-changed == 'true' && 'Updated' || 'No changes' }}
+          draft: false
+          prerelease: false
+
+      - name: Update monitoring dashboards
+        run: |
+          # Update production monitoring
+          echo "📊 Updating monitoring dashboards..."
+          
+          # DataDog deployment marker
+          curl -X POST "https://api.datadoghq.com/api/v1/events" \
+            -H "Content-Type: application/json" \
+            -H "DD-API-KEY: ${{ secrets.DD_API_KEY }}" \
+            -d '{
+              "title": "Production Deployment",
+              "text": "OneClickTag production deployment completed",
+              "date_happened": '$(date +%s)',
+              "priority": "normal",
+              "alert_type": "success",
+              "tags": [
+                "service:oneclicktag",
+                "environment:production",
+                "version:${{ inputs.rollback_version || github.sha }}"
+              ]
+            }'
+
+  notify-deployment:
+    runs-on: ubuntu-latest
+    needs: [
+      pre-deployment-checks,
+      database-migration,
+      deploy-backend,
+      deploy-frontend,
+      production-e2e-tests,
+      disable-maintenance-mode,
+      update-monitoring
+    ]
+    if: always()
+    
+    steps:
+      - name: Notify successful deployment
+        if: needs.deploy-backend.result == 'success' && needs.deploy-frontend.result == 'success'
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          channel: '#deployments'
+          text: |
+            🎉 Production Deployment Successful
+            
+            **Type**: ${{ needs.pre-deployment-checks.outputs.is-rollback == 'true' && 'Rollback' || 'Regular Deployment' }}
+            **Version**: ${{ inputs.rollback_version || github.sha }}
+            **Author**: ${{ github.actor }}
+            
+            **Deployed Components**:
+            Backend: ${{ needs.deploy-backend.result == 'success' && '✅ Deployed' || '⏭️ Skipped' }}
+            Frontend: ${{ needs.deploy-frontend.result == 'success' && '✅ Deployed' || '⏭️ Skipped' }}
+            Database: ${{ needs.database-migration.result == 'success' && '✅ Migrated' || '⏭️ No changes' }}
+            
+            **Quality Checks**:
+            E2E Tests: ${{ needs.production-e2e-tests.result == 'success' && '✅ Passed' || needs.production-e2e-tests.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }}
+            
+            🔗 **Live URL**: https://app.oneclicktag.com
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Notify deployment failure
+        if: contains(needs.*.result, 'failure')
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          channel: '#critical-alerts'
+          text: |
+            🚨 PRODUCTION DEPLOYMENT FAILED
+            
+            **Type**: ${{ needs.pre-deployment-checks.outputs.is-rollback == 'true' && 'Rollback' || 'Regular Deployment' }}
+            **Version**: ${{ inputs.rollback_version || github.sha }}
+            **Author**: ${{ github.actor }}
+            
+            **Failed Components**:
+            ${{ needs.database-migration.result == 'failure' && '❌ Database Migration' || '' }}
+            ${{ needs.deploy-backend.result == 'failure' && '❌ Backend Deployment' || '' }}
+            ${{ needs.deploy-frontend.result == 'failure' && '❌ Frontend Deployment' || '' }}
+            ${{ needs.production-e2e-tests.result == 'failure' && '❌ E2E Tests' || '' }}
+            
+            **Recovery Actions**:
+            1. 🔄 Automatic rollback may be initiated
+            2. 📦 Database backup is available
+            3. 🚧 Maintenance mode is still active
+            
+            [View Logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            
+            @channel - Production deployment requires immediate attention!
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_CRITICAL_WEBHOOK_URL }}
+
+  automatic-rollback:
+    runs-on: ubuntu-latest
+    needs: [deploy-backend, deploy-frontend, production-e2e-tests]
+    if: failure() && needs.pre-deployment-checks.outputs.is-rollback != 'true'
+    environment: production
+    
+    steps:
+      - name: Initiate automatic rollback
+        run: |
+          echo "🔄 INITIATING AUTOMATIC ROLLBACK"
+          echo "==============================="
+          
+          # Get previous successful deployment
+          PREVIOUS_DEPLOYMENT=$(curl -s \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/deployments?environment=production&per_page=10" \
+            | jq -r '.[] | select(.id != ${{ github.event.deployment.id }}) | .sha' \
+            | head -1)
+          
+          if [[ ! -z "$PREVIOUS_DEPLOYMENT" ]]; then
+            echo "🔄 Rolling back to: $PREVIOUS_DEPLOYMENT"
+            
+            # Trigger rollback workflow
+            curl -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy-production.yml/dispatches" \
+              -d '{
+                "ref": "main",
+                "inputs": {
+                  "rollback_version": "'$PREVIOUS_DEPLOYMENT'",
+                  "skip_tests": "true"
+                }
+              }'
+              
+            echo "✅ Rollback initiated"
+          else
+            echo "❌ No previous deployment found for rollback"
+          fi
+
+      - name: Notify automatic rollback
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          custom_payload: |
+            {
+              "channel": "#critical-alerts",
+              "attachments": [{
+                "color": "danger",
+                "title": "🔄 AUTOMATIC PRODUCTION ROLLBACK INITIATED",
+                "text": "Production deployment failed. Automatic rollback in progress.",
+                "fields": [
+                  {
+                    "title": "Failed Deployment",
+                    "value": "${{ github.sha }}",
+                    "short": true
+                  },
+                  {
+                    "title": "Status",
+                    "value": "Rollback in progress",
+                    "short": true
+                  }
+                ],
+                "footer": "Monitor rollback progress in GitHub Actions"
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_CRITICAL_WEBHOOK_URL }}

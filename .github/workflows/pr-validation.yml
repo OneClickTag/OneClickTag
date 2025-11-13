@@ -1,0 +1,545 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: pr-validation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '18'
+  PNPM_VERSION: '8'
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.changes.outputs.frontend }}
+      backend: ${{ steps.changes.outputs.backend }}
+      shared: ${{ steps.changes.outputs.shared }}
+      docs: ${{ steps.changes.outputs.docs }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect changes
+        uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+              - 'shared/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+            backend:
+              - 'backend/**'
+              - 'shared/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+            shared:
+              - 'shared/**'
+            docs:
+              - 'docs/**'
+              - '*.md'
+
+  lint-and-format:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.backend == 'true' || needs.changes.outputs.shared == 'true'
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint shared package
+        if: needs.changes.outputs.shared == 'true'
+        run: pnpm --filter shared lint
+
+      - name: Lint frontend
+        if: needs.changes.outputs.frontend == 'true'
+        run: pnpm --filter frontend lint
+
+      - name: Lint backend
+        if: needs.changes.outputs.backend == 'true'
+        run: pnpm --filter backend lint
+
+      - name: Check Prettier formatting
+        run: pnpm prettier --check .
+
+      - name: Check for unused dependencies
+        run: |
+          npx depcheck --ignores="@types/*,eslint-*,prettier,typescript" frontend/
+          npx depcheck --ignores="@types/*,eslint-*,prettier,typescript" backend/
+
+      - name: Security audit
+        run: pnpm audit --audit-level moderate
+
+  type-check:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.backend == 'true' || needs.changes.outputs.shared == 'true'
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check shared
+        if: needs.changes.outputs.shared == 'true'
+        run: pnpm --filter shared type-check
+
+      - name: Type check backend
+        if: needs.changes.outputs.backend == 'true'
+        run: pnpm --filter backend type-check
+
+      - name: Type check frontend
+        if: needs.changes.outputs.frontend == 'true'
+        run: pnpm --filter frontend type-check
+
+  test-backend:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.shared == 'true'
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: oneclicktag_test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: testpass
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: postgresql://test:testpass@localhost:5432/oneclicktag_test
+        run: |
+          pnpm --filter backend db:migrate:deploy
+          pnpm --filter backend db:seed
+
+      - name: Run backend tests
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://test:testpass@localhost:5432/oneclicktag_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test-secret
+          JWT_REFRESH_SECRET: test-refresh-secret
+          GOOGLE_GTM_CLIENT_ID: test-client-id
+          GOOGLE_GTM_CLIENT_SECRET: test-client-secret
+        run: pnpm --filter backend test:coverage
+
+      - name: Upload backend coverage
+        uses: codecov/codecov-action@v3
+        with:
+          flags: backend
+          directory: backend/coverage
+          fail_ci_if_error: false
+
+  test-frontend:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.shared == 'true'
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run frontend tests
+        env:
+          NODE_ENV: test
+        run: pnpm --filter frontend test:coverage
+
+      - name: Upload frontend coverage
+        uses: codecov/codecov-action@v3
+        with:
+          flags: frontend
+          directory: frontend/coverage
+          fail_ci_if_error: false
+
+  build-test:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.backend == 'true' || needs.changes.outputs.shared == 'true'
+    
+    strategy:
+      matrix:
+        package: [backend, frontend]
+        include:
+          - package: backend
+            condition: needs.changes.outputs.backend == 'true' || needs.changes.outputs.shared == 'true'
+          - package: frontend
+            condition: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.shared == 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        if: ${{ matrix.condition }}
+
+      - name: Setup Node.js
+        if: ${{ matrix.condition }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        if: ${{ matrix.condition }}
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup cache
+        if: ${{ matrix.condition }}
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        if: ${{ matrix.condition }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Build ${{ matrix.package }}
+        if: ${{ matrix.condition }}
+        run: pnpm --filter ${{ matrix.package }} build
+
+      - name: Check bundle size (frontend)
+        if: matrix.package == 'frontend' && matrix.condition
+        run: |
+          pnpm --filter frontend build:analyze
+          # Check if bundle size increased significantly
+          node scripts/check-bundle-size.js
+
+  e2e-tests:
+    runs-on: ubuntu-latest
+    needs: [changes, build-test]
+    if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.backend == 'true'
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: oneclicktag_test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: testpass
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter frontend exec playwright install --with-deps
+
+      - name: Setup test database
+        env:
+          DATABASE_URL: postgresql://test:testpass@localhost:5432/oneclicktag_test
+        run: |
+          pnpm --filter backend db:migrate:deploy
+          pnpm --filter backend db:seed
+
+      - name: Build applications
+        run: |
+          pnpm --filter backend build
+          pnpm --filter frontend build
+
+      - name: Start backend
+        env:
+          NODE_ENV: test
+          PORT: 3001
+          DATABASE_URL: postgresql://test:testpass@localhost:5432/oneclicktag_test
+          JWT_SECRET: test-secret
+          CORS_ORIGIN: http://localhost:3000
+        run: |
+          pnpm --filter backend start &
+          npx wait-on http://localhost:3001/health
+
+      - name: Start frontend
+        env:
+          NODE_ENV: test
+          VITE_API_BASE_URL: http://localhost:3001/api
+        run: |
+          pnpm --filter frontend preview &
+          npx wait-on http://localhost:3000
+
+      - name: Run E2E tests
+        run: pnpm --filter frontend e2e
+
+      - name: Upload E2E artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: |
+            frontend/test-results/
+            frontend/playwright-report/
+          retention-days: 7
+
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.backend == 'true'
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Snyk security scan
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  pr-summary:
+    runs-on: ubuntu-latest
+    needs: [lint-and-format, type-check, test-backend, test-frontend, build-test, e2e-tests, security-scan]
+    if: always()
+    
+    steps:
+      - name: PR Summary Comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const jobs = [
+              { name: 'Lint & Format', status: '${{ needs.lint-and-format.result }}' },
+              { name: 'Type Check', status: '${{ needs.type-check.result }}' },
+              { name: 'Backend Tests', status: '${{ needs.test-backend.result }}' },
+              { name: 'Frontend Tests', status: '${{ needs.test-frontend.result }}' },
+              { name: 'Build Test', status: '${{ needs.build-test.result }}' },
+              { name: 'E2E Tests', status: '${{ needs.e2e-tests.result }}' },
+              { name: 'Security Scan', status: '${{ needs.security-scan.result }}' }
+            ];
+
+            const getStatusEmoji = (status) => {
+              switch(status) {
+                case 'success': return '✅';
+                case 'failure': return '❌';
+                case 'cancelled': return '⏭️';
+                case 'skipped': return '⏭️';
+                default: return '⚪';
+              }
+            };
+
+            const summary = jobs.map(job => 
+              `${getStatusEmoji(job.status)} ${job.name}: ${job.status}`
+            ).join('\n');
+
+            const overallStatus = jobs.some(job => job.status === 'failure') ? 'Failed' : 
+                                 jobs.every(job => ['success', 'skipped'].includes(job.status)) ? 'Passed' : 'Pending';
+
+            const comment = `## 🔍 PR Validation Summary
+
+            **Overall Status: ${overallStatus === 'Passed' ? '✅' : overallStatus === 'Failed' ? '❌' : '⏳'} ${overallStatus}**
+
+            ### Job Results:
+            ${summary}
+
+            ### 📊 Coverage Reports
+            Coverage reports are available in the [Codecov dashboard](https://codecov.io/gh/${{ github.repository }}/pull/${{ github.event.number }}).
+
+            ### 🔧 Next Steps
+            ${overallStatus === 'Failed' ? 
+              '- Review failed jobs and fix issues\n- Commit fixes and push to update this PR' :
+              '- All checks passed! This PR is ready for review 🎉'
+            }
+
+            ---
+            <sub>This comment is automatically updated on each push.</sub>
+            `;
+
+            // Find existing comment and update or create new
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
+
+            const existingComment = comments.find(comment => 
+              comment.body.includes('PR Validation Summary') && comment.user.type === 'Bot'
+            );
+
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: comment
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment
+              });
+            }
+
+  notify-slack:
+    runs-on: ubuntu-latest
+    needs: [lint-and-format, type-check, test-backend, test-frontend, build-test, e2e-tests, security-scan]
+    if: failure() && github.event.action != 'opened'
+    
+    steps:
+      - name: Notify Slack on failure
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          channel: '#dev-alerts'
+          text: |
+            🚨 PR Validation Failed
+            
+            **PR**: ${{ github.event.pull_request.title }}
+            **Author**: ${{ github.event.pull_request.user.login }}
+            **Branch**: ${{ github.event.pull_request.head.ref }}
+            
+            **Failed Jobs**:
+            ${{ needs.lint-and-format.result == 'failure' && '- Lint & Format' || '' }}
+            ${{ needs.type-check.result == 'failure' && '- Type Check' || '' }}
+            ${{ needs.test-backend.result == 'failure' && '- Backend Tests' || '' }}
+            ${{ needs.test-frontend.result == 'failure' && '- Frontend Tests' || '' }}
+            ${{ needs.build-test.result == 'failure' && '- Build Test' || '' }}
+            ${{ needs.e2e-tests.result == 'failure' && '- E2E Tests' || '' }}
+            ${{ needs.security-scan.result == 'failure' && '- Security Scan' || '' }}
+            
+            [View PR](${{ github.event.pull_request.html_url }})
+            [View Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

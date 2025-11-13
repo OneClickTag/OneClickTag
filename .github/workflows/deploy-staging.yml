@@ -1,0 +1,576 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: 'Force deployment even if no changes detected'
+        required: false
+        default: false
+        type: boolean
+      run_migrations:
+        description: 'Run database migrations'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: staging-deployment
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '18'
+  PNPM_VERSION: '8'
+  ENVIRONMENT: 'staging'
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend-changed: ${{ steps.changes.outputs.backend }}
+      frontend-changed: ${{ steps.changes.outputs.frontend }}
+      database-changed: ${{ steps.changes.outputs.database }}
+      should-deploy: ${{ steps.should-deploy.outputs.result }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changes
+        uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'shared/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+            frontend:
+              - 'frontend/**'
+              - 'shared/**'
+              - 'package.json' 
+              - 'pnpm-lock.yaml'
+            database:
+              - 'backend/prisma/**'
+
+      - name: Determine if deployment needed
+        id: should-deploy
+        run: |
+          if [[ "${{ inputs.force_deploy }}" == "true" ]] || \
+             [[ "${{ steps.changes.outputs.backend }}" == "true" ]] || \
+             [[ "${{ steps.changes.outputs.frontend }}" == "true" ]] || \
+             [[ "${{ steps.changes.outputs.database }}" == "true" ]]; then
+            echo "result=true" >> $GITHUB_OUTPUT
+          else
+            echo "result=false" >> $GITHUB_OUTPUT
+          fi
+
+  database-migration:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.database-changed == 'true' || inputs.run_migrations == true
+    environment: staging
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pnpm install --frozen-lockfile
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+        run: |
+          cd backend
+          echo "🚀 Running staging database migrations..."
+          pnpm prisma migrate deploy
+          echo "✅ Migrations completed"
+
+      - name: Seed database if needed
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          NODE_ENV: staging
+        run: |
+          cd backend
+          # Only seed if database is empty or on explicit request
+          if [[ "${{ inputs.run_migrations }}" == "true" ]] || ! pnpm prisma db execute --stdin <<< "SELECT 1 FROM \"User\" LIMIT 1;" 2>/dev/null; then
+            echo "🌱 Seeding staging database..."
+            pnpm prisma db seed
+          else
+            echo "⏭️ Database already seeded, skipping"
+          fi
+
+  deploy-backend:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, database-migration]
+    if: always() && needs.detect-changes.outputs.should-deploy == 'true' && (needs.detect-changes.outputs.backend-changed == 'true' || inputs.force_deploy == true)
+    environment: staging
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build backend
+        run: |
+          cd backend
+          pnpm build
+
+      - name: Create deployment package
+        run: |
+          cd backend
+          # Create deployment artifact
+          tar -czf ../backend-staging.tar.gz \
+            --exclude=node_modules \
+            --exclude=.env.local \
+            --exclude=coverage \
+            --exclude=tests \
+            .
+
+      - name: Deploy to staging server
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            # Create deployment directory
+            DEPLOY_DIR="/var/www/oneclicktag-backend-staging"
+            BACKUP_DIR="/var/backups/oneclicktag-backend-$(date +%Y%m%d_%H%M%S)"
+            
+            # Backup current deployment
+            if [ -d "$DEPLOY_DIR" ]; then
+              sudo cp -r "$DEPLOY_DIR" "$BACKUP_DIR"
+              echo "✅ Backup created: $BACKUP_DIR"
+            fi
+            
+            # Stop current service
+            sudo systemctl stop oneclicktag-backend-staging || true
+            
+            # Extract new deployment
+            sudo mkdir -p "$DEPLOY_DIR"
+            sudo tar -xzf /tmp/backend-staging.tar.gz -C "$DEPLOY_DIR"
+            
+            # Install dependencies
+            cd "$DEPLOY_DIR"
+            sudo npm install --production
+            
+            # Set permissions
+            sudo chown -R www-data:www-data "$DEPLOY_DIR"
+            
+            # Start service
+            sudo systemctl start oneclicktag-backend-staging
+            sudo systemctl enable oneclicktag-backend-staging
+            
+            echo "✅ Backend deployment completed"
+
+      - name: Upload deployment artifact
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          source: backend-staging.tar.gz
+          target: /tmp/
+
+      - name: Health check backend
+        run: |
+          echo "🏥 Performing backend health check..."
+          sleep 30  # Wait for service to start
+          
+          # Check if backend is responding
+          MAX_RETRIES=10
+          RETRY_COUNT=0
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if curl -f -s "${{ secrets.STAGING_BACKEND_URL }}/health"; then
+              echo "✅ Backend health check passed"
+              break
+            else
+              echo "⏳ Waiting for backend to start... ($((RETRY_COUNT + 1))/$MAX_RETRIES)"
+              sleep 10
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+            fi
+          done
+          
+          if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+            echo "❌ Backend health check failed"
+            exit 1
+          fi
+
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, deploy-backend]
+    if: always() && needs.detect-changes.outputs.should-deploy == 'true' && (needs.detect-changes.outputs.frontend-changed == 'true' || inputs.force_deploy == true)
+    environment: staging
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend for staging
+        env:
+          NODE_ENV: staging
+          VITE_API_BASE_URL: ${{ secrets.STAGING_API_BASE_URL }}
+          VITE_GTM_CONTAINER_ID: ${{ secrets.STAGING_GTM_CONTAINER_ID }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          VITE_ENVIRONMENT: staging
+          VITE_VERSION: ${{ github.sha }}
+        run: |
+          cd frontend
+          pnpm build
+
+      - name: Deploy to Vercel (Preview)
+        id: vercel-deploy
+        run: |
+          cd frontend
+          npm install -g vercel
+          
+          DEPLOYMENT_URL=$(vercel deploy \
+            --token=${{ secrets.VERCEL_TOKEN }} \
+            --scope=${{ secrets.VERCEL_ORG_ID }})
+          
+          echo "deployment-url=$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
+          echo "✅ Frontend deployed to: $DEPLOYMENT_URL"
+
+      - name: Update staging alias
+        run: |
+          cd frontend
+          vercel alias ${{ steps.vercel-deploy.outputs.deployment-url }} staging.oneclicktag.com \
+            --token=${{ secrets.VERCEL_TOKEN }} \
+            --scope=${{ secrets.VERCEL_ORG_ID }}
+          
+          echo "✅ Staging alias updated"
+
+  run-e2e-tests:
+    runs-on: ubuntu-latest
+    needs: [deploy-backend, deploy-frontend]
+    if: always() && needs.deploy-backend.result != 'failure' && needs.deploy-frontend.result != 'failure'
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: e2e_test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: testpass
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright
+        run: |
+          cd frontend
+          pnpm exec playwright install --with-deps
+
+      - name: Wait for staging deployment
+        run: |
+          echo "⏳ Waiting for staging services to be ready..."
+          
+          # Wait for backend
+          npx wait-on ${{ secrets.STAGING_BACKEND_URL }}/health --timeout 300000
+          
+          # Wait for frontend
+          npx wait-on https://staging.oneclicktag.com --timeout 300000
+          
+          echo "✅ Staging services are ready"
+
+      - name: Run E2E tests against staging
+        env:
+          PLAYWRIGHT_BASE_URL: https://staging.oneclicktag.com
+          API_BASE_URL: ${{ secrets.STAGING_API_BASE_URL }}
+          NODE_ENV: staging
+        run: |
+          cd frontend
+          pnpm e2e --project=chromium
+
+      - name: Upload E2E results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-staging-results
+          path: |
+            frontend/test-results/
+            frontend/playwright-report/
+          retention-days: 7
+
+  performance-audit:
+    runs-on: ubuntu-latest
+    needs: [deploy-frontend]
+    if: always() && needs.deploy-frontend.result == 'success'
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Lighthouse audit
+        uses: treosh/lighthouse-ci-action@v10
+        with:
+          urls: https://staging.oneclicktag.com
+          configPath: './lighthouse.config.js'
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+
+      - name: Check performance budget
+        run: |
+          # Parse Lighthouse results and check against budget
+          node scripts/check-performance-budget.js
+
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: [deploy-backend, deploy-frontend]
+    if: always() && needs.deploy-backend.result != 'failure' && needs.deploy-frontend.result != 'failure'
+    
+    steps:
+      - name: OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.10.0
+        with:
+          target: 'https://staging.oneclicktag.com'
+
+      - name: Security Headers Check
+        run: |
+          curl -I https://staging.oneclicktag.com | grep -E "(Content-Security-Policy|X-Frame-Options|X-Content-Type-Options)" || {
+            echo "⚠️ Security headers missing"
+            exit 1
+          }
+
+  update-monitoring:
+    runs-on: ubuntu-latest
+    needs: [deploy-backend, deploy-frontend, run-e2e-tests]
+    if: always() && needs.deploy-backend.result == 'success' && needs.deploy-frontend.result == 'success'
+    
+    steps:
+      - name: Update Sentry release
+        uses: getsentry/action-release@v1
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: oneclicktag
+        with:
+          environment: staging
+          version: ${{ github.sha }}
+          finalize: true
+
+      - name: Update monitoring dashboards
+        run: |
+          # Update Grafana dashboards with new deployment info
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.GRAFANA_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "dashboard": {
+                "title": "OneClickTag Staging - ${{ github.sha }}",
+                "tags": ["staging", "deployment"],
+                "time": {"from": "now-1h", "to": "now"}
+              }
+            }' \
+            ${{ secrets.GRAFANA_URL }}/api/dashboards/db
+
+      - name: Create deployment marker in DataDog
+        run: |
+          curl -X POST "https://api.datadoghq.com/api/v1/events" \
+            -H "Content-Type: application/json" \
+            -H "DD-API-KEY: ${{ secrets.DD_API_KEY }}" \
+            -d '{
+              "title": "Staging Deployment",
+              "text": "OneClickTag deployed to staging environment",
+              "date_happened": '$(date +%s)',
+              "priority": "low",
+              "alert_type": "info",
+              "tags": [
+                "service:oneclicktag",
+                "environment:staging",
+                "version:${{ github.sha }}"
+              ]
+            }'
+
+  smoke-tests:
+    runs-on: ubuntu-latest
+    needs: [deploy-backend, deploy-frontend, update-monitoring]
+    if: always() && needs.deploy-backend.result == 'success' && needs.deploy-frontend.result == 'success'
+    
+    steps:
+      - name: API smoke tests
+        run: |
+          echo "🔥 Running API smoke tests..."
+          
+          # Test health endpoint
+          curl -f ${{ secrets.STAGING_BACKEND_URL }}/health
+          
+          # Test authentication endpoint
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"email": "invalid@test.com", "password": "invalid"}' \
+            ${{ secrets.STAGING_API_BASE_URL }}/auth/login)
+          
+          if [ "$response" != "401" ]; then
+            echo "❌ Auth endpoint not returning expected error code"
+            exit 1
+          fi
+          
+          echo "✅ API smoke tests passed"
+
+      - name: Frontend smoke tests
+        run: |
+          echo "🔥 Running frontend smoke tests..."
+          
+          # Check if main page loads
+          response=$(curl -s -o /dev/null -w "%{http_code}" https://staging.oneclicktag.com)
+          if [ "$response" != "200" ]; then
+            echo "❌ Frontend not accessible"
+            exit 1
+          fi
+          
+          # Check if essential resources load
+          curl -f https://staging.oneclicktag.com/assets/index.css
+          curl -f https://staging.oneclicktag.com/assets/index.js
+          
+          echo "✅ Frontend smoke tests passed"
+
+  notify-deployment:
+    runs-on: ubuntu-latest
+    needs: [
+      detect-changes, 
+      database-migration, 
+      deploy-backend, 
+      deploy-frontend, 
+      run-e2e-tests, 
+      performance-audit, 
+      security-scan, 
+      smoke-tests
+    ]
+    if: always()
+    
+    steps:
+      - name: Notify successful deployment
+        if: needs.deploy-backend.result == 'success' && needs.deploy-frontend.result == 'success'
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          channel: '#deployments'
+          text: |
+            🚀 Staging Deployment Successful
+            
+            **Branch**: ${{ github.ref_name }}
+            **Commit**: ${{ github.sha }}
+            **Author**: ${{ github.actor }}
+            
+            **Deployed Components**:
+            ${{ needs.deploy-backend.result == 'success' && '✅ Backend' || '⏭️ Backend (skipped)' }}
+            ${{ needs.deploy-frontend.result == 'success' && '✅ Frontend' || '⏭️ Frontend (skipped)' }}
+            ${{ needs.database-migration.result == 'success' && '✅ Database' || '⏭️ Database (skipped)' }}
+            
+            **Quality Checks**:
+            E2E Tests: ${{ needs.run-e2e-tests.result == 'success' && '✅ Passed' || needs.run-e2e-tests.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }}
+            Performance: ${{ needs.performance-audit.result == 'success' && '✅ Passed' || needs.performance-audit.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }}
+            Security: ${{ needs.security-scan.result == 'success' && '✅ Passed' || needs.security-scan.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }}
+            
+            🔗 **Staging URLs**:
+            Frontend: https://staging.oneclicktag.com
+            Backend: ${{ secrets.STAGING_BACKEND_URL }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Notify deployment failure
+        if: needs.deploy-backend.result == 'failure' || needs.deploy-frontend.result == 'failure'
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          channel: '#dev-alerts'
+          text: |
+            🚨 Staging Deployment Failed
+            
+            **Branch**: ${{ github.ref_name }}
+            **Commit**: ${{ github.sha }}
+            **Author**: ${{ github.actor }}
+            
+            **Failed Components**:
+            ${{ needs.database-migration.result == 'failure' && '❌ Database Migration' || '' }}
+            ${{ needs.deploy-backend.result == 'failure' && '❌ Backend Deployment' || '' }}
+            ${{ needs.deploy-frontend.result == 'failure' && '❌ Frontend Deployment' || '' }}
+            
+            [View Logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Update deployment status
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const success = '${{ needs.deploy-backend.result }}' === 'success' && 
+                          '${{ needs.deploy-frontend.result }}' === 'success';
+            
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: context.payload.deployment?.id || 0,
+              state: success ? 'success' : 'failure',
+              environment: 'staging',
+              environment_url: 'https://staging.oneclicktag.com',
+              description: success ? 'Staging deployment completed' : 'Staging deployment failed'
+            });
