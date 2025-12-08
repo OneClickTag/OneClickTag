@@ -91,12 +91,14 @@ aws ecs update-service --cluster ${ENV}-frontend-cluster --service ${ENV}-fronte
 ### Backend Image
 - Base: `node:18-alpine`
 - Build dependencies: Python3, make, g++, openssl-dev
+- Build order: shared package → Prisma generate → backend build
 - Includes: Prisma, NestJS, bcrypt (native module)
 - Entry point: Runs migrations then starts server
 - Port: 80
 
 ### Frontend Image
 - Base: `node:18-alpine` (builder), `nginx:alpine` (runtime)
+- Build order: shared package → Vite build
 - Build: Vite production build (TypeScript checking skipped in Docker)
 - Runtime: nginx with SPA routing, gzip, security headers
 - Port: 80

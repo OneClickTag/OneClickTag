@@ -17,6 +17,10 @@ RUN pnpm install --frozen-lockfile
 # Copy frontend source
 COPY frontend ./frontend
 
+# Build shared package first (frontend depends on it)
+WORKDIR /app/shared
+RUN pnpm build
+
 # Build frontend
 WORKDIR /app/frontend
 # Skip TypeScript type checking in Docker build (run separately in CI)

@@ -20,6 +20,10 @@ RUN pnpm install --frozen-lockfile
 # Copy backend source
 COPY backend ./backend
 
+# Build shared package first (backend depends on it)
+WORKDIR /app/shared
+RUN pnpm build
+
 # Generate Prisma client
 WORKDIR /app/backend
 RUN pnpm db:generate
@@ -47,6 +51,7 @@ COPY backend/package.json ./backend/
 RUN pnpm install --frozen-lockfile --prod
 
 # Copy built application from builder
+COPY --from=builder /app/shared/dist ./shared/dist
 COPY --from=builder /app/backend/dist ./backend/dist
 COPY --from=builder /app/backend/prisma ./backend/prisma
 
