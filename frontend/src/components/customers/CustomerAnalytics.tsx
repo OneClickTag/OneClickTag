@@ -1,26 +1,7 @@
 import React from 'react';
 import {
-  LineChart,
-  Line,
-  AreaChart,
-  Area,
-  PieChart,
-  Pie,
-  Cell,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from 'recharts';
-import { 
- 
-  TrendingUp, 
-  Target, 
-  DollarSign, 
+  TrendingUp,
+  Target,
   Activity,
   Loader2,
   AlertCircle,
@@ -34,19 +15,17 @@ interface CustomerAnalyticsProps {
   customerId: string;
 }
 
-const CHART_COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7c7c', '#8dd1e1'];
-
 export function CustomerAnalytics({ customerId }: CustomerAnalyticsProps) {
   const [dateRange, setDateRange] = React.useState<{ from: string; to: string }>({
     from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days ago
     to: new Date().toISOString().split('T')[0], // today
   });
 
-  const { 
-    data: analytics, 
-    isLoading, 
+  const {
+    data: analytics,
+    isLoading,
     error,
-    refetch 
+    refetch
   } = useTrackingAnalytics(customerId, dateRange);
 
   const handleDateRangeChange = (period: '7d' | '30d' | '90d' | 'custom') => {
@@ -101,9 +80,6 @@ export function CustomerAnalytics({ customerId }: CustomerAnalyticsProps) {
       </div>
     );
   }
-
-  const formatCurrency = (value: number) => `$${value.toFixed(2)}`;
-  const formatPercentage = (value: number) => `${(value * 100).toFixed(1)}%`;
 
   return (
     <div className="space-y-6">
@@ -178,188 +154,62 @@ export function CustomerAnalytics({ customerId }: CustomerAnalyticsProps) {
         <div className="bg-white rounded-lg border p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Conversions</p>
-              <p className="text-2xl font-bold">{analytics.totalConversions.toLocaleString()}</p>
+              <p className="text-sm font-medium text-muted-foreground">Sync Rate</p>
+              <p className="text-2xl font-bold">
+                {analytics.totalTrackings > 0 && analytics.syncHealth
+                  ? Math.round((analytics.syncHealth.synced / analytics.totalTrackings) * 100)
+                  : 0}%
+              </p>
             </div>
             <TrendingUp className="h-8 w-8 text-purple-600" />
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            {formatPercentage(analytics.conversionRate)} rate
+            {analytics.syncHealth?.errors || 0} failed
           </p>
         </div>
 
         <div className="bg-white rounded-lg border p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Total Value</p>
-              <p className="text-2xl font-bold">{formatCurrency(analytics.totalValue)}</p>
+              <p className="text-sm font-medium text-muted-foreground">Failed Trackings</p>
+              <p className="text-2xl font-bold">{analytics.syncHealth?.errors || 0}</p>
             </div>
-            <DollarSign className="h-8 w-8 text-yellow-600" />
+            <AlertCircle className="h-8 w-8 text-red-600" />
           </div>
         </div>
       </div>
 
-      {/* Charts Row 1: Performance Over Time */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Events and Conversions Over Time */}
-        <div className="bg-white rounded-lg border p-6">
-          <h4 className="text-base font-semibold mb-4">Performance Over Time</h4>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={analytics.recentActivity}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey="date" 
-                  tick={{ fontSize: 12 }}
-                  tickFormatter={(value) => new Date(value).toLocaleDateString()}
-                />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip 
-                  labelFormatter={(value) => new Date(value).toLocaleDateString()}
-                  formatter={(value: number, name: string) => [
-                    value.toLocaleString(),
-                    name === 'events' ? 'Events' : name === 'conversions' ? 'Conversions' : 'Value'
-                  ]}
-                />
-                <Legend />
-                <Line 
-                  type="monotone" 
-                  dataKey="events" 
-                  stroke="#8884d8" 
-                  strokeWidth={2}
-                  dot={{ r: 4 }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="conversions" 
-                  stroke="#82ca9d" 
-                  strokeWidth={2}
-                  dot={{ r: 4 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Revenue Over Time */}
-        <div className="bg-white rounded-lg border p-6">
-          <h4 className="text-base font-semibold mb-4">Revenue Over Time</h4>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={analytics.recentActivity}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey="date" 
-                  tick={{ fontSize: 12 }}
-                  tickFormatter={(value) => new Date(value).toLocaleDateString()}
-                />
-                <YAxis 
-                  tick={{ fontSize: 12 }}
-                  tickFormatter={(value) => formatCurrency(value)}
-                />
-                <Tooltip 
-                  labelFormatter={(value) => new Date(value).toLocaleDateString()}
-                  formatter={(value: number) => [formatCurrency(value), 'Revenue']}
-                />
-                <Area 
-                  type="monotone" 
-                  dataKey="value" 
-                  stroke="#ffc658" 
-                  fill="#ffc658" 
-                  fillOpacity={0.3}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
-
-      {/* Charts Row 2: Distribution Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Performance by Type */}
-        <div className="bg-white rounded-lg border p-6">
-          <h4 className="text-base font-semibold mb-4">Performance by Tracking Type</h4>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={analytics.performanceByType}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="type" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip 
-                  formatter={(value: number, name: string) => [
-                    name === 'value' ? formatCurrency(value) : value.toLocaleString(),
-                    name === 'count' ? 'Trackings' : name === 'conversions' ? 'Conversions' : 'Value'
-                  ]}
-                />
-                <Legend />
-                <Bar dataKey="count" fill="#8884d8" />
-                <Bar dataKey="conversions" fill="#82ca9d" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Sync Health Status */}
-        <div className="bg-white rounded-lg border p-6">
-          <h4 className="text-base font-semibold mb-4">Sync Health Status</h4>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={[
-                    { name: 'Synced', value: analytics.syncHealth.synced, color: '#82ca9d' },
-                    { name: 'Pending', value: analytics.syncHealth.pending, color: '#ffc658' },
-                    { name: 'Errors', value: analytics.syncHealth.errors, color: '#ff7c7c' },
-                  ]}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {[0, 1, 2].map((index) => (
-                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value: number) => [value, 'Count']} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
-
-      {/* Summary Table */}
+      {/* Recent Activity */}
       <div className="bg-white rounded-lg border p-6">
-        <h4 className="text-base font-semibold mb-4">Performance Summary by Type</h4>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b">
-                <th className="text-left py-2">Type</th>
-                <th className="text-right py-2">Trackings</th>
-                <th className="text-right py-2">Conversions</th>
-                <th className="text-right py-2">Total Value</th>
-                <th className="text-right py-2">Avg. Value</th>
-              </tr>
-            </thead>
-            <tbody>
-              {analytics.performanceByType.map((item, index) => (
-                <tr key={index} className="border-b last:border-b-0">
-                  <td className="py-2 font-medium capitalize">{item.type}</td>
-                  <td className="text-right py-2">{item.count}</td>
-                  <td className="text-right py-2">{item.conversions.toLocaleString()}</td>
-                  <td className="text-right py-2">{formatCurrency(item.value)}</td>
-                  <td className="text-right py-2">
-                    {item.conversions > 0 ? formatCurrency(item.value / item.conversions) : '$0.00'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <h4 className="text-base font-semibold mb-4">Recent Activity</h4>
+        {analytics.recentActivity && analytics.recentActivity.length > 0 ? (
+          <div className="space-y-2">
+            {analytics.recentActivity.map((activity: any) => (
+              <div key={activity.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
+                <div className="flex-1">
+                  <p className="text-sm font-medium">{activity.name}</p>
+                  <p className="text-xs text-muted-foreground">{activity.type}</p>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <span className={`px-2 py-1 text-xs rounded-full ${
+                    activity.status === 'ACTIVE' ? 'bg-green-100 text-green-800' :
+                    activity.status === 'FAILED' ? 'bg-red-100 text-red-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {activity.status}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(activity.updatedAt).toLocaleDateString()}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">No recent activity</p>
+        )}
       </div>
+
     </div>
   );
 }

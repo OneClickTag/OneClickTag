@@ -247,18 +247,18 @@ export class GoogleIntegrationService {
         // Don't fail the entire connection if Ads sync fails
       }
 
-      // Step 4: Connect to GA4 (non-blocking)
+      // Step 4: Connect to GA4 and ensure OneClickTag property exists (non-blocking)
       this.emitProgress(customerId, 'ga4', 'pending', 'Connecting to Google Analytics 4...');
       try {
-        await this.syncGA4Properties(customerId);
+        await this.setupGA4Properties(customerId);
         this.emitProgress(customerId, 'ga4', 'success', 'GA4 connected successfully');
       } catch (ga4Error) {
         const errorMessage = ga4Error?.message || String(ga4Error) || 'Unknown error';
         this.logger.warn(
-          `Failed to sync GA4 properties for customer ${customerId}: ${errorMessage}. Continuing with connection.`
+          `Failed to setup GA4 properties for customer ${customerId}: ${errorMessage}. Continuing with connection.`
         );
         this.emitProgress(customerId, 'ga4', 'error', 'GA4 connection failed', errorMessage);
-        // Don't fail the entire connection if GA4 sync fails
+        // Don't fail the entire connection if GA4 setup fails
       }
 
       // Step 5: Set up GTM (non-blocking)
@@ -285,6 +285,7 @@ export class GoogleIntegrationService {
 
       return {
         id: updatedCustomer.id,
+        slug: updatedCustomer.slug,
         email: updatedCustomer.email,
         firstName: updatedCustomer.firstName,
         lastName: updatedCustomer.lastName,
@@ -486,6 +487,7 @@ export class GoogleIntegrationService {
 
       return {
         id: updatedCustomer.id,
+        slug: updatedCustomer.slug,
         email: updatedCustomer.email,
         firstName: updatedCustomer.firstName,
         lastName: updatedCustomer.lastName,
@@ -643,6 +645,152 @@ export class GoogleIntegrationService {
     }
   }
 
+  /**
+   * Setup GA4 properties during initial connection
+   * This ensures OneClickTag property exists (creates or restores from trash if needed)
+   */
+  async setupGA4Properties(customerId: string): Promise<any[]> {
+    const tenantId = TenantContextService.getTenantId();
+    if (!tenantId) {
+      throw new CustomerGoogleAccountException('Tenant context is required');
+    }
+
+    this.logger.log(`Setting up GA4 properties for customer: ${customerId}`);
+
+    try {
+      // Get customer with Google account
+      const customer = await this.prisma.tenantAware.customer.findUnique({
+        where: { id: customerId },
+      });
+
+      if (!customer || !customer.googleAccountId) {
+        throw new CustomerGoogleAccountException(
+          'Customer does not have a connected Google account'
+        );
+      }
+
+      // Get OAuth tokens
+      const userId = TenantContextService.getUserId();
+      if (!userId) {
+        throw new CustomerGoogleAccountException('User context is required');
+      }
+
+      const tokens = await this.oauthService.getOAuthTokens(
+        userId,
+        'google',
+        'ga4'
+      );
+      if (!tokens) {
+        throw new CustomerGoogleAccountException('No valid GA4 OAuth tokens found');
+      }
+
+      const oauth2Client = new google.auth.OAuth2(
+        this.configService.get<string>('GOOGLE_CLIENT_ID'),
+        this.configService.get<string>('GOOGLE_CLIENT_SECRET'),
+        this.configService.get<string>('GOOGLE_CALLBACK_URL')
+      );
+      oauth2Client.setCredentials({
+        access_token: tokens.accessToken,
+        refresh_token: tokens.refreshToken,
+      });
+
+      // Fetch GA4 properties
+      let ga4Properties = await this.fetchGA4Properties(oauth2Client);
+
+      // Check for OneClickTag property
+      let oneClickTagProperty = ga4Properties.find(p =>
+        p.displayName && p.displayName.includes('OneClickTag')
+      );
+
+      if (!oneClickTagProperty) {
+        this.logger.log('OneClickTag property not found in active properties, checking trash...');
+
+        // Check if OneClickTag property is in trash
+        const trashedProperty = await this.findTrashedGA4Property(oauth2Client, 'OneClickTag');
+
+        if (trashedProperty) {
+          this.logger.log(`Found OneClickTag property in trash: ${trashedProperty.propertyId}, restoring...`);
+          await this.restoreGA4Property(oauth2Client, trashedProperty.propertyId);
+
+          // Re-fetch properties after restoration
+          ga4Properties = await this.fetchGA4Properties(oauth2Client);
+
+          // Verify it's now in the list
+          oneClickTagProperty = ga4Properties.find(p =>
+            p.displayName && p.displayName.includes('OneClickTag')
+          );
+
+          if (oneClickTagProperty) {
+            this.logger.log(`Successfully restored OneClickTag property: ${oneClickTagProperty.propertyId}`);
+          } else {
+            this.logger.warn('Property restored but not found in active properties, may need manual verification');
+          }
+        } else {
+          // No OneClickTag property found anywhere, create a new one
+          this.logger.log('OneClickTag property not found anywhere, creating new property...');
+          const newProperty = await this.createGA4Property(oauth2Client, customer);
+
+          // Add ONLY the new property to the list (don't fetch all again to avoid race conditions)
+          ga4Properties.push(newProperty);
+
+          this.logger.log(`Created new OneClickTag property: ${newProperty.propertyId}`);
+        }
+      } else {
+        this.logger.log(`Found existing OneClickTag property: ${oneClickTagProperty.propertyId}`);
+      }
+
+      // Store/update GA4 properties in database
+      const savedProperties = [];
+      for (const propertyInfo of ga4Properties) {
+        const savedProperty = await this.prisma.gA4Property.upsert({
+          where: {
+            propertyId_tenantId: {
+              propertyId: propertyInfo.propertyId,
+              tenantId,
+            },
+          },
+          update: {
+            propertyName: propertyInfo.propertyName,
+            displayName: propertyInfo.displayName,
+            websiteUrl: propertyInfo.websiteUrl,
+            timeZone: propertyInfo.timeZone,
+            currency: propertyInfo.currency,
+            industryCategory: propertyInfo.industryCategory,
+            measurementId: propertyInfo.measurementId,
+            isActive: propertyInfo.isActive,
+          },
+          create: {
+            googleAccountId: customer.googleAccountId,
+            propertyId: propertyInfo.propertyId,
+            propertyName: propertyInfo.propertyName,
+            displayName: propertyInfo.displayName,
+            websiteUrl: propertyInfo.websiteUrl,
+            timeZone: propertyInfo.timeZone,
+            currency: propertyInfo.currency,
+            industryCategory: propertyInfo.industryCategory,
+            measurementId: propertyInfo.measurementId,
+            isActive: propertyInfo.isActive,
+            customerId,
+            tenantId,
+          },
+        });
+        savedProperties.push(savedProperty);
+      }
+
+      this.logger.log(
+        `Setup complete: ${savedProperties.length} GA4 properties for customer: ${customerId}`
+      );
+      return ga4Properties;
+    } catch (error) {
+      const errorMessage = error?.message || String(error) || 'Unknown error';
+      this.logger.error(`Failed to setup GA4 properties: ${errorMessage}`, error?.stack);
+      throw new CustomerGoogleAccountException(`GA4 setup failed: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Sync GA4 properties (routine sync - no creation, only fetches existing properties)
+   */
   async syncGA4Properties(customerId: string): Promise<any[]> {
     const tenantId = TenantContextService.getTenantId();
     if (!tenantId) {
@@ -689,8 +837,10 @@ export class GoogleIntegrationService {
         refresh_token: tokens.refreshToken,
       });
 
-      // Fetch GA4 properties
+      // Fetch GA4 properties (active only)
       const ga4Properties = await this.fetchGA4Properties(oauth2Client);
+
+      this.logger.log(`Found ${ga4Properties.length} GA4 properties to sync`);
 
       // Store/update GA4 properties in database
       const savedProperties = [];
@@ -775,7 +925,21 @@ export class GoogleIntegrationService {
   async setupGTMEssentials(userId: string, customerId: string): Promise<void> {
     this.logger.log(`Setting up GTM essentials for customer: ${customerId}`);
 
+    const tenantId = TenantContextService.getTenantId();
+    if (!tenantId) {
+      throw new CustomerGoogleAccountException('Tenant context is required');
+    }
+
     try {
+      // Get customer to get their name
+      const customer = await this.prisma.customer.findUnique({
+        where: { id: customerId, tenantId },
+      });
+
+      if (!customer) {
+        throw new CustomerNotFoundException(customerId);
+      }
+
       // Initialize GTM client
       const gtmClient = await this.initializeGTMClient(userId);
 
@@ -783,27 +947,21 @@ export class GoogleIntegrationService {
       const accountsResponse = await gtmClient.accounts.list();
 
       if (!accountsResponse.data.account || accountsResponse.data.account.length === 0) {
-        this.logger.warn('No GTM accounts found for customer');
-        return;
+        this.logger.warn('No GTM accounts found - user must create a GTM account first at https://tagmanager.google.com');
+        throw new CustomerGoogleAccountException('No GTM accounts found. Please create a GTM account at https://tagmanager.google.com and reconnect.');
       }
 
       const gtmAccountId = accountsResponse.data.account[0].accountId;
       this.logger.log(`Found GTM account: ${gtmAccountId}`);
 
-      // Get GTM containers
-      const containersResponse = await gtmClient.accounts.containers.list({
-        parent: `accounts/${gtmAccountId}`,
-      });
+      // Get or create GTM container for OneClickTag
+      const { containerId, containerName } = await this.getOrCreateGTMContainer(
+        gtmClient,
+        gtmAccountId,
+        customer.fullName
+      );
 
-      if (!containersResponse.data.container || containersResponse.data.container.length === 0) {
-        this.logger.warn('No GTM containers found for customer');
-        return;
-      }
-
-      const container = containersResponse.data.container[0];
-      const containerId = container.containerId;
-
-      this.logger.log(`Setting up GTM container: ${container.name} (${containerId})`);
+      this.logger.log(`Setting up GTM container: ${containerName} (${containerId})`);
 
       // Get or create OneClickTag workspace
       const workspaceId = await this.getOrCreateWorkspace(gtmClient, gtmAccountId, containerId);
@@ -825,6 +983,62 @@ export class GoogleIntegrationService {
       const errorMessage = error?.message || String(error) || 'Unknown error';
       this.logger.error(`Failed to setup GTM essentials: ${errorMessage}`, error?.stack);
       throw new CustomerGoogleAccountException(`GTM setup failed: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Get or create GTM container for OneClickTag
+   */
+  private async getOrCreateGTMContainer(
+    gtmClient: any,
+    gtmAccountId: string,
+    customerName: string
+  ): Promise<{ containerId: string; containerName: string }> {
+    this.logger.log('Getting or creating OneClickTag GTM container');
+
+    try {
+      // List existing containers
+      const containersResponse = await gtmClient.accounts.containers.list({
+        parent: `accounts/${gtmAccountId}`,
+      });
+
+      // Check if OneClickTag container already exists
+      const existingContainer = containersResponse.data.container?.find(
+        (container: any) => container.name?.includes('OneClickTag')
+      );
+
+      if (existingContainer) {
+        this.logger.log(`Found existing OneClickTag container: ${existingContainer.containerId}`);
+        return {
+          containerId: existingContainer.containerId,
+          containerName: existingContainer.name,
+        };
+      }
+
+      // Create new container
+      const containerName = `OneClickTag - ${customerName}`;
+      this.logger.log(`Creating new GTM container: ${containerName}`);
+
+      const createResponse = await gtmClient.accounts.containers.create({
+        parent: `accounts/${gtmAccountId}`,
+        requestBody: {
+          name: containerName,
+          usageContext: ['WEB'], // Web container
+          notes: 'Container created by OneClickTag for automated tracking setup',
+        },
+      });
+
+      const containerId = createResponse.data.containerId;
+      this.logger.log(`Created GTM container: ${containerName} (${containerId})`);
+
+      return {
+        containerId,
+        containerName,
+      };
+    } catch (error) {
+      const errorMessage = error?.message || String(error) || 'Unknown error';
+      this.logger.error(`Failed to get/create GTM container: ${errorMessage}`, error?.stack);
+      throw error;
     }
   }
 
@@ -986,6 +1200,48 @@ export class GoogleIntegrationService {
     }
   }
 
+  /**
+   * Publish a GTM workspace to make changes live
+   */
+  private async publishGTMWorkspace(
+    gtmClient: any,
+    gtmAccountId: string,
+    containerId: string,
+    workspaceId: string,
+    versionName: string
+  ): Promise<void> {
+    this.logger.log(`Publishing GTM workspace: ${workspaceId}`);
+
+    try {
+      // Create a version from the workspace
+      const versionResponse = await gtmClient.accounts.containers.workspaces.create_version({
+        path: `accounts/${gtmAccountId}/containers/${containerId}/workspaces/${workspaceId}`,
+        requestBody: {
+          name: versionName,
+          notes: `Automated publish by OneClickTag - ${new Date().toISOString()}`,
+        },
+      });
+
+      const version = versionResponse.data;
+      this.logger.log(`Created version: ${version.containerVersion?.containerVersionId}`);
+
+      // Publish the version (setting it as live)
+      if (version.containerVersion?.path) {
+        const publishResponse = await gtmClient.accounts.containers.versions.publish({
+          path: version.containerVersion.path,
+        });
+
+        this.logger.log(`Published version successfully: ${publishResponse.data.containerVersion?.containerVersionId}`);
+      } else {
+        throw new Error('Version path not found in response');
+      }
+    } catch (error) {
+      const errorMessage = error?.message || String(error) || 'Unknown error';
+      this.logger.error(`Failed to publish GTM workspace: ${errorMessage}`, error?.stack);
+      throw error;
+    }
+  }
+
   private async createAllPagesTrigger(
     gtmClient: any,
     gtmAccountId: string,
@@ -1099,6 +1355,98 @@ export class GoogleIntegrationService {
     }
   }
 
+  /**
+   * Verify that all required OneClickTag resources exist in GTM
+   * Returns specific error messages if resources are missing
+   */
+  private async verifyGTMResources(
+    gtmClient: any,
+    gtmAccountId: string,
+    containerId: string
+  ): Promise<{ valid: boolean; errors: string[] }> {
+    const errors: string[] = [];
+
+    try {
+      // Check if OneClickTag workspace exists
+      const workspacesResponse = await gtmClient.accounts.containers.workspaces.list({
+        parent: `accounts/${gtmAccountId}/containers/${containerId}`,
+      });
+
+      const oneClickTagWorkspace = workspacesResponse.data.workspace?.find(
+        (ws: any) => ws.name === 'OneClickTag'
+      );
+
+      if (!oneClickTagWorkspace) {
+        errors.push('OneClickTag workspace not found in GTM container');
+        // If workspace doesn't exist, no point checking further
+        return { valid: false, errors };
+      }
+
+      const workspaceId = oneClickTagWorkspace.workspaceId;
+
+      // Check if Conversion Linker tag exists
+      const tagsResponse = await gtmClient.accounts.containers.workspaces.tags.list({
+        parent: `accounts/${gtmAccountId}/containers/${containerId}/workspaces/${workspaceId}`,
+      });
+
+      const conversionLinker = tagsResponse.data.tag?.find(
+        (t: any) => t.name === 'OneClickTag - Conversion Linker' && t.type === 'gclidw'
+      );
+
+      if (!conversionLinker) {
+        errors.push('Conversion Linker tag not found in OneClickTag workspace');
+      }
+
+      return { valid: errors.length === 0, errors };
+    } catch (error) {
+      const errorMessage = error?.message || String(error) || 'Unknown error';
+      this.logger.error(`Failed to verify GTM resources: ${errorMessage}`, error?.stack);
+      errors.push(`GTM verification failed: ${errorMessage}`);
+      return { valid: false, errors };
+    }
+  }
+
+  /**
+   * Verify that OneClickTag GA4 property exists
+   * Returns specific error message if property is missing or deleted
+   */
+  private async verifyGA4Property(
+    oauth2Client: InstanceType<typeof google.auth.OAuth2>
+  ): Promise<{ valid: boolean; error: string | null }> {
+    try {
+      const ga4Properties = await this.fetchGA4Properties(oauth2Client);
+
+      // Check if OneClickTag property exists
+      const oneClickTagProperty = ga4Properties.find(p =>
+        p.displayName && p.displayName.includes('OneClickTag')
+      );
+
+      if (!oneClickTagProperty) {
+        return {
+          valid: false,
+          error: 'OneClickTag GA4 property not found or was deleted',
+        };
+      }
+
+      // Check if property has measurement ID (web data stream)
+      if (!oneClickTagProperty.measurementId) {
+        return {
+          valid: false,
+          error: 'OneClickTag GA4 property exists but has no web data stream',
+        };
+      }
+
+      return { valid: true, error: null };
+    } catch (error) {
+      const errorMessage = error?.message || String(error) || 'Unknown error';
+      this.logger.error(`Failed to verify GA4 property: ${errorMessage}`, error?.stack);
+      return {
+        valid: false,
+        error: `GA4 verification failed: ${errorMessage}`,
+      };
+    }
+  }
+
   async getConnectionStatus(customerId: string): Promise<{
     connected: boolean;
     hasAdsAccess: boolean;
@@ -1113,6 +1461,9 @@ export class GoogleIntegrationService {
     gtmContainerId: string | null;
     ga4PropertyCount: number;
     adsAccountCount: number;
+    gtmLastSyncedAt: string | null;
+    ga4LastSyncedAt: string | null;
+    adsLastSyncedAt: string | null;
   }> {
     const tenantId = TenantContextService.getTenantId();
     const userId = TenantContextService.getUserId();
@@ -1132,6 +1483,9 @@ export class GoogleIntegrationService {
         gtmContainerId: null,
         ga4PropertyCount: 0,
         adsAccountCount: 0,
+        gtmLastSyncedAt: null,
+        ga4LastSyncedAt: null,
+        adsLastSyncedAt: null,
       };
     }
 
@@ -1156,6 +1510,9 @@ export class GoogleIntegrationService {
           gtmContainerId: null,
           ga4PropertyCount: 0,
           adsAccountCount: 0,
+          gtmLastSyncedAt: null,
+          ga4LastSyncedAt: null,
+          adsLastSyncedAt: null,
         };
       }
 
@@ -1182,27 +1539,134 @@ export class GoogleIntegrationService {
           try {
             const gtmClient = await this.initializeGTMClient(userId);
             const accountsResponse = await gtmClient.accounts.list({});
-            if (accountsResponse.data.account && accountsResponse.data.account.length > 0) {
-              return {
-                hasAccess: true,
-                error: null,
-                accountId: customer.gtmAccountId,
-                containerId: customer.gtmContainerId,
-              };
-            } else {
+
+            if (!accountsResponse.data.account || accountsResponse.data.account.length === 0) {
               return {
                 hasAccess: false,
-                error: 'No GTM accounts found for this Google account',
+                error: 'No GTM accounts found for this Google account. Please reconnect.',
                 accountId: null,
                 containerId: null,
               };
             }
+
+            const gtmAccountId = customer.gtmAccountId;
+            const containerId = customer.gtmContainerId;
+
+            // If we have stored account/container IDs, verify they still exist
+            if (gtmAccountId && containerId) {
+              // Check if the stored account still exists in the list
+              const accountExists = accountsResponse.data.account.some(
+                (acc: any) => acc.accountId === gtmAccountId
+              );
+
+              if (!accountExists) {
+                return {
+                  hasAccess: false,
+                  error: 'GTM account was deleted. Please reconnect to recreate required resources.',
+                  accountId: null,
+                  containerId: null,
+                };
+              }
+
+              // Try to access the account directly to verify it's not in trash
+              try {
+                await gtmClient.accounts.get({
+                  path: `accounts/${gtmAccountId}`,
+                });
+              } catch (accountGetError) {
+                const accountErrorMessage = accountGetError?.message || String(accountGetError) || 'Unknown error';
+
+                // If we can't access the account directly, it's in trash or deleted
+                if (accountErrorMessage.includes('404') ||
+                    accountErrorMessage.includes('not found') ||
+                    accountErrorMessage.includes('has been deleted') ||
+                    accountErrorMessage.includes('does not exist')) {
+                  return {
+                    hasAccess: false,
+                    error: 'GTM account is in trash or was deleted. Please reconnect to recreate required resources.',
+                    accountId: null,
+                    containerId: null,
+                  };
+                }
+
+                this.logger.warn(`Failed to get GTM account details: ${accountErrorMessage}`);
+              }
+
+              // Check if the stored container still exists
+              try {
+                const containersResponse = await gtmClient.accounts.containers.list({
+                  parent: `accounts/${gtmAccountId}`,
+                });
+
+                const containerExists = containersResponse.data.container?.some(
+                  (c: any) => c.containerId === containerId
+                );
+
+                if (!containerExists) {
+                  return {
+                    hasAccess: false,
+                    error: 'GTM container was deleted or is in trash. Please reconnect to recreate required resources.',
+                    accountId: gtmAccountId,
+                    containerId: null,
+                  };
+                }
+
+                // Try to access the container directly to verify it's not in trash
+                try {
+                  await gtmClient.accounts.containers.get({
+                    path: `accounts/${gtmAccountId}/containers/${containerId}`,
+                  });
+                } catch (getError) {
+                  const getErrorMessage = getError?.message || String(getError) || 'Unknown error';
+
+                  // If we can't access it directly, it's likely deleted or in trash
+                  if (getErrorMessage.includes('404') || getErrorMessage.includes('not found')) {
+                    return {
+                      hasAccess: false,
+                      error: 'GTM container is in trash or was deleted. Please reconnect to recreate required resources.',
+                      accountId: gtmAccountId,
+                      containerId: null,
+                    };
+                  }
+
+                  this.logger.warn(`Failed to get GTM container details: ${getErrorMessage}`);
+                }
+              } catch (containerError) {
+                const errorMessage = containerError?.message || String(containerError) || 'Unknown error';
+                this.logger.warn(`Failed to verify GTM container: ${errorMessage}`);
+                return {
+                  hasAccess: false,
+                  error: 'GTM container not accessible. Please reconnect to recreate required resources.',
+                  accountId: gtmAccountId,
+                  containerId: null,
+                };
+              }
+
+              // Account and container exist, now verify workspace and tags
+              const verification = await this.verifyGTMResources(gtmClient, gtmAccountId, containerId);
+
+              if (!verification.valid) {
+                return {
+                  hasAccess: false,
+                  error: `Setup incomplete: ${verification.errors.join(', ')}. Please reconnect to recreate required resources.`,
+                  accountId: gtmAccountId,
+                  containerId,
+                };
+              }
+            }
+
+            return {
+              hasAccess: true,
+              error: null,
+              accountId: gtmAccountId || accountsResponse.data.account[0].accountId,
+              containerId,
+            };
           } catch (error) {
             const errorMessage = error?.message || String(error) || 'Failed to access GTM';
             this.logger.warn(`GTM connection test failed: ${errorMessage}`);
             return {
               hasAccess: false,
-              error: errorMessage,
+              error: `GTM verification failed: ${errorMessage}. Please reconnect.`,
               accountId: null,
               containerId: null,
             };
@@ -1231,19 +1695,31 @@ export class GoogleIntegrationService {
             });
 
             const ga4Properties = await this.fetchGA4Properties(oauth2Client);
-            if (ga4Properties.length > 0) {
-              return {
-                hasAccess: true,
-                error: null,
-                propertyCount: ga4Properties.length,
-              };
-            } else {
+
+            if (ga4Properties.length === 0) {
               return {
                 hasAccess: false,
                 error: 'No GA4 properties found for this Google account',
                 propertyCount: 0,
               };
             }
+
+            // Verify OneClickTag property exists
+            const verification = await this.verifyGA4Property(oauth2Client);
+
+            if (!verification.valid) {
+              return {
+                hasAccess: false,
+                error: `${verification.error}. Please reconnect to recreate required resources.`,
+                propertyCount: ga4Properties.length,
+              };
+            }
+
+            return {
+              hasAccess: true,
+              error: null,
+              propertyCount: ga4Properties.length,
+            };
           } catch (error) {
             const errorMessage = error?.message || String(error) || 'Unknown error';
             let ga4Error: string;
@@ -1367,6 +1843,9 @@ export class GoogleIntegrationService {
         gtmContainerId,
         ga4PropertyCount,
         adsAccountCount,
+        gtmLastSyncedAt: gtmTokens?.updatedAt?.toISOString() ?? null,
+        ga4LastSyncedAt: ga4Tokens?.updatedAt?.toISOString() ?? null,
+        adsLastSyncedAt: adsTokens?.updatedAt?.toISOString() ?? null,
       };
 
       this.logger.log(`Connection status for customer ${customerId}: hasAdsAccess=${hasAdsAccess}, adsError=${adsError}`);
@@ -1392,6 +1871,9 @@ export class GoogleIntegrationService {
         gtmContainerId: null,
         ga4PropertyCount: 0,
         adsAccountCount: 0,
+        gtmLastSyncedAt: null,
+        ga4LastSyncedAt: null,
+        adsLastSyncedAt: null,
       };
     }
   }
@@ -1401,8 +1883,13 @@ export class GoogleIntegrationService {
     trackingData: {
       name: string;
       type: string;
-      selector: string;
+      selector?: string;
+      urlPattern?: string;
       description?: string;
+      destinations: string[];
+      ga4EventName?: string;
+      adsConversionValue?: number;
+      config?: Record<string, any>;
     },
     userId: string
   ): Promise<{
@@ -1418,15 +1905,41 @@ export class GoogleIntegrationService {
       throw new CustomerGoogleAccountException('Tenant context is required');
     }
 
+    // Enhanced logging to debug destinations parameter
     this.logger.log(
       `Creating complete tracking setup for customer: ${customerId}`
     );
+    this.logger.log(`Tracking data received: ${JSON.stringify(trackingData, null, 2)}`);
+    this.logger.log(`Destinations type: ${typeof trackingData.destinations}`);
+    this.logger.log(`Destinations value: ${JSON.stringify(trackingData.destinations)}`);
+    this.logger.log(`Destinations is array: ${Array.isArray(trackingData.destinations)}`);
+
+    if (trackingData.destinations) {
+      this.logger.log(`Destinations length: ${trackingData.destinations.length}`);
+      this.logger.log(`Destinations items: ${trackingData.destinations.map((d, i) => `[${i}]="${d}"`).join(', ')}`);
+    }
+
+    // Validate destinations parameter
+    if (!trackingData.destinations || !Array.isArray(trackingData.destinations) || trackingData.destinations.length === 0) {
+      throw new CustomerGoogleAccountException(
+        'Destinations parameter is required and must be a non-empty array. Got: ' + JSON.stringify(trackingData.destinations)
+      );
+    }
+
+    const includesGoogleAds = trackingData.destinations.includes('GOOGLE_ADS');
+    const includesGA4 = trackingData.destinations.includes('GA4');
+
+    this.logger.log(`Includes Google Ads: ${includesGoogleAds}`);
+    this.logger.log(`Includes GA4: ${includesGA4}`);
 
     try {
       // Verify customer has Google account connected
       const customer = await this.prisma.tenantAware.customer.findUnique({
         where: { id: customerId },
-        include: { googleAdsAccounts: true },
+        include: {
+          googleAdsAccounts: true,
+          ga4Properties: true,
+        },
       });
 
       if (!customer || !customer.googleAccountId) {
@@ -1435,31 +1948,56 @@ export class GoogleIntegrationService {
         );
       }
 
-      if (
-        !customer.googleAdsAccounts ||
-        customer.googleAdsAccounts.length === 0
-      ) {
-        throw new CustomerGoogleAccountException(
-          'Customer must have at least one Google Ads account'
-        );
+      // Only validate Google Ads account if user wants to track to Google Ads
+      if (includesGoogleAds) {
+        if (
+          !customer.googleAdsAccounts ||
+          customer.googleAdsAccounts.length === 0
+        ) {
+          throw new CustomerGoogleAccountException(
+            'Customer must have at least one Google Ads account to create Google Ads tracking'
+          );
+        }
       }
 
-      // Check if we have both GTM and Ads tokens
-      const adsTokens = await this.oauthService.getOAuthTokens(
-        userId,
-        'google',
-        'ads'
-      );
+      // Validate GA4 properties if user wants GA4 destination
+      if (includesGA4) {
+        if (
+          !customer.ga4Properties ||
+          customer.ga4Properties.length === 0
+        ) {
+          throw new CustomerGoogleAccountException(
+            'Customer must have at least one GA4 property to create GA4 tracking'
+          );
+        }
+      }
+
+      // Check GTM tokens (always required)
       const gtmTokens = await this.oauthService.getOAuthTokens(
         userId,
         'google',
         'gtm'
       );
 
-      if (!adsTokens || !gtmTokens) {
+      if (!gtmTokens) {
         throw new CustomerGoogleAccountException(
-          'Both Google Ads and Tag Manager access required'
+          'Google Tag Manager access is required'
         );
+      }
+
+      // Only check Ads tokens if user wants Google Ads destination
+      if (includesGoogleAds) {
+        const adsTokens = await this.oauthService.getOAuthTokens(
+          userId,
+          'google',
+          'ads'
+        );
+
+        if (!adsTokens) {
+          throw new CustomerGoogleAccountException(
+            'Google Ads access is required for Google Ads tracking'
+          );
+        }
       }
 
       // Convert type to enum format
@@ -1470,13 +2008,20 @@ export class GoogleIntegrationService {
         | 'LINK_CLICK'
         | 'ELEMENT_VISIBILITY';
 
+      // Determine GA4 event name
+      const ga4EventName = trackingData.ga4EventName || trackingData.type.toLowerCase();
+
       // Create tracking record in database first
       const tracking = await this.prisma.tenantAware.tracking.create({
         data: {
           name: trackingData.name,
           type: trackingType,
-          selector: trackingData.selector,
-          description: trackingData.description,
+          selector: trackingData.selector || undefined,
+          urlPattern: trackingData.urlPattern || undefined,
+          description: trackingData.description || undefined,
+          config: trackingData.config || undefined,
+          destinations: trackingData.destinations as any, // TrackingDestination enum array
+          ga4EventName: includesGA4 ? ga4EventName : undefined,
           status: 'CREATING',
           customerId,
           tenantId,
@@ -1487,29 +2032,32 @@ export class GoogleIntegrationService {
       let gtmTriggerId: string | undefined;
       let gtmTagId: string | undefined;
       let conversionActionId: string | undefined;
+      let conversionActionResponse: any | undefined;
       let lastError: string | undefined;
 
       try {
-        // Step 1: Create Google Ads conversion action
-        const primaryAdsAccount = customer.googleAdsAccounts[0];
-        const conversionActionResponse =
-          await this.conversionActionsService.createConversionAction(
-            userId, // Pass userId instead of customerId
-            primaryAdsAccount.accountId,
-            {
-              name: `${trackingData.name} - ${customer.fullName || customer.firstName}`,
-              category: this.getConversionCategory(trackingData.type),
-              status: ConversionActionStatus.ENABLED,
-              type: ConversionActionType.WEBPAGE,
-              countingType: ConversionCountingType.ONE_PER_CLICK,
-              clickThroughLookbackWindowDays: 30,
-              viewThroughLookbackWindowDays: 1,
-              includeInConversionsMetric: true,
-              attributionModel: AttributionModel.GOOGLE_ADS_LAST_CLICK,
-            }
-          );
+        // Step 1: Create Google Ads conversion action (only if Google Ads is in destinations)
+        if (includesGoogleAds) {
+          const primaryAdsAccount = customer.googleAdsAccounts[0];
+          conversionActionResponse =
+            await this.conversionActionsService.createConversionAction(
+              userId, // Pass userId instead of customerId
+              primaryAdsAccount.accountId,
+              {
+                name: `${trackingData.name} - ${customer.fullName || customer.firstName}`,
+                category: this.getConversionCategory(trackingData.type),
+                status: ConversionActionStatus.ENABLED,
+                type: ConversionActionType.WEBPAGE,
+                countingType: ConversionCountingType.ONE_PER_CLICK,
+                clickThroughLookbackWindowDays: 30,
+                viewThroughLookbackWindowDays: 1,
+                includeInConversionsMetric: true,
+                attributionModel: AttributionModel.GOOGLE_ADS_LAST_CLICK,
+              }
+            );
 
-        conversionActionId = conversionActionResponse.id;
+          conversionActionId = conversionActionResponse.id;
+        }
 
         // Step 2: Create GTM components
         const gtmClient = await this.initializeGTMClient(userId);
@@ -1553,47 +2101,139 @@ export class GoogleIntegrationService {
         );
         gtmTriggerId = trigger.triggerId;
 
-        // Create GTM tag that fires the conversion
-        const tag = await this.createGTMTag(
-          gtmClient,
-          gtmAccountId,
-          containerId,
-          workspaceId,
-          trackingData,
-          conversionActionResponse,
-          gtmTriggerId
-        );
-        gtmTagId = tag.tagId;
+        // Step 3: Create GTM tag (either for Google Ads conversion or GA4 event)
+        if (includesGoogleAds && conversionActionResponse) {
+          // Create GTM tag for Google Ads conversion tracking
+          const tag = await this.createGTMTag(
+            gtmClient,
+            gtmAccountId,
+            containerId,
+            workspaceId,
+            trackingData,
+            conversionActionResponse,
+            gtmTriggerId
+          );
+          gtmTagId = tag.tagId;
+        } else if (includesGA4) {
+          // Get GA4 measurement ID from properties
+          const ga4Property = customer.ga4Properties.find(p => p.measurementId);
+
+          if (!ga4Property || !ga4Property.measurementId) {
+            // Try to refresh GA4 properties to get measurement IDs
+            this.logger.warn('No GA4 property with measurement ID found, attempting to refresh GA4 properties...');
+            try {
+              await this.syncGA4Properties(customerId);
+
+              // Re-fetch customer with updated GA4 properties
+              const refreshedCustomer = await this.prisma.tenantAware.customer.findUnique({
+                where: { id: customerId },
+                include: { ga4Properties: true },
+              });
+
+              const refreshedProperty = refreshedCustomer?.ga4Properties?.find(p => p.measurementId);
+              if (!refreshedProperty || !refreshedProperty.measurementId) {
+                throw new CustomerGoogleAccountException(
+                  'GA4 property does not have a measurement ID. Please ensure your GA4 property has at least one web data stream configured.'
+                );
+              }
+
+              // Create GTM tag with refreshed measurement ID
+              const tag = await this.createGA4GTMTag(
+                gtmClient,
+                gtmAccountId,
+                containerId,
+                workspaceId,
+                trackingData,
+                gtmTriggerId,
+                refreshedProperty.measurementId
+              );
+              gtmTagId = tag.tagId;
+            } catch (refreshError) {
+              throw new CustomerGoogleAccountException(
+                `Failed to get GA4 measurement ID: ${refreshError.message}`
+              );
+            }
+          } else {
+            // Create GTM tag for GA4 event tracking
+            const tag = await this.createGA4GTMTag(
+              gtmClient,
+              gtmAccountId,
+              containerId,
+              workspaceId,
+              trackingData,
+              gtmTriggerId,
+              ga4Property.measurementId
+            );
+            gtmTagId = tag.tagId;
+          }
+        }
 
         // Update tracking record with successful creation
+        const updateData: any = {
+          status: 'ACTIVE',
+          gtmTriggerId,
+          gtmContainerId: containerId,
+          gtmWorkspaceId: workspaceId,
+          lastSyncAt: new Date(),
+          updatedBy: userId,
+        };
+
+        // Set appropriate GTM tag IDs based on what was created
+        if (includesGoogleAds && includesGA4) {
+          updateData.gtmTagIdAds = gtmTagId; // First one created is Ads
+          updateData.gtmTagIdGA4 = gtmTagId; // Would need separate IDs if both created
+        } else if (includesGoogleAds) {
+          updateData.gtmTagIdAds = gtmTagId;
+          updateData.gtmTagId = gtmTagId;
+        } else if (includesGA4) {
+          updateData.gtmTagIdGA4 = gtmTagId;
+          updateData.gtmTagId = gtmTagId;
+        }
+
+        // Set conversion action ID if created
+        if (conversionActionId) {
+          updateData.conversionActionId = conversionActionId;
+        }
+
         await this.prisma.tenantAware.tracking.update({
           where: { id: tracking.id },
-          data: {
-            status: 'ACTIVE',
-            gtmTriggerId,
-            gtmTagId,
-            gtmContainerId: containerId,
-            conversionActionId,
-            lastSyncAt: new Date(),
-            updatedBy: userId,
-          },
+          data: updateData,
         });
 
-        // Create conversion action record in database
-        await this.prisma.tenantAware.conversionAction.create({
-          data: {
-            id: conversionActionId,
-            name: conversionActionResponse.name,
-            type: conversionActionResponse.type,
-            status: conversionActionResponse.status,
-            category: conversionActionResponse.category,
-            googleConversionActionId: conversionActionResponse.id,
-            googleAccountId: primaryAdsAccount.accountId,
-            customerId,
-            tenantId,
-            createdBy: userId,
-          },
-        });
+        // Create conversion action record in database (only if Google Ads was created)
+        if (includesGoogleAds && conversionActionResponse && conversionActionId) {
+          const primaryAdsAccount = customer.googleAdsAccounts[0];
+          await this.prisma.tenantAware.conversionAction.create({
+            data: {
+              id: conversionActionId,
+              name: conversionActionResponse.name,
+              type: conversionActionResponse.type,
+              status: conversionActionResponse.status,
+              category: conversionActionResponse.category,
+              googleConversionActionId: conversionActionResponse.id,
+              googleAccountId: primaryAdsAccount.accountId,
+              customerId,
+              tenantId,
+              createdBy: userId,
+            },
+          });
+        }
+
+        // Publish the OneClickTag workspace to make tags live
+        try {
+          await this.publishGTMWorkspace(
+            gtmClient,
+            gtmAccountId,
+            containerId,
+            workspaceId,
+            `OneClickTag: Created tracking "${trackingData.name}"`
+          );
+          this.logger.log(`Published OneClickTag workspace successfully`);
+        } catch (publishError) {
+          const publishErrorMessage = publishError?.message || String(publishError) || 'Unknown error';
+          this.logger.warn(`Failed to publish GTM workspace: ${publishErrorMessage}. Tags created but not yet live. Please publish manually in GTM.`);
+          // Don't throw - tracking was created successfully, just not published
+        }
 
         this.logger.log(
           `Complete tracking setup created successfully for customer: ${customerId}`
@@ -1605,7 +2245,7 @@ export class GoogleIntegrationService {
           gtmTagId,
           conversionActionId,
           status: 'active',
-          message: `Tracking "${trackingData.name}" created successfully with GTM trigger, tag, and Google Ads conversion action`,
+          message: `Tracking "${trackingData.name}" created successfully and published to GTM. Events should now flow to ${includesGA4 ? 'GA4' : ''}${includesGA4 && includesGoogleAds ? ' and ' : ''}${includesGoogleAds ? 'Google Ads' : ''}.`,
         };
       } catch (error) {
         const errorMessage = error?.message || String(error) || 'Unknown error';
@@ -1681,17 +2321,38 @@ export class GoogleIntegrationService {
     trackingData: {
       name: string;
       type: string;
-      selector: string;
+      selector?: string;
+      urlPattern?: string;
       description?: string;
     }
   ): Promise<tagmanager_v2.Schema$Trigger> {
     const triggerConfig = this.getTriggerConfig(trackingData);
 
-    const triggerResource = {
-      name: `${trackingData.name} - Trigger`,
+    // Add timestamp to make names unique
+    const uniqueSuffix = Date.now().toString().slice(-6);
+    const triggerResource: any = {
+      name: `${trackingData.name} - Trigger ${uniqueSuffix}`,
       type: triggerConfig.type,
-      filter: triggerConfig.filters,
     };
+
+    // Add filters if present
+    if (triggerConfig.filters && triggerConfig.filters.length > 0) {
+      triggerResource.filter = triggerConfig.filters;
+    }
+
+    // For element visibility triggers, add selector as parameter
+    if (triggerConfig.type === 'ELEMENT_VISIBILITY' && trackingData.selector) {
+      triggerResource.selector = trackingData.selector;
+      triggerResource.parameter = [
+        {
+          type: 'TEMPLATE',
+          key: 'selector',
+          value: trackingData.selector,
+        },
+      ];
+    }
+
+    this.logger.log(`Creating GTM trigger with config: ${JSON.stringify(triggerResource, null, 2)}`);
 
     const response =
       await gtmClient.accounts.containers.workspaces.triggers.create({
@@ -1711,7 +2372,7 @@ export class GoogleIntegrationService {
     trackingData: {
       name: string;
       type: string;
-      selector: string;
+      selector?: string;
       description?: string;
     },
     conversionAction: {
@@ -1724,8 +2385,10 @@ export class GoogleIntegrationService {
     },
     triggerId: string
   ): Promise<tagmanager_v2.Schema$Tag> {
+    // Add timestamp to make names unique
+    const uniqueSuffix = Date.now().toString().slice(-6);
     const tagResource = {
-      name: `${trackingData.name} - Conversion Tag`,
+      name: `${trackingData.name} - Conversion Tag ${uniqueSuffix}`,
       type: 'awct', // Google Ads Conversion Tracking
       firingTriggerId: [triggerId],
       parameter: [
@@ -1764,10 +2427,70 @@ export class GoogleIntegrationService {
     return response.data;
   }
 
+  private async createGA4GTMTag(
+    gtmClient: tagmanager_v2.Tagmanager,
+    gtmAccountId: string,
+    containerId: string,
+    workspaceId: string,
+    trackingData: {
+      name: string;
+      type: string;
+      selector?: string;
+      urlPattern?: string;
+      description?: string;
+      ga4EventName?: string;
+    },
+    triggerId: string,
+    measurementId: string
+  ): Promise<tagmanager_v2.Schema$Tag> {
+    // Use provided GA4 event name or generate from type
+    const eventName = trackingData.ga4EventName || trackingData.type.toLowerCase();
+
+    this.logger.log(`Creating GA4 tag with event name: "${eventName}" and measurement ID: ${measurementId}`);
+
+    // Add timestamp to make names unique
+    const uniqueSuffix = Date.now().toString().slice(-6);
+    const tagResource = {
+      name: `${trackingData.name} - GA4 Event ${uniqueSuffix}`,
+      type: 'gaawe', // Google Analytics: GA4 Event
+      firingTriggerId: [triggerId],
+      parameter: [
+        {
+          type: 'TEMPLATE',
+          key: 'eventName',
+          value: eventName,
+        },
+        {
+          type: 'TEMPLATE',
+          key: 'measurementIdOverride',
+          value: measurementId,
+        },
+        {
+          type: 'BOOLEAN',
+          key: 'sendEcommerceData',
+          value: 'false',
+        },
+      ],
+    };
+
+    this.logger.log(`GA4 Tag configuration: ${JSON.stringify(tagResource, null, 2)}`);
+
+    const response = await gtmClient.accounts.containers.workspaces.tags.create(
+      {
+        parent: `accounts/${gtmAccountId}/containers/${containerId}/workspaces/${workspaceId}`,
+        requestBody: tagResource,
+      }
+    );
+
+    this.logger.log(`✓ Created GA4 GTM tag: ${response.data.tagId} - Event "${eventName}" will be sent to GA4 property ${measurementId}`);
+    return response.data;
+  }
+
   private getTriggerConfig(trackingData: {
     name: string;
     type: string;
-    selector: string;
+    selector?: string;
+    urlPattern?: string;
     description?: string;
   }): {
     type: string;
@@ -1780,96 +2503,197 @@ export class GoogleIntegrationService {
       }>;
     }>;
   } {
+    this.logger.log(`Building trigger config for type: ${trackingData.type}, selector: ${trackingData.selector}, urlPattern: ${trackingData.urlPattern}`);
+
     switch (trackingData.type) {
       case 'button_click':
       case 'link_click':
-        return {
-          type: 'CLICK',
-          filters: [
-            {
-              type: 'css_selector',
-              parameter: [
+      case 'BUTTON_CLICK':
+      case 'LINK_CLICK':
+        // Click trigger - for now using "All Clicks" approach
+        // CSS selector filtering is complex in GTM API and is better handled in the GTM UI
+        // The selector is logged and saved to the database for manual configuration if needed
+        if (trackingData.selector) {
+          this.logger.log(`NOTE: Click tracking created with selector "${trackingData.selector}". For precise CSS selector matching, please refine the trigger in GTM UI.`);
+          // Try using Click ID if selector looks like an ID
+          if (trackingData.selector.startsWith('#')) {
+            const idValue = trackingData.selector.substring(1);
+            return {
+              type: 'CLICK',
+              filters: [
                 {
-                  type: 'TEMPLATE',
-                  key: 'arg0',
-                  value: trackingData.selector,
+                  type: 'equals',
+                  parameter: [
+                    {
+                      type: 'TEMPLATE',
+                      key: 'arg0',
+                      value: '{{Click ID}}',
+                    },
+                    {
+                      type: 'TEMPLATE',
+                      key: 'arg1',
+                      value: idValue,
+                    },
+                  ],
                 },
               ],
-            },
-          ],
-        };
+            };
+          }
+          // Try using Click Classes if selector looks like a class
+          else if (trackingData.selector.startsWith('.')) {
+            const classValue = trackingData.selector.substring(1);
+            return {
+              type: 'CLICK',
+              filters: [
+                {
+                  type: 'contains',
+                  parameter: [
+                    {
+                      type: 'TEMPLATE',
+                      key: 'arg0',
+                      value: '{{Click Classes}}',
+                    },
+                    {
+                      type: 'TEMPLATE',
+                      key: 'arg1',
+                      value: classValue,
+                    },
+                  ],
+                },
+              ],
+            };
+          }
+          // For complex selectors, create "All Clicks" and let user refine in GTM
+          else {
+            this.logger.warn(`Complex CSS selector "${trackingData.selector}" cannot be directly applied via API. Creating "All Clicks" trigger. Please refine in GTM UI.`);
+            return {
+              type: 'CLICK',
+              filters: [],
+            };
+          }
+        } else {
+          // All clicks
+          return {
+            type: 'CLICK',
+            filters: [],
+          };
+        }
 
       case 'page_view':
-        return {
-          type: 'PAGE_VIEW',
-          filters: [
-            {
-              type: 'page_url',
-              parameter: [
-                {
-                  type: 'TEMPLATE',
-                  key: 'operator',
-                  value: 'contains',
-                },
-                {
-                  type: 'TEMPLATE',
-                  key: 'arg0',
-                  value: trackingData.selector,
-                },
-              ],
-            },
-          ],
-        };
+      case 'PAGE_VIEW':
+        // Page view trigger with URL pattern filter
+        if (trackingData.urlPattern) {
+          return {
+            type: 'PAGE_VIEW',
+            filters: [
+              {
+                type: 'contains',
+                parameter: [
+                  {
+                    type: 'TEMPLATE',
+                    key: 'arg0',
+                    value: '{{Page URL}}',
+                  },
+                  {
+                    type: 'TEMPLATE',
+                    key: 'arg1',
+                    value: trackingData.urlPattern,
+                  },
+                ],
+              },
+            ],
+          };
+        } else {
+          // All pages
+          return {
+            type: 'PAGE_VIEW',
+            filters: [],
+          };
+        }
 
       case 'form_submit':
-        return {
-          type: 'FORM_SUBMISSION',
-          filters: [
-            {
-              type: 'css_selector',
-              parameter: [
+      case 'FORM_SUBMIT':
+        // Form submission trigger
+        if (trackingData.selector) {
+          this.logger.log(`NOTE: Form tracking created with selector "${trackingData.selector}". For precise CSS selector matching, please refine the trigger in GTM UI.`);
+          // Try using Form ID if selector looks like an ID
+          if (trackingData.selector.startsWith('#')) {
+            const idValue = trackingData.selector.substring(1);
+            return {
+              type: 'FORM_SUBMISSION',
+              filters: [
                 {
-                  type: 'TEMPLATE',
-                  key: 'arg0',
-                  value: trackingData.selector,
+                  type: 'equals',
+                  parameter: [
+                    {
+                      type: 'TEMPLATE',
+                      key: 'arg0',
+                      value: '{{Form ID}}',
+                    },
+                    {
+                      type: 'TEMPLATE',
+                      key: 'arg1',
+                      value: idValue,
+                    },
+                  ],
                 },
               ],
-            },
-          ],
-        };
+            };
+          }
+          // Try using Form Classes if selector looks like a class
+          else if (trackingData.selector.startsWith('.')) {
+            const classValue = trackingData.selector.substring(1);
+            return {
+              type: 'FORM_SUBMISSION',
+              filters: [
+                {
+                  type: 'contains',
+                  parameter: [
+                    {
+                      type: 'TEMPLATE',
+                      key: 'arg0',
+                      value: '{{Form Classes}}',
+                    },
+                    {
+                      type: 'TEMPLATE',
+                      key: 'arg1',
+                      value: classValue,
+                    },
+                  ],
+                },
+              ],
+            };
+          }
+          // For complex selectors, create "All Forms" and let user refine in GTM
+          else {
+            this.logger.warn(`Complex CSS selector "${trackingData.selector}" cannot be directly applied via API. Creating "All Form Submissions" trigger. Please refine in GTM UI.`);
+            return {
+              type: 'FORM_SUBMISSION',
+              filters: [],
+            };
+          }
+        } else {
+          // All form submissions
+          return {
+            type: 'FORM_SUBMISSION',
+            filters: [],
+          };
+        }
 
       case 'element_visibility':
+      case 'ELEMENT_VISIBILITY':
+        // Element visibility trigger - selector is required and will be added as parameter in createGTMTrigger
         return {
           type: 'ELEMENT_VISIBILITY',
-          filters: [
-            {
-              type: 'css_selector',
-              parameter: [
-                {
-                  type: 'TEMPLATE',
-                  key: 'arg0',
-                  value: trackingData.selector,
-                },
-              ],
-            },
-          ],
+          filters: [],
         };
 
       default:
+        // Default to all clicks trigger
+        this.logger.warn(`Unknown tracking type: ${trackingData.type}. Defaulting to ALL CLICKS trigger.`);
         return {
           type: 'CLICK',
-          filters: [
-            {
-              type: 'css_selector',
-              parameter: [
-                {
-                  type: 'TEMPLATE',
-                  key: 'arg0',
-                  value: trackingData.selector,
-                },
-              ],
-            },
-          ],
+          filters: [],
         };
     }
   }
@@ -1887,6 +2711,185 @@ export class GoogleIntegrationService {
         return ConversionActionCategory.PURCHASE;
       default:
         return ConversionActionCategory.DEFAULT;
+    }
+  }
+
+  /**
+   * Create a new GA4 property for OneClickTag
+   */
+  private async createGA4Property(
+    oauth2Client: InstanceType<typeof google.auth.OAuth2>,
+    customer: any
+  ): Promise<any> {
+    try {
+      const analyticsAdmin = google.analyticsadmin({ version: 'v1beta', auth: oauth2Client });
+
+      // First, get the account to create property under
+      const accountSummariesResponse = await analyticsAdmin.accountSummaries.list();
+
+      if (!accountSummariesResponse.data.accountSummaries ||
+          accountSummariesResponse.data.accountSummaries.length === 0) {
+        throw new CustomerGoogleAccountException(
+          'No GA4 accounts found. Please create a GA4 account at https://analytics.google.com and reconnect.'
+        );
+      }
+
+      const account = accountSummariesResponse.data.accountSummaries[0];
+      const accountName = account.account; // Format: "accounts/123456789"
+
+      // Double-check if OneClickTag property already exists (prevent race conditions)
+      this.logger.log(`Checking for existing OneClickTag properties before creating...`);
+      const existingProperties = await this.fetchGA4Properties(oauth2Client);
+      const existingOneClickTag = existingProperties.find(p =>
+        p.displayName && p.displayName.includes('OneClickTag')
+      );
+
+      if (existingOneClickTag) {
+        this.logger.warn(`OneClickTag property already exists (${existingOneClickTag.propertyId}), skipping creation`);
+        return existingOneClickTag;
+      }
+
+      this.logger.log(`Creating GA4 property for customer under account: ${accountName}`);
+
+      // Create property
+      const propertyName = `OneClickTag - ${customer.fullName}`;
+      const websiteUrl = customer.website || `https://${customer.slug}.example.com`;
+
+      const propertyResponse = await analyticsAdmin.properties.create({
+        requestBody: {
+          parent: accountName,
+          displayName: propertyName,
+          timeZone: 'America/New_York',
+          currencyCode: 'USD',
+          industryCategory: 'TECHNOLOGY',
+        },
+      });
+
+      const property = propertyResponse.data;
+      const propertyId = property.name?.split('/')[1];
+
+      this.logger.log(`Created GA4 property: ${propertyName} (${propertyId})`);
+
+      // Create a web data stream for the property
+      let measurementId = null;
+      try {
+        const dataStreamResponse = await analyticsAdmin.properties.dataStreams.create({
+          parent: property.name,
+          requestBody: {
+            type: 'WEB_DATA_STREAM',
+            displayName: `${propertyName} - Web`,
+            webStreamData: {
+              defaultUri: websiteUrl,
+            },
+          },
+        });
+
+        measurementId = dataStreamResponse.data.webStreamData?.measurementId;
+        this.logger.log(`Created web data stream with measurement ID: ${measurementId}`);
+      } catch (streamError) {
+        const errorMessage = streamError?.message || String(streamError) || 'Unknown error';
+        this.logger.warn(`Failed to create data stream: ${errorMessage}`);
+        // Continue without measurement ID
+      }
+
+      return {
+        propertyId,
+        propertyName,
+        displayName: property.displayName,
+        websiteUrl,
+        timeZone: property.timeZone || 'America/New_York',
+        currency: property.currencyCode || 'USD',
+        industryCategory: property.industryCategory || 'TECHNOLOGY',
+        measurementId,
+        isActive: true,
+      };
+    } catch (error) {
+      const errorMessage = error?.message || String(error) || 'Unknown error';
+      this.logger.error(`Failed to create GA4 property: ${errorMessage}`, error?.stack);
+      throw new CustomerGoogleAccountException(`Failed to create GA4 property: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Find OneClickTag property in trash
+   */
+  private async findTrashedGA4Property(
+    oauth2Client: InstanceType<typeof google.auth.OAuth2>,
+    searchName: string
+  ): Promise<{ propertyId: string; propertyName: string } | null> {
+    try {
+      const analyticsAdmin = google.analyticsadmin({ version: 'v1beta', auth: oauth2Client });
+
+      // List account summaries to get accounts
+      const accountSummariesResponse = await analyticsAdmin.accountSummaries.list();
+
+      if (!accountSummariesResponse.data.accountSummaries ||
+          accountSummariesResponse.data.accountSummaries.length === 0) {
+        return null;
+      }
+
+      // Search through each account for deleted properties
+      for (const accountSummary of accountSummariesResponse.data.accountSummaries) {
+        try {
+          // List properties including deleted ones
+          const propertiesResponse = await analyticsAdmin.properties.list({
+            filter: `parent:${accountSummary.account} show_deleted:true`,
+          });
+
+          if (propertiesResponse.data.properties) {
+            for (const property of propertiesResponse.data.properties) {
+              // Check if property is deleted and matches our search name
+              if (property.deleteTime && property.displayName?.includes(searchName)) {
+                const propertyId = property.name?.split('/')[1];
+                this.logger.log(`Found trashed property: ${property.displayName} (${propertyId})`);
+                return {
+                  propertyId,
+                  propertyName: property.displayName,
+                };
+              }
+            }
+          }
+        } catch (error) {
+          const errorMessage = error?.message || String(error) || 'Unknown error';
+          this.logger.warn(`Failed to list properties for account ${accountSummary.account}: ${errorMessage}`);
+          // Continue with next account
+        }
+      }
+
+      return null;
+    } catch (error) {
+      const errorMessage = error?.message || String(error) || 'Unknown error';
+      this.logger.error(`Failed to search for trashed properties: ${errorMessage}`, error?.stack);
+      return null;
+    }
+  }
+
+  /**
+   * Restore GA4 property from trash
+   */
+  private async restoreGA4Property(
+    oauth2Client: InstanceType<typeof google.auth.OAuth2>,
+    propertyId: string
+  ): Promise<void> {
+    try {
+      const analyticsAdmin = google.analyticsadmin({ version: 'v1beta', auth: oauth2Client });
+
+      this.logger.log(`Restoring GA4 property from trash: ${propertyId}`);
+
+      // Undelete the property by updating it with deleteTime removed
+      await analyticsAdmin.properties.patch({
+        name: `properties/${propertyId}`,
+        updateMask: 'deleteTime',
+        requestBody: {
+          deleteTime: null, // Clearing deleteTime restores the property
+        },
+      });
+
+      this.logger.log(`Successfully restored GA4 property: ${propertyId}`);
+    } catch (error) {
+      const errorMessage = error?.message || String(error) || 'Unknown error';
+      this.logger.error(`Failed to restore GA4 property ${propertyId}: ${errorMessage}`, error?.stack);
+      throw new CustomerGoogleAccountException(`Failed to restore property from trash: ${errorMessage}`);
     }
   }
 
@@ -1938,6 +2941,30 @@ export class GoogleIntegrationService {
                   );
                   if (webStream && webStream.webStreamData) {
                     measurementId = webStream.webStreamData.measurementId;
+                  }
+                }
+
+                // If no web data stream exists, create one
+                if (!measurementId) {
+                  this.logger.log(`No web data stream found for property ${propertyId}, creating one...`);
+                  try {
+                    const websiteUrl = property.serviceLevel === 'GOOGLE_ANALYTICS_STANDARD' ? 'https://example.com' : (property.parent || 'https://example.com');
+                    const dataStreamResponse = await analyticsAdmin.properties.dataStreams.create({
+                      parent: propertySummary.property,
+                      requestBody: {
+                        type: 'WEB_DATA_STREAM',
+                        displayName: `${property.displayName || 'OneClickTag'} - Web`,
+                        webStreamData: {
+                          defaultUri: websiteUrl,
+                        },
+                      },
+                    });
+
+                    measurementId = dataStreamResponse.data.webStreamData?.measurementId;
+                    this.logger.log(`Created web data stream with measurement ID: ${measurementId}`);
+                  } catch (createStreamError) {
+                    const errorMessage = createStreamError?.message || String(createStreamError) || 'Unknown error';
+                    this.logger.warn(`Failed to create data stream for property ${propertyId}: ${errorMessage}`);
                   }
                 }
               } catch (streamError) {

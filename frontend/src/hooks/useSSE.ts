@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { SSEMessage, SyncStatus } from '../types/tracking.types';
-import { TRACKINGS_QUERY_KEY, TRACKING_ANALYTICS_QUERY_KEY } from './useTracking';
+import {
+  TRACKINGS_QUERY_KEY,
+  TRACKING_ANALYTICS_QUERY_KEY,
+} from './useTracking';
+import { tokenManager } from '../lib/api/auth/tokenManager';
+import { getBaseURL } from '../lib/api/config';
 
 interface UseSSEOptions {
   customerId?: string;
@@ -20,34 +25,44 @@ export const useSSE = ({
   onOpen,
   onClose,
 }: UseSSEOptions = {}) => {
-  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
+  const [connectionStatus, setConnectionStatus] = useState<
+    'connecting' | 'connected' | 'disconnected' | 'error'
+  >('disconnected');
   const [lastMessage, setLastMessage] = useState<SSEMessage | null>(null);
-  const [syncStatuses, setSyncStatuses] = useState<Record<string, SyncStatus>>({});
+  const [syncStatuses, setSyncStatuses] = useState<Record<string, SyncStatus>>(
+    {}
+  );
   const eventSourceRef = useRef<EventSource | null>(null);
   const queryClient = useQueryClient();
 
   const connect = () => {
-    if (!enabled || !customerId || eventSourceRef.current) return;
+    if (!enabled || eventSourceRef.current) return;
 
-    const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
-    const token = localStorage.getItem('authToken');
-    
+    const token = tokenManager.getAccessToken();
+
     if (!token) {
       console.warn('No auth token found for SSE connection');
       return;
     }
 
-    const url = `${API_BASE_URL}/customers/${customerId}/sse?token=${encodeURIComponent(token)}`;
-    
-    setConnectionStatus('connecting');
-    eventSourceRef.current = new EventSource(url);
+    // Use the correct SSE endpoint: /api/v1/events/stream
+    // EventSource doesn't support custom headers, so we'll need to use a different approach
+    // For now, we'll use the token in the URL or implement a custom SSE client
+    const url = `${getBaseURL()}/v1/events/stream`;
 
-    eventSourceRef.current.onopen = (event) => {
+    setConnectionStatus('connecting');
+
+    // Create EventSource with Authorization header using EventSource polyfill or withCredentials
+    // Since native EventSource doesn't support headers, we pass token via query param
+    const urlWithAuth = `${url}?authorization=${encodeURIComponent(token)}${customerId ? `&customerId=${customerId}` : ''}`;
+    eventSourceRef.current = new EventSource(urlWithAuth);
+
+    eventSourceRef.current.onopen = event => {
       setConnectionStatus('connected');
       onOpen?.(event);
     };
 
-    eventSourceRef.current.onmessage = (event) => {
+    eventSourceRef.current.onmessage = event => {
       try {
         const message: SSEMessage = JSON.parse(event.data);
         setLastMessage(message);
@@ -62,22 +77,22 @@ export const useSSE = ({
               [syncStatus.trackingId]: syncStatus,
             }));
             // Invalidate trackings query to refresh data
-            queryClient.invalidateQueries({ 
-              queryKey: [TRACKINGS_QUERY_KEY, customerId] 
+            queryClient.invalidateQueries({
+              queryKey: [TRACKINGS_QUERY_KEY, customerId],
             });
             break;
 
           case 'tracking_update':
             // Invalidate trackings queries when tracking data changes
-            queryClient.invalidateQueries({ 
-              queryKey: [TRACKINGS_QUERY_KEY, customerId] 
+            queryClient.invalidateQueries({
+              queryKey: [TRACKINGS_QUERY_KEY, customerId],
             });
             break;
 
           case 'analytics_update':
             // Invalidate analytics queries when analytics data changes
-            queryClient.invalidateQueries({ 
-              queryKey: [TRACKING_ANALYTICS_QUERY_KEY, customerId] 
+            queryClient.invalidateQueries({
+              queryKey: [TRACKING_ANALYTICS_QUERY_KEY, customerId],
             });
             break;
         }
@@ -86,10 +101,10 @@ export const useSSE = ({
       }
     };
 
-    eventSourceRef.current.onerror = (event) => {
+    eventSourceRef.current.onerror = event => {
       setConnectionStatus('error');
       onError?.(event);
-      
+
       // Attempt to reconnect after a delay
       setTimeout(() => {
         disconnect();
@@ -97,7 +112,7 @@ export const useSSE = ({
       }, 5000);
     };
 
-    eventSourceRef.current.addEventListener('close', (event) => {
+    eventSourceRef.current.addEventListener('close', event => {
       setConnectionStatus('disconnected');
       onClose?.(event);
     });
@@ -148,12 +163,14 @@ export const useSSE = ({
 
 // Hook specifically for tracking sync status
 export const useTrackingSyncStatus = (customerId: string) => {
-  const [syncStatuses, setSyncStatuses] = useState<Record<string, SyncStatus>>({});
+  const [syncStatuses, setSyncStatuses] = useState<Record<string, SyncStatus>>(
+    {}
+  );
 
   const { connectionStatus, isConnected } = useSSE({
     customerId,
     enabled: !!customerId,
-    onMessage: (message) => {
+    onMessage: message => {
       if (message.type === 'sync_status') {
         const syncStatus = message.data as SyncStatus;
         setSyncStatuses(prev => ({
@@ -168,7 +185,9 @@ export const useTrackingSyncStatus = (customerId: string) => {
     return syncStatuses[trackingId];
   };
 
-  const getLatestSyncStatus = (trackingId: string): 'synced' | 'pending' | 'error' | 'unknown' => {
+  const getLatestSyncStatus = (
+    trackingId: string
+  ): 'synced' | 'pending' | 'error' | 'unknown' => {
     const status = syncStatuses[trackingId];
     return status?.status || 'unknown';
   };

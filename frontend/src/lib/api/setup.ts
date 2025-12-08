@@ -7,7 +7,7 @@
 
 import { QueryClient } from '@tanstack/react-query';
 import { apiClient, tokenManager, loadingManager, errorHandler } from './index';
-import { ApiConfig } from './config';
+import { ApiConfig, getBaseURL } from './config';
 
 export interface ApiSetupOptions {
   // API Configuration
@@ -281,15 +281,15 @@ export function setupForEnvironment() {
  */
 export function initializeApi(customOptions?: ApiSetupOptions) {
   const defaultOptions: ApiSetupOptions = {
-    baseURL: import.meta.env.VITE_API_BASE_URL,
+    baseURL: getBaseURL(),
     autoRefresh: true,
     enableLogging: import.meta.env.NODE_ENV === 'development',
   };
 
   const options = { ...defaultOptions, ...customOptions };
-  
+
   setupApiClient(options);
-  
+
   return {
     apiClient,
     tokenManager,

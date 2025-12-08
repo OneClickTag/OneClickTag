@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/api/hooks/useAuth';
 import { useFirebaseAuth } from '@/lib/firebase/hooks/useFirebaseAuth';
-import { customerService } from '@/lib/api/services/customerService';
+import { customersApi } from '@/lib/api/services';
 import type { Customer } from '@/lib/api/types';
 
 export function CustomersPage() {
-  const { isAuthenticated, tokens } = useAuth();
+  const { isAuthenticated } = useAuth();
   const { firebaseUser, loading: firebaseLoading } = useFirebaseAuth();
   const navigate = useNavigate();
   const [authCheckComplete, setAuthCheckComplete] = useState(false);
@@ -43,11 +43,15 @@ export function CustomersPage() {
       try {
         setLoading(true);
         setError(null);
-        const response = await customerService.getCustomers({ 
-          limit: 50,
-          search: searchQuery || undefined 
+        const response = await customersApi.getCustomers({
+          page: 1,
+          pageSize: 50,
+          filters: {
+            search: searchQuery || undefined
+          }
         });
-        setCustomers(response.data.data || []);
+        console.log('Customers response:', response);
+        setCustomers(response.customers as any || []);
       } catch (error: any) {
         console.error('Failed to fetch customers:', error);
         setError('Failed to load customers. Please try again.');
@@ -229,20 +233,23 @@ export function CustomersPage() {
                 
                 <div className="grid gap-4">
                   {customers.map((customer) => {
-                    const customerName = `${customer.firstName}-${customer.lastName}`.toLowerCase().replace(/\s+/g, '-');
+                    console.log('Customer object:', customer);
                     const websiteUrl = customer.customFields?.websiteUrl || customer.company || 'No website';
-                    
+                    const displayName = customer.fullName || `${customer.firstName || ''} ${customer.lastName || ''}`.trim() || 'Unnamed Customer';
+
+                    console.log('Display name:', displayName, 'fullName:', customer.fullName, 'slug:', customer.slug);
+
                     return (
                       <div key={customer.id} className="bg-card p-6 rounded-lg border hover:shadow-md transition-shadow">
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
                             <div className="flex items-center gap-3 mb-2">
                               <h3 className="text-lg font-semibold">
-                                {customer.firstName} {customer.lastName}
+                                {displayName}
                               </h3>
                               <span className={`px-2 py-1 text-xs rounded-full ${
-                                customer.status === 'ACTIVE' 
-                                  ? 'bg-green-100 text-green-800' 
+                                customer.status === 'ACTIVE'
+                                  ? 'bg-green-100 text-green-800'
                                   : 'bg-gray-100 text-gray-800'
                               }`}>
                                 {customer.status || 'ACTIVE'}
@@ -255,10 +262,10 @@ export function CustomersPage() {
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
-                            <Button 
-                              variant="outline" 
+                            <Button
+                              variant="outline"
                               size="sm"
-                              onClick={() => navigate(`/customer/${customerName}`)}
+                              onClick={() => navigate(`/customer/${customer.slug}`)}
                             >
                               View Details
                             </Button>

@@ -3,12 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/api/hooks/useAuth';
 import { useFirebaseAuth } from '@/lib/firebase/hooks/useFirebaseAuth';
-import { customerService } from '@/lib/api/services/customerService';
+import { customersApi } from '@/lib/api/services';
 import { tokenManager } from '@/lib/api/auth/tokenManager';
 import { firebaseAuthService } from '@/lib/firebase/authService';
 
 export function CreateCustomerPage() {
-  const { isAuthenticated, tokens } = useAuth();
+  const { isAuthenticated } = useAuth();
   const { firebaseUser, loading: firebaseLoading } = useFirebaseAuth();
   const navigate = useNavigate();
   const [authCheckComplete, setAuthCheckComplete] = useState(false);
@@ -73,25 +73,16 @@ export function CreateCustomerPage() {
     setError(null);
 
     try {
-      // Split name into first and last name
-      const nameParts = name.trim().split(' ');
-      const firstName = nameParts[0] || name;
-      const lastName = nameParts.slice(1).join(' ') || 'Customer';
-
-      const response = await customerService.createCustomer({
+      const customer = await customersApi.createCustomer({
+        name: name.trim(),
         email,
-        firstName,
-        lastName,
+        website: websiteUrl,
         company: websiteUrl, // Store website URL in company field for now
-        customFields: {
-          websiteUrl: websiteUrl,
-        },
       });
 
-      if (response.data) {
-        // Navigate to the customer's detail page
-        const customerName = `${response.data.firstName}-${response.data.lastName}`.toLowerCase().replace(/\s+/g, '-');
-        navigate(`/customer/${customerName}`);
+      if (customer) {
+        // Navigate to the customer's detail page using slug
+        navigate(`/customer/${customer.slug}`);
       }
     } catch (error: any) {
       console.error('Failed to create customer:', error);

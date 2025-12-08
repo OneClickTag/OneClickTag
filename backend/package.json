@@ -53,6 +53,7 @@
     "google-auth-library": "^10.3.0",
     "googleapis": "^131.0.0",
     "ioredis": "^5.3.2",
+    "nanoid": "3",
     "passport": "^0.7.0",
     "passport-custom": "^1.1.1",
     "passport-google-oauth20": "^2.0.0",

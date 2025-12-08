@@ -73,6 +73,7 @@ export class FirebaseStrategy extends PassportStrategy(Strategy, 'firebase') {
         name: user.name,
         firebaseId: user.firebaseId,
         tenantId: user.tenantId,
+        role: user.role,
         tenant: user.tenant,
       };
     } catch (error) {

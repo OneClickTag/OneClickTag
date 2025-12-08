@@ -37,6 +37,41 @@ export class AuthService {
       },
     });
 
+    // If not found by firebaseId, try to find by email (handles SSO provider changes)
+    if (!user) {
+      user = await this.prisma.user.findUnique({
+        where: { email: decodedToken.email },
+        include: {
+          tenant: {
+            select: {
+              id: true,
+              name: true,
+              domain: true,
+              isActive: true,
+            },
+          },
+        },
+      });
+
+      // If found by email, update firebaseId to new one
+      if (user) {
+        user = await this.prisma.user.update({
+          where: { id: user.id },
+          data: { firebaseId: decodedToken.uid },
+          include: {
+            tenant: {
+              select: {
+                id: true,
+                name: true,
+                domain: true,
+                isActive: true,
+              },
+            },
+          },
+        });
+      }
+    }
+
     if (!user) {
       // Create new tenant for the user if no tenantId provided
       let finalTenantId = tenantId;
@@ -133,6 +168,7 @@ export class AuthService {
       email: user.email,
       firebaseId: user.firebaseId,
       tenantId: user.tenantId,
+      role: user.role,
     };
 
     const accessToken = this.jwtService.sign(payload, {
@@ -188,6 +224,7 @@ export class AuthService {
         email: user.email,
         firebaseId: user.firebaseId,
         tenantId: user.tenantId,
+        role: user.role,
       };
 
       const accessToken = this.jwtService.sign(newPayload, {
@@ -273,6 +310,7 @@ export class AuthService {
       name: user.name,
       firebaseId: user.firebaseId,
       tenantId: user.tenantId,
+      role: user.role,
       tenant: user.tenant,
     };
   }
@@ -291,6 +329,7 @@ export class AuthService {
       email: user.email,
       firebaseId: user.firebaseId,
       tenantId: user.tenantId,
+      role: user.role,
     };
 
     const accessToken = this.jwtService.sign(payload, {

@@ -62,7 +62,7 @@ import {
 } from '../exceptions/customer.exceptions';
 
 @ApiTags('Customers')
-@Controller('customers')
+@Controller('v1/customers')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class CustomerController {
@@ -234,6 +234,38 @@ export class CustomerController {
   async getStats() {
     this.logger.log('Fetching customer statistics');
     return this.customerService.getStats();
+  }
+
+  @Get('by-slug/:slug')
+  @ApiOperation({
+    summary: 'Get customer by slug',
+    description:
+      'Retrieves a specific customer by slug within the current tenant scope.',
+  })
+  @ApiParam({
+    name: 'slug',
+    description: 'Customer slug (8-character unique identifier)',
+    example: 'a1b2c3d4',
+  })
+  @ApiQuery({
+    name: 'includeGoogleAds',
+    required: false,
+    description: 'Include Google Ads accounts in response',
+    type: Boolean,
+  })
+  @ApiOkResponse({
+    description: 'Customer found',
+    type: CustomerResponseDto,
+  })
+  @ApiNotFoundResponse({
+    description: 'Customer not found',
+  })
+  async findBySlug(
+    @Param('slug') slug: string,
+    @Query('includeGoogleAds') includeGoogleAds?: boolean
+  ): Promise<CustomerResponseDto> {
+    this.logger.log(`Fetching customer by slug: ${slug}`);
+    return this.customerService.findBySlug(slug, includeGoogleAds);
   }
 
   @Get(':id')
@@ -581,6 +613,46 @@ export class CustomerController {
     return this.googleIntegrationService.getGoogleAdsAccounts(id);
   }
 
+  @Get(':id/trackings')
+  @ApiOperation({
+    summary: 'Get all trackings for customer',
+    description: 'Returns paginated list of tracking configurations for the customer.',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Customer ID',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async getCustomerTrackings(
+    @Param('id') id: string,
+    @Query('page') page: number = 0,
+    @Query('limit') limit: number = 20,
+  ) {
+    this.logger.log(`Fetching trackings for customer: ${id}`);
+    return this.customerService.getCustomerTrackings(id, page, limit);
+  }
+
+  @Get(':id/analytics')
+  @ApiOperation({
+    summary: 'Get analytics for customer',
+    description: 'Returns tracking analytics and metrics for the customer.',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Customer ID',
+  })
+  @ApiQuery({ name: 'fromDate', required: false, type: String })
+  @ApiQuery({ name: 'toDate', required: false, type: String })
+  async getCustomerAnalytics(
+    @Param('id') id: string,
+    @Query('fromDate') fromDate?: string,
+    @Query('toDate') toDate?: string,
+  ) {
+    this.logger.log(`Fetching analytics for customer: ${id}`);
+    return this.customerService.getCustomerAnalytics(id, fromDate, toDate);
+  }
+
   @Post(':id/tracking/create')
   @ApiOperation({
     summary: 'Create tracking configuration',
@@ -612,8 +684,16 @@ export class CustomerController {
         type: { type: 'string', enum: ['button_click', 'page_view', 'form_submit', 'link_click', 'element_visibility'] },
         selector: { type: 'string', description: 'CSS selector or URL pattern' },
         description: { type: 'string', description: 'Optional description' },
+        destinations: {
+          type: 'array',
+          items: { type: 'string', enum: ['GA4', 'GOOGLE_ADS'] },
+          description: 'Where to send tracking data (GA4, GOOGLE_ADS, or both)',
+        },
+        ga4EventName: { type: 'string', description: 'Custom GA4 event name' },
+        adsConversionValue: { type: 'number', description: 'Conversion value for Google Ads' },
+        config: { type: 'object', description: 'Additional configuration' },
       },
-      required: ['name', 'type', 'selector'],
+      required: ['name', 'type', 'destinations'],
     },
   })
   async createTracking(
@@ -621,12 +701,19 @@ export class CustomerController {
     @Body() trackingData: {
       name: string;
       type: string;
-      selector: string;
+      selector?: string;
+      urlPattern?: string;
       description?: string;
+      destinations: string[];
+      ga4EventName?: string;
+      adsConversionValue?: number;
+      config?: Record<string, any>;
     },
     @CurrentUser() user: AuthenticatedUser,
   ) {
     this.logger.log(`Creating tracking configuration for customer: ${id}`);
+    this.logger.log(`Controller received tracking data: ${JSON.stringify(trackingData, null, 2)}`);
+    this.logger.log(`Destinations in controller: ${JSON.stringify(trackingData.destinations)}`);
     return this.googleIntegrationService.createCompleteTracking(id, trackingData, user.id);
   }
 

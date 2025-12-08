@@ -49,7 +49,7 @@ import {
 @ApiBearerAuth()
 @ApiSecurity('Auth0')
 @UseGuards(Auth0Middleware)
-@Controller('api/v1/customers/:customerId/google-ads')
+@Controller('v1/customers/:customerId/google-ads')
 export class GoogleAdsController {
   private readonly logger = new Logger(GoogleAdsController.name);
 

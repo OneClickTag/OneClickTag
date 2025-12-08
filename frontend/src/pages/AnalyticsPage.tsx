@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/api/hooks/useAuth';
 import { useFirebaseAuth } from '@/lib/firebase/hooks/useFirebaseAuth';
 
 export function AnalyticsPage() {
-  const { isAuthenticated, tokens } = useAuth();
+  const { isAuthenticated } = useAuth();
   const { firebaseUser, loading: firebaseLoading } = useFirebaseAuth();
   const navigate = useNavigate();
   const [authCheckComplete, setAuthCheckComplete] = useState(false);

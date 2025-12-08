@@ -2,7 +2,7 @@ import React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Save, Loader2, ExternalLink, Unlink, AlertCircle, RefreshCw, CheckCircle2, XCircle } from 'lucide-react';
+import { Save, Loader2, ExternalLink, Unlink, RefreshCw, CheckCircle2, XCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Customer, UpdateCustomerRequest, GoogleConnectionStatus } from '@/types/customer.types';
 import { useUpdateCustomer, useConnectGoogleAccount, useDisconnectGoogleAccount } from '@/hooks/useCustomers';
 import { formatRelativeTime } from '@/lib/utils';
+import { GoogleConnectionInstructions } from './GoogleConnectionInstructions';
 
 const customerSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -110,12 +111,19 @@ export function CustomerSettings({
     if (!customer) return;
 
     try {
+      console.log('Connecting Google account for customer:', customer.id);
       const result = await connectGoogleAccount.mutateAsync(customer.id);
+      console.log('Received auth URL:', result);
+
       if (result.authUrl) {
-        window.open(result.authUrl, '_blank');
+        // Open OAuth URL in same window to allow popup blockers to work
+        window.location.href = result.authUrl;
+      } else {
+        console.error('No authUrl received from backend');
       }
     } catch (error) {
       console.error('Failed to connect Google account:', error);
+      alert('Failed to connect Google account. Please try again.');
     }
   };
 
@@ -263,7 +271,22 @@ export function CustomerSettings({
       <div className="bg-white rounded-lg border p-6">
         <h3 className="text-lg font-semibold mb-4">Google Account Integration</h3>
 
-        {connectionStatus?.connected ? (
+        {/* Show loading state while fetching */}
+        {isLoadingConnectionStatus ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+              <span className="ml-3 text-gray-600">Loading connection status...</span>
+            </div>
+          </div>
+        ) : !connectionStatus?.connected ? (
+          /* Show connection instructions when not connected */
+          <GoogleConnectionInstructions
+            onConnect={handleGoogleConnect}
+            isConnecting={connectGoogleAccount.isPending}
+          />
+        ) : (
+          /* Show connected status with individual service details */
           <div className="space-y-4">
             {/* Overall Connection Status */}
             <div className="flex items-center space-x-2 p-3 bg-green-50 border border-green-200 rounded-md">
@@ -292,9 +315,17 @@ export function CustomerSettings({
                   : 'bg-red-50 border-red-200'
               }`}>
                 <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-xl">📊</span>
-                    <span className="text-sm font-semibold text-gray-900">Google Tag Manager</span>
+                  <div className="flex items-center space-x-3">
+                    <svg className="h-8 w-8" viewBox="0 0 192 192" xmlns="http://www.w3.org/2000/svg">
+                      <path fill="#8AB4F8" d="M96 18.4l75 75v-30l-45-45-30-18.4z"/>
+                      <path fill="#4285F4" d="M171 63.4v30l-75 75-75-75v-30l75 75z"/>
+                      <path fill="#8AB4F8" d="M96 18.4l-75 75v30l45-45 30-18.4z"/>
+                      <path fill="#4285F4" d="M96 168.4l-45-45h90z"/>
+                    </svg>
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900">Google Tag Manager</div>
+                      <div className="text-xs text-gray-500">Workspace & Container</div>
+                    </div>
                   </div>
                   {isLoadingConnectionStatus ? (
                     <Skeleton className="h-6 w-20 rounded-full" />
@@ -324,12 +355,19 @@ export function CustomerSettings({
                       </>
                     ) : connectionStatus.hasGTMAccess ? (
                       <>
-                        {connectionStatus.gtmAccountId && (
-                          <p className="text-xs text-gray-600">Account: {connectionStatus.gtmAccountId}</p>
-                        )}
                         {connectionStatus.gtmContainerId && (
-                          <p className="text-xs text-gray-600">Container: {connectionStatus.gtmContainerId}</p>
+                          <p className="text-xs text-gray-600">
+                            <span className="font-medium">Container:</span> {connectionStatus.gtmContainerId}
+                          </p>
                         )}
+                        {connectionStatus.gtmAccountId && (
+                          <p className="text-xs text-gray-600">
+                            <span className="font-medium">Account:</span> {connectionStatus.gtmAccountId}
+                          </p>
+                        )}
+                        <p className="text-xs text-gray-600">
+                          <span className="font-medium">Workspace:</span> OneClickTag
+                        </p>
                         <p className="text-xs text-gray-500 mt-1">
                           Last sync: {formatRelativeTime(connectionStatus.gtmLastSyncedAt)}
                         </p>
@@ -344,16 +382,29 @@ export function CustomerSettings({
                     )}
                   </div>
                   {!isLoadingConnectionStatus && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleSyncService('gtm')}
-                      disabled={syncingService !== null}
-                      className="ml-2"
-                    >
-                      <RefreshCw className="h-3 w-3 mr-1" />
-                      Sync
-                    </Button>
+                    connectionStatus.gtmError && connectionStatus.gtmError.toLowerCase().includes('reconnect') ? (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={handleGoogleConnect}
+                        disabled={connectGoogleAccount.isPending}
+                        className="ml-2 bg-blue-600 hover:bg-blue-700"
+                      >
+                        <ExternalLink className="h-3 w-3 mr-1" />
+                        Reconnect
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleSyncService('gtm')}
+                        disabled={syncingService !== null}
+                        className="ml-2"
+                      >
+                        <RefreshCw className="h-3 w-3 mr-1" />
+                        Sync
+                      </Button>
+                    )
                   )}
                 </div>
               </div>
@@ -369,9 +420,15 @@ export function CustomerSettings({
                   : 'bg-yellow-50 border-yellow-200'
               }`}>
                 <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-xl">📊</span>
-                    <span className="text-sm font-semibold text-gray-900">Google Analytics 4</span>
+                  <div className="flex items-center space-x-3">
+                    <svg className="h-8 w-8" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path fill="#F9AB00" d="M22.84 3.27L7.5 21.68l-4.88-8.54 5.02-1.78L3.81 2.5z"/>
+                      <path fill="#E37400" d="M22.84 3.27L12 13.85 7.5 21.68z"/>
+                    </svg>
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900">Google Analytics 4</div>
+                      <div className="text-xs text-gray-500">Properties & Data Streams</div>
+                    </div>
                   </div>
                   {isLoadingConnectionStatus ? (
                     <Skeleton className="h-6 w-20 rounded-full" />
@@ -402,7 +459,10 @@ export function CustomerSettings({
                     ) : connectionStatus.hasGA4Access ? (
                       <>
                         <p className="text-xs text-gray-600">
-                          {connectionStatus.ga4PropertyCount} {connectionStatus.ga4PropertyCount === 1 ? 'property' : 'properties'} found
+                          <span className="font-medium">Properties:</span> {connectionStatus.ga4PropertyCount} {connectionStatus.ga4PropertyCount === 1 ? 'property' : 'properties'}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Each property can have multiple data streams
                         </p>
                         <p className="text-xs text-gray-500 mt-1">
                           Last sync: {formatRelativeTime(connectionStatus.ga4LastSyncedAt)}
@@ -418,16 +478,29 @@ export function CustomerSettings({
                     )}
                   </div>
                   {!isLoadingConnectionStatus && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleSyncService('ga4')}
-                      disabled={syncingService !== null}
-                      className="ml-2"
-                    >
-                      <RefreshCw className="h-3 w-3 mr-1" />
-                      Sync
-                    </Button>
+                    connectionStatus.ga4Error && connectionStatus.ga4Error.toLowerCase().includes('reconnect') ? (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={handleGoogleConnect}
+                        disabled={connectGoogleAccount.isPending}
+                        className="ml-2 bg-blue-600 hover:bg-blue-700"
+                      >
+                        <ExternalLink className="h-3 w-3 mr-1" />
+                        Reconnect
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleSyncService('ga4')}
+                        disabled={syncingService !== null}
+                        className="ml-2"
+                      >
+                        <RefreshCw className="h-3 w-3 mr-1" />
+                        Sync
+                      </Button>
+                    )
                   )}
                 </div>
               </div>
@@ -443,9 +516,16 @@ export function CustomerSettings({
                   : 'bg-yellow-50 border-yellow-200'
               }`}>
                 <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-xl">📊</span>
-                    <span className="text-sm font-semibold text-gray-900">Google Ads</span>
+                  <div className="flex items-center space-x-3">
+                    <svg className="h-8 w-8" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path fill="#FBBC04" d="M12 2L2 19.5h20L12 2z"/>
+                      <path fill="#34A853" d="M12 2v17.5l10-17.5H12z"/>
+                      <path fill="#4285F4" d="M12 2L2 19.5l10 .5V2z"/>
+                    </svg>
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900">Google Ads</div>
+                      <div className="text-xs text-gray-500">Accounts & Conversions</div>
+                    </div>
                   </div>
                   {isLoadingConnectionStatus ? (
                     <Skeleton className="h-6 w-20 rounded-full" />
@@ -476,7 +556,10 @@ export function CustomerSettings({
                     ) : connectionStatus.hasAdsAccess ? (
                       <>
                         <p className="text-xs text-gray-600">
-                          {connectionStatus.adsAccountCount} {connectionStatus.adsAccountCount === 1 ? 'account' : 'accounts'} accessible
+                          <span className="font-medium">Accounts:</span> {connectionStatus.adsAccountCount} {connectionStatus.adsAccountCount === 1 ? 'account' : 'accounts'}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Can create conversion actions and track campaigns
                         </p>
                         <p className="text-xs text-gray-500 mt-1">
                           Last sync: {formatRelativeTime(connectionStatus.adsLastSyncedAt)}
@@ -525,99 +608,19 @@ export function CustomerSettings({
               )}
             </Button>
           </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="flex items-center space-x-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-              <AlertCircle className="h-5 w-5 text-yellow-600" />
-              <div>
-                <p className="text-sm font-medium text-yellow-800">No Google Account Connected</p>
-                <p className="text-sm text-yellow-600">
-                  Connect a Google account to enable Google Ads tracking and conversions.
-                </p>
-              </div>
-            </div>
-
-            {/* Show services even when not connected */}
-            <div className="space-y-3">
-              <h4 className="text-sm font-medium text-gray-700">Service Status:</h4>
-
-              {/* GTM Status - Not Connected */}
-              <div className="p-4 border rounded-md bg-gray-50 border-gray-200">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-xl">📊</span>
-                    <span className="text-sm font-semibold text-gray-900">Google Tag Manager</span>
-                  </div>
-                  <span className="flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                    Not Connected
-                  </span>
-                </div>
-                <p className="text-xs text-gray-500">
-                  Connect Google account to access GTM
-                </p>
-              </div>
-
-              {/* GA4 Status - Not Connected */}
-              <div className="p-4 border rounded-md bg-gray-50 border-gray-200">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-xl">📊</span>
-                    <span className="text-sm font-semibold text-gray-900">Google Analytics 4</span>
-                  </div>
-                  <span className="flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                    Not Connected
-                  </span>
-                </div>
-                <p className="text-xs text-gray-500">
-                  Connect Google account to access GA4
-                </p>
-              </div>
-
-              {/* Google Ads Status - Not Connected */}
-              <div className="p-4 border rounded-md bg-gray-50 border-gray-200">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-xl">📊</span>
-                    <span className="text-sm font-semibold text-gray-900">Google Ads</span>
-                  </div>
-                  <span className="flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                    Not Connected
-                  </span>
-                </div>
-                <p className="text-xs text-gray-500">
-                  Connect Google account to access Google Ads
-                </p>
-              </div>
-            </div>
-
-            <Button
-              onClick={handleGoogleConnect}
-              disabled={connectGoogleAccount.isPending}
-            >
-              {connectGoogleAccount.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Connecting...
-                </>
-              ) : (
-                <>
-                  <ExternalLink className="mr-2 h-4 w-4" />
-                  Connect Google Account
-                </>
-              )}
-            </Button>
-          </div>
         )}
 
-        <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
-          <h4 className="text-sm font-medium text-blue-800 mb-2">What does this enable?</h4>
-          <ul className="text-sm text-blue-600 space-y-1">
-            <li>• Automatic conversion tracking setup</li>
-            <li>• Real-time campaign performance data</li>
-            <li>• Enhanced conversion attribution</li>
-            <li>• Audience list management</li>
-          </ul>
-        </div>
+        {!isLoadingConnectionStatus && (
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+            <h4 className="text-sm font-medium text-blue-800 mb-2">What does this enable?</h4>
+            <ul className="text-sm text-blue-600 space-y-1">
+              <li>• Automatic conversion tracking setup</li>
+              <li>• Real-time campaign performance data</li>
+              <li>• Enhanced conversion attribution</li>
+              <li>• Audience list management</li>
+            </ul>
+          </div>
+        )}
       </div>
 
       {/* Customer Statistics */}

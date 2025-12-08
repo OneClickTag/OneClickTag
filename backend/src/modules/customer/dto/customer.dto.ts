@@ -127,6 +127,9 @@ export class CustomerResponseDto {
   @ApiProperty({ description: 'Customer ID' })
   id: string;
 
+  @ApiProperty({ description: 'Customer slug - unique 8-character identifier' })
+  slug: string;
+
   @ApiProperty({ description: 'Customer email' })
   email: string;
 

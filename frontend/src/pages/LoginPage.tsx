@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { useFirebaseAuth } from '@/lib/firebase/hooks/useFirebaseAuth'
 import { useAuth } from '@/lib/api/hooks/useAuth'
@@ -9,27 +9,30 @@ export function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const navigate = useNavigate()
-  
-  const { signIn, signInWithGoogle, error, clearError, firebaseUser } = useFirebaseAuth()
+  const [searchParams] = useSearchParams()
+
+  const { signIn, signInWithGoogle, error, clearError } = useFirebaseAuth()
   const { isAuthenticated } = useAuth()
 
-  // Redirect authenticated users to dashboard
+  // Get redirect URL from query params, default to dashboard
+  const redirectUrl = searchParams.get('redirect') || '/dashboard'
+
+  // Redirect authenticated users to intended destination
   useEffect(() => {
     if (isAuthenticated && !isSubmitting) {
-      window.location.href = '/dashboard';
+      window.location.href = redirectUrl;
     }
-  }, [isAuthenticated, isSubmitting]);
+  }, [isAuthenticated, isSubmitting, redirectUrl]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
-    
+
     try {
       await signIn({ email, password })
       // Wait a bit for auth state to settle then redirect
       setTimeout(() => {
-        window.location.href = '/dashboard';
+        window.location.href = redirectUrl;
       }, 500);
     } catch (error) {
       console.error('Login failed:', error)
@@ -39,12 +42,12 @@ export function LoginPage() {
 
   const handleGoogleSignIn = async () => {
     setIsSubmitting(true)
-    
+
     try {
       await signInWithGoogle()
       // Wait a bit for auth state to settle then redirect
       setTimeout(() => {
-        window.location.href = '/dashboard';
+        window.location.href = redirectUrl;
       }, 500);
     } catch (error) {
       console.error('Google sign in failed:', error)

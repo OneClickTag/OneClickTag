@@ -16,6 +16,7 @@ model User {
   name       String
   password   String?
   firebaseId String?  @unique
+  role       UserRole @default(USER)
   tenantId   String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -63,6 +64,7 @@ model OAuthToken {
 
 model Customer {
   id                String    @id @default(cuid())
+  slug              String    @unique
   email             String
   firstName         String
   lastName          String
@@ -73,6 +75,9 @@ model Customer {
   tags              String[]
   notes             String?
   customFields      Json?
+
+  // Tracking Settings
+  trackingSettings  Json?     // {defaultDestinations: ['GA4', 'GOOGLE_ADS'], defaultGA4Property: 'xxx', defaultAdsAccount: 'yyy'}
 
   // Google Account Connection
   googleAccountId   String?
@@ -250,30 +255,58 @@ model Tracking {
   id                String   @id @default(cuid())
   name              String
   type              TrackingType
-  selector          String   // CSS selector or URL pattern
   description       String?
   status            TrackingStatus @default(PENDING)
-  
+
+  // Tracking Configuration
+  // For auto-detected selectors: JSON array of {selector, confidence, method}
+  // For manual: single selector string
+  selector          String?  // CSS selector (manual or primary auto-detected)
+  urlPattern        String?  // URL pattern for page-based triggers
+  selectorConfig    Json?    // {selectors: [{selector, confidence, method}], fallbacks: [...]}
+
+  // Type-specific configuration
+  config            Json?    // Flexible config: {scrollPercentage: 75, timeSeconds: 30, value: 99.99, etc.}
+
+  // Destination: where to send this tracking
+  destinations      TrackingDestination[] @default([GA4]) // Can be GA4, GOOGLE_ADS, or both
+
   // Google Tag Manager fields
   gtmTriggerId      String?
-  gtmTagId          String?
+  gtmTagId          String?  // Can be comma-separated if multiple tags (GA4 + Ads)
+  gtmTagIdGA4       String?  // Dedicated GA4 tag ID
+  gtmTagIdAds       String?  // Dedicated Google Ads tag ID
   gtmContainerId    String?
-  
+  gtmWorkspaceId    String?  // Track which workspace this was created in
+
+  // GA4 Configuration
+  ga4EventName      String?  // GA4 event name (e.g., "add_to_cart", "purchase")
+  ga4Parameters     Json?    // GA4 event parameters
+  ga4PropertyId     String?  // Which GA4 property to send to
+
   // Google Ads relation
   conversionActionId String?
   conversionAction   ConversionAction? @relation(fields: [conversionActionId], references: [id])
-  
+  adsConversionLabel String? // Google Ads conversion label
+  adsConversionValue Decimal? @db.Decimal(10, 2) // Default conversion value
+
   // Customer relation
   customerId        String
   customer          Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  
+
   // Tenant relation
   tenantId          String
-  
-  // Error tracking
+
+  // Crawler preparation fields
+  isAutoCrawled     Boolean  @default(false) // Was this created by crawler?
+  crawlMetadata     Json?    // {detectedAt, pageUrl, elementContext, etc.}
+  selectorConfidence Float?  // 0-1 confidence score for auto-detected selectors
+
+  // Error tracking & sync
   lastError         String?
   lastSyncAt        DateTime?
-  
+  syncAttempts      Int      @default(0)
+
   // Audit fields
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -283,6 +316,8 @@ model Tracking {
   @@index([tenantId, customerId])
   @@index([tenantId, status])
   @@index([customerId, status])
+  @@index([customerId, type])
+  @@index([isAutoCrawled])
   @@map("trackings")
 }
 
@@ -294,17 +329,167 @@ enum CustomerStatus {
 }
 
 enum TrackingType {
+  // Basic Interactions
   BUTTON_CLICK
-  PAGE_VIEW
-  FORM_SUBMIT
   LINK_CLICK
+  PAGE_VIEW
   ELEMENT_VISIBILITY
+
+  // Forms
+  FORM_SUBMIT
+  FORM_START
+  FORM_ABANDON
+
+  // E-commerce
+  ADD_TO_CART
+  REMOVE_FROM_CART
+  ADD_TO_WISHLIST
+  VIEW_CART
+  CHECKOUT_START
+  CHECKOUT_STEP
+  PURCHASE
+  PRODUCT_VIEW
+
+  // Lead Generation
+  PHONE_CALL_CLICK
+  EMAIL_CLICK
+  DOWNLOAD
+  DEMO_REQUEST
+  SIGNUP
+
+  // Engagement
+  SCROLL_DEPTH
+  TIME_ON_PAGE
+  VIDEO_PLAY
+  VIDEO_COMPLETE
+
+  // Navigation & Search
+  SITE_SEARCH
+  FILTER_USE
+  TAB_SWITCH
+  ACCORDION_EXPAND
+  MODAL_OPEN
+
+  // Social & Sharing
+  SOCIAL_SHARE
+  SOCIAL_CLICK
+
+  // Content
+  PDF_DOWNLOAD
+  FILE_DOWNLOAD
+  NEWSLETTER_SIGNUP
+
+  // Custom
+  CUSTOM_EVENT
 }
 
 enum TrackingStatus {
-  PENDING
-  CREATING
-  ACTIVE
-  FAILED
-  PAUSED
+  PENDING       // Not yet synced to GTM/GA4/Ads
+  CREATING      // Currently being created in Google systems
+  ACTIVE        // Successfully created and active
+  FAILED        // Creation failed - see lastError
+  PAUSED        // Temporarily disabled
+  SYNCING       // Currently syncing updates
+}
+
+enum TrackingDestination {
+  GA4           // Google Analytics 4 only
+  GOOGLE_ADS    // Google Ads conversion only
+  BOTH          // Both GA4 and Google Ads (deprecated - use array)
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+model ContentPage {
+  id              String   @id @default(cuid())
+  slug            String   @unique
+  title           String
+  content         String   @db.Text
+  metaTitle       String?
+  metaDescription String?
+  isPublished     Boolean  @default(false)
+  order           Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  createdBy       String?
+  updatedBy       String?
+
+  @@index([slug])
+  @@index([isPublished])
+  @@map("content_pages")
+}
+
+model Plan {
+  id            String   @id @default(cuid())
+  name          String
+  description   String?  @db.Text
+  features      Json     // Array of feature strings
+  price         Decimal  @db.Decimal(10, 2)
+  billingPeriod String   // 'MONTHLY', 'YEARLY'
+  currency      String   @default("USD")
+  isActive      Boolean  @default(true)
+  isFeatured    Boolean  @default(false)
+  order         Int      @default(0)
+  ctaText       String   @default("Get Started")
+  ctaUrl        String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([order])
+  @@map("plans")
+}
+
+model LandingPageContent {
+  id        String   @id @default(cuid())
+  key       String   @unique // 'hero', 'features', 'how-it-works', 'social-proof', 'cta'
+  content   Json     // Flexible JSON structure for each section
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@map("landing_page_content")
+}
+
+model SiteSettings {
+  id                 String   @id @default(cuid())
+  key                String   @unique // 'global' or specific setting key
+  logoUrl            String?  // URL to logo image
+  faviconUrl         String?  // URL to favicon
+  brandName          String?
+  brandColors        Json?    // {primary, secondary, accent}
+  heroBackgroundUrl  String?  // URL to hero background image
+  metaTitle          String?
+  metaDescription    String?
+  socialImageUrl     String?  // OG image
+  customCSS          String?  @db.Text
+  customJS           String?  @db.Text
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  updatedBy          String?
+
+  @@map("site_settings")
+}
+
+model ContactPageContent {
+  id              String   @id @default(cuid())
+  email           String?
+  phone           String?
+  address         String?
+  businessHours   String?
+  socialLinks     Json?    // Array of {platform, url}
+  faqs            Json?    // Array of {question, answer}
+  formSettings    Json?    // {enableForm, emailTo, successMessage}
+  customContent   Json?    // Additional custom sections
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  updatedBy       String?
+
+  @@map("contact_page_content")
 }

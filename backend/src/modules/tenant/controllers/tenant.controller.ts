@@ -41,7 +41,7 @@ import {
 import { TenantContextData as ITenantContext } from '../interfaces/tenant-context.interface';
 
 @ApiTags('Tenants')
-@Controller('tenants')
+@Controller('v1/tenants')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class TenantController {

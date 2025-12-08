@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { customerService } from '@/lib/api/services/customerService';
+import { customersApi } from '@/lib/api/services';
 
 export function OAuthCallbackPage() {
   const navigate = useNavigate();
@@ -54,21 +54,23 @@ export function OAuthCallbackPage() {
 
         // Connect the Google account with proper error handling
         try {
-          const connectionResult = await customerService.connectGoogleAccount(state, authCode);
+          const connectionResult = await customersApi.handleGoogleCallback(state, authCode);
           console.log('Google account connected successfully:', connectionResult);
-          
+
           setStatus('redirecting');
-          
-          // Get customer data for proper redirect
-          const customersResponse = await customerService.getCustomers({ limit: 100 });
-          const customer = customersResponse.data.data?.find(c => c.id === state);
-          
-          if (customer) {
-            const customerName = `${customer.firstName}-${customer.lastName}`.toLowerCase().replace(/\s+/g, '-');
-            console.log('Redirecting to customer detail page:', customerName);
-            navigate(`/customer/${customerName}?connected=true&scopes=${encodeURIComponent(scope || '')}`);
+
+          // Get customer data to build proper URL with slug
+          if (state) {
+            try {
+              const customer = await customersApi.getCustomer(state);
+              console.log('Redirecting to customer detail page with slug:', customer.slug);
+              navigate(`/customer/${customer.slug}?connected=true&scopes=${encodeURIComponent(scope || '')}`);
+            } catch (err) {
+              console.error('Failed to get customer data, redirecting to customers list');
+              navigate('/customers?connected=true');
+            }
           } else {
-            console.log('Customer not found after connection, redirecting to customers list');
+            console.log('No customer ID in state, redirecting to customers list');
             navigate('/customers?connected=true');
           }
           

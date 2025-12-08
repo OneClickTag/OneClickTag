@@ -274,29 +274,45 @@ export interface components {
     };
     Customer: {
       id: string;
-      name: string;
+      slug: string;
       email: string;
+      firstName: string;
+      lastName: string;
+      fullName: string;
       company?: string;
-      status: "active" | "inactive" | "pending";
+      phone?: string;
+      status: "ACTIVE" | "INACTIVE" | "SUSPENDED" | "ARCHIVED";
       tags: string[];
-      totalCampaigns: number;
-      totalRevenue: number;
-      googleAccountConnected: boolean;
+      notes?: string;
+      customFields?: Record<string, any>;
+      trackingSettings?: Record<string, any>;
+      googleAccountId?: string;
+      googleEmail?: string;
       createdAt: string;
       updatedAt: string;
+      createdBy?: string;
+      updatedBy?: string;
     };
     CreateCustomerRequest: {
-      name: string;
+      firstName: string;
+      lastName: string;
       email: string;
       company?: string;
+      phone?: string;
       tags?: string[];
+      notes?: string;
+      customFields?: Record<string, any>;
     };
     UpdateCustomerRequest: {
-      name?: string;
+      firstName?: string;
+      lastName?: string;
       email?: string;
       company?: string;
-      status?: "active" | "inactive" | "pending";
+      phone?: string;
+      status?: "ACTIVE" | "INACTIVE" | "SUSPENDED" | "ARCHIVED";
       tags?: string[];
+      notes?: string;
+      customFields?: Record<string, any>;
     };
     Campaign: {
       id: string;

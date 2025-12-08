@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { campaignsApi } from '../services/campaigns';
+import { campaignsApi } from '../lib/api/services';
 import { CreateCampaignRequest, UpdateCampaignRequest } from '../types/campaign.types';
 
 export const CAMPAIGNS_QUERY_KEY = 'campaigns';

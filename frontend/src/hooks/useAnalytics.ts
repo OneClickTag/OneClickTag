@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { analyticsApi } from '../services/analytics';
+import { analyticsApi } from '../lib/api/services';
 import { AnalyticsFilters, ExportRequest } from '../types/analytics.types';
 
 export const ANALYTICS_QUERY_KEYS = {

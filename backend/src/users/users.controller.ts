@@ -14,7 +14,7 @@ import { CreateUserDto, UpdateUserDto } from '@oneclicktag/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('users')
-@Controller('users')
+@Controller('v1/users')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class UsersController {

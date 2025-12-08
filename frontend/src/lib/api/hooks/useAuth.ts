@@ -125,7 +125,6 @@ export function useCurrentUser(options?: {
  */
 export function useSessionValidation() {
   const { isAuthenticated } = useAuth();
-  const _queryClient = useQueryClient();
 
   return useQuery({
     queryKey: AUTH_KEYS.session,
@@ -254,14 +253,7 @@ export function useAuthErrorHandler() {
   const logout = useLogout();
 
   React.useEffect(() => {
-    const _handleAuthError = (error: any) => {
-      if (error.code === 'UNAUTHORIZED' || error.status === 401) {
-        logout.mutate();
-      } else if (error.code === 'FORBIDDEN' || error.status === 403) {
-        window.location.href = '/unauthorized';
-      }
-    };
-
+    // Cleanup function if needed in the future
     return () => {
     };
   }, [logout]);

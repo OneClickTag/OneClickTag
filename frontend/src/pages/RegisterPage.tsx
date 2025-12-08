@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { useFirebaseAuth } from '@/lib/firebase/hooks/useFirebaseAuth'
 import { useAuth } from '@/lib/api/hooks/useAuth'
@@ -10,9 +10,8 @@ export function RegisterPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const navigate = useNavigate()
-  
-  const { signUp, signInWithGoogle, error, clearError, firebaseUser } = useFirebaseAuth()
+
+  const { signUp, signInWithGoogle, error, clearError } = useFirebaseAuth()
   const { isAuthenticated } = useAuth()
 
   // Redirect authenticated users to dashboard

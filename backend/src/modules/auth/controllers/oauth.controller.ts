@@ -47,7 +47,7 @@ const SCOPE_MAPPING = {
 };
 
 @ApiTags('OAuth')
-@Controller('oauth')
+@Controller('v1/oauth')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class OAuthController {

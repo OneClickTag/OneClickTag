@@ -1,19 +1,66 @@
 - NOTE: You can't need to Start frontend and backend dev servers to test because they running on other bash. use them instead running you own bashs
 
-# ⚠️ IMPORTANT: Proactive Agent Usage
+# ⚠️ CRITICAL: Mandatory Agent Usage Protocol
 
-## Claude MUST Follow These Rules:
+## 🚨 ENFORCEMENT RULES - NO EXCEPTIONS 🚨
 
-### 1. **ALWAYS Read Agent Files Before Working**
+**Claude Code MUST follow this protocol for EVERY task. Failure to do so will result in incorrect implementations.**
+
+### Rule 1: **AGENT FILES ARE MANDATORY, NOT OPTIONAL**
+
+Before writing ANY code or making ANY changes:
+
+1. ✅ **STOP** - Don't start coding immediately
+2. ✅ **IDENTIFY** - What domain does this task belong to?
+3. ✅ **READ** - Open and read the relevant agent file(s) from `.claude/agents/`
+4. ✅ **APPLY** - Use the patterns, rules, and best practices from the agent
+5. ✅ **CODE** - Now implement following the agent's guidelines
+
+**This is NOT a suggestion. This is a requirement.**
+
+### Rule 2: **Agent Reading is ALWAYS the First Step**
+
+```
+❌ WRONG WORKFLOW:
+User: "Fix the GTM workspace issue"
+→ Claude immediately starts editing google-integration.service.ts
+→ Makes changes without context
+→ Violates best practices from Google Agent
+
+✅ CORRECT WORKFLOW:
+User: "Fix the GTM workspace issue"
+→ Claude: "I'll read the Google Agent file first"
+→ Reads .claude/agents/google.md
+→ Sees GTM workspace management patterns
+→ Sees OAuth client initialization requirements
+→ Applies those patterns while fixing
+→ Success!
+```
+
+### Rule 3: **Acknowledge Agent Usage in Your Response**
+
+When starting a task, you MUST explicitly state which agent(s) you're using:
+
+```
+✅ "I'll use the Google Agent to help with this GTM integration..."
+✅ "Reading the Campaigner Agent for tracking strategy..."
+✅ "Applying patterns from Backend Agent and Database Agent..."
+```
+
+This ensures you're actually reading and using the agent files.
+
+### Rule 4: **Task-to-Agent Mapping**
 
 When you start ANY task, you MUST:
 
-1. **Identify the domain** (backend, frontend, Google APIs, etc.)
+1. **Identify the domain** (backend, frontend, Google APIs, campaign analysis, etc.)
 2. **Read the relevant agent file(s)** from `.claude/agents/`
 3. **Apply the patterns and rules** from that agent
 4. **Follow the agent's best practices**
 
-### 2. **Automatic Agent Activation Triggers**
+**If you're unsure which agent to use, read the trigger table below.**
+
+### Rule 5: **Automatic Agent Activation Triggers**
 
 | Working On | Read This Agent | File Path |
 |---|---|---|
@@ -22,8 +69,41 @@ When you start ANY task, you MUST:
 | `frontend/src/**/*.tsx` | Frontend Agent | `.claude/agents/frontend.md` |
 | Prisma schema or migrations | Database Agent | `.claude/agents/database.md` |
 | OAuth or security features | Security Agent | `.claude/agents/security.md` |
+| Website tracking analysis | Campaigner Agent | `.claude/agents/campaigner.md` |
+| Tracking point identification | Campaigner Agent | `.claude/agents/campaigner.md` |
+| Campaign site crawling | Crawler Agent + Campaigner Agent | `.claude/agents/crawler.md` + `.claude/agents/campaigner.md` |
+| Selector generation for tracking | Crawler Agent + Campaigner Agent | `.claude/agents/crawler.md` + `.claude/agents/campaigner.md` |
 
-### 3. **Example: Correct Agent Usage**
+### Rule 6: **Multi-Agent Tasks Require Reading ALL Agents**
+
+Some tasks require multiple agents. You MUST read ALL applicable agents:
+
+**Example - Campaign Site Analysis with Implementation**:
+```
+Task: "Analyze this e-commerce site and create tracking for checkout flow"
+
+Required Agents:
+1. Campaigner Agent - Identify conversion points
+2. Crawler Agent - Generate CSS selectors
+3. Google Agent - Create GTM tags/triggers
+4. Backend Agent - Implement API endpoints
+
+Process:
+→ Read all 4 agent files
+→ Campaigner: Identify checkout steps (cart, shipping, payment, confirmation)
+→ Crawler: Generate selectors for each button/form
+→ Google: Create GTM trigger/tag configurations
+→ Backend: Create tracking endpoint with proper structure
+→ Implement with all best practices applied
+```
+
+**Never skip reading an agent because you "think you know how to do it."**
+
+---
+
+## Agent Usage Examples
+
+### Example 1: Correct Agent Usage
 
 **WRONG ❌**:
 ```
@@ -41,13 +121,20 @@ Claude: I'll read the Google agent file first to follow best practices.
 [Applies those patterns while fixing the issue]
 ```
 
-### 4. **Multiple Agents for Complex Tasks**
+### Example 2: Multi-Agent Complex Tasks
 
-For tasks spanning multiple domains, read ALL relevant agents:
+**Common Multi-Agent Scenarios**:
 
-- **GTM Tag Creation**: Read both `google.md` (GTM API) + `backend.md` (service patterns)
-- **Customer Connection UI**: Read both `frontend.md` (React components) + `backend.md` (API integration)
-- **Database Schema Changes**: Read both `database.md` (schema design) + `backend.md` (Prisma patterns)
+| Task Type | Required Agents | Why |
+|---|---|---|
+| **GTM Tag Creation** | `google.md` + `backend.md` | GTM API patterns + NestJS service structure |
+| **Customer Connection UI** | `frontend.md` + `backend.md` | React components + API integration |
+| **Database Schema Changes** | `database.md` + `backend.md` | Schema design + Prisma best practices |
+| **Campaign Site Analysis** | `campaigner.md` + `crawler.md` | Conversion strategy + Selector generation |
+| **Full Tracking Implementation** | `campaigner.md` + `crawler.md` + `google.md` + `backend.md` | Strategy + Selectors + GTM + API |
+| **Secure OAuth Flow** | `google.md` + `security.md` + `backend.md` | OAuth API + Security + Implementation |
+
+**You must read ALL listed agents for these tasks.**
 
 ---
 
@@ -258,6 +345,28 @@ For tasks spanning multiple domains, read ALL relevant agents:
 - Real-time communication architecture
 - Multi-tenant architecture patterns
 
+### 11. Campaigner Agent (@campaigner)
+**Expertise**: Marketing campaign analysis, Conversion tracking, Campaign site analysis, Tracking strategy
+**Responsibilities**:
+- Analyze marketing campaign websites and landing pages
+- Identify conversion points and micro-conversions
+- Map out complete user journeys and conversion funnels
+- Recommend optimal tracking placements for ROI measurement
+- Design event tracking taxonomies and naming conventions
+- Identify cross-domain and multi-step tracking requirements
+- Analyze e-commerce, lead gen, SaaS, and content campaigns
+- Recommend tracking strategies for specific campaign goals
+
+**Key Focus Areas**:
+- Conversion point identification (CTAs, forms, checkouts)
+- Campaign type analysis (e-commerce, lead gen, SaaS, content)
+- User journey mapping and funnel analysis
+- Event naming conventions (Category_Action_Label)
+- Value tracking for ROI measurement
+- Multi-step form and checkout flow tracking
+- Mobile-specific tracking patterns
+- A/B testing and personalization tracking
+
 ## How to Use Agent Expertise
 
 The agent files in `.claude/agents/` serve as **context and expertise references** for Claude. When working on specific tasks, Claude should:
@@ -284,6 +393,7 @@ When implementing GTM features:
 - `/database.md` - PostgreSQL, schema design, optimization
 - `/security.md` - OAuth security, OWASP, data protection
 - `/crawler.md` - Web scraping, selector generation
+- `/campaigner.md` - Campaign analysis, conversion tracking strategy
 - `/testing.md` - Jest, E2E testing, test patterns
 - `/devops.md` - Vercel deployment, CI/CD
 - `/analytics.md` - Data visualization, metrics
@@ -307,6 +417,9 @@ When implementing GTM features:
 - Building React form → Read `frontend.md` for component patterns
 - Database optimization → Read `database.md` for query optimization
 - OAuth implementation → Read both `google.md` and `security.md`
+- Analyzing campaign site → Read `campaigner.md` for tracking strategy
+- Implementing site crawler → Read both `crawler.md` and `campaigner.md`
+- Creating tracking recommendations → Read `campaigner.md` + `google.md` + `backend.md`
 
 # OneClickTag - System Features & Abilities
 

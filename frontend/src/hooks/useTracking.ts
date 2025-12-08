@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { trackingApi } from '../services/tracking';
+import { trackingApi } from '../lib/api/services';
 import { 
   TrackingTableParams, 
   CreateTrackingRequest, 

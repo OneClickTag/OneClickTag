@@ -10,8 +10,20 @@ export interface ApiConfig {
   enableLogging: boolean;
 }
 
+/**
+ * Helper to ensure base URL has /api suffix
+ * Use this function instead of accessing VITE_API_BASE_URL directly
+ */
+export const getBaseURL = () => {
+  const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+  // Remove trailing slash if present
+  const cleanURL = baseURL.replace(/\/$/, '');
+  // Add /api if not already present
+  return cleanURL.endsWith('/api') ? cleanURL : `${cleanURL}/api`;
+};
+
 export const defaultApiConfig: ApiConfig = {
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001/api',
+  baseURL: getBaseURL(),
   timeout: 30000, // 30 seconds
   retryAttempts: 3,
   retryDelay: 1000, // 1 second
@@ -21,72 +33,148 @@ export const defaultApiConfig: ApiConfig = {
 export const apiEndpoints = {
   // Auth endpoints
   auth: {
-    login: '/auth/login',
-    firebase: '/auth/firebase',
-    refresh: '/auth/refresh',
-    logout: '/auth/logout',
-    me: '/auth/profile',
+    login: '/v1/auth/login',
+    firebase: '/v1/auth/firebase',
+    refresh: '/v1/auth/refresh',
+    logout: '/v1/auth/logout',
+    me: '/v1/auth/profile',
   },
-  
+
   // Customer endpoints
   customers: {
-    list: '/customers',
-    create: '/customers',
-    get: (id: string) => `/customers/${id}`,
-    update: (id: string) => `/customers/${id}`,
-    delete: (id: string) => `/customers/${id}`,
-    bulkDelete: '/customers/bulk-delete',
-    bulkUpdate: '/customers/bulk-update',
-    export: '/customers/export',
-    connectGoogle: (id: string) => `/customers/${id}/google/connect`,
-    disconnectGoogle: (id: string) => `/customers/${id}/google/disconnect`,
-    getGoogleAuthUrl: (id: string) => `/customers/${id}/google/auth-url`,
-    getGoogleStatus: (id: string) => `/customers/${id}/google/status`,
-    createTracking: (id: string) => `/customers/${id}/tracking/create`,
+    list: '/v1/customers',
+    create: '/v1/customers',
+    get: (id: string) => `/v1/customers/${id}`,
+    getBySlug: (slug: string) => `/v1/customers/by-slug/${slug}`,
+    update: (id: string) => `/v1/customers/${id}`,
+    delete: (id: string) => `/v1/customers/${id}`,
+    bulkDelete: '/v1/customers/bulk-delete',
+    bulkUpdate: '/v1/customers/bulk-update',
+    export: '/v1/customers/export',
+    connectGoogle: (id: string) => `/v1/customers/${id}/google/connect`,
+    disconnectGoogle: (id: string) => `/v1/customers/${id}/google/disconnect`,
+    getGoogleAuthUrl: (id: string) => `/v1/customers/${id}/google/auth-url`,
+    getGoogleStatus: (id: string) => `/v1/customers/${id}/google/status`,
+    createTracking: (id: string) => `/v1/customers/${id}/tracking/create`,
   },
-  
+
   // Campaign endpoints
   campaigns: {
-    list: '/campaigns',
-    create: '/campaigns',
-    get: (id: string) => `/campaigns/${id}`,
-    update: (id: string) => `/campaigns/${id}`,
-    delete: (id: string) => `/campaigns/${id}`,
-    analytics: (id: string) => `/campaigns/${id}/analytics`,
-    events: (id: string) => `/campaigns/${id}/events`,
-    gtmSync: (id: string) => `/campaigns/${id}/gtm-sync`,
+    list: '/v1/campaigns',
+    create: '/v1/campaigns',
+    get: (id: string) => `/v1/campaigns/${id}`,
+    update: (id: string) => `/v1/campaigns/${id}`,
+    delete: (id: string) => `/v1/campaigns/${id}`,
+    analytics: (id: string) => `/v1/campaigns/${id}/analytics`,
+    events: (id: string) => `/v1/campaigns/${id}/events`,
+    gtmSync: (id: string) => `/v1/campaigns/${id}/gtm-sync`,
   },
-  
+
   // Analytics endpoints
   analytics: {
-    overview: '/analytics/overview',
-    customerUsage: '/analytics/customer-usage',
-    campaignPerformance: '/analytics/campaign-performance',
-    systemHealth: '/analytics/system-health',
-    export: '/analytics/export',
+    overview: '/v1/analytics/overview',
+    customerUsage: '/v1/analytics/customer-usage',
+    campaignPerformance: '/v1/analytics/campaign-performance',
+    systemHealth: '/v1/analytics/system-health',
+    export: '/v1/analytics/export',
   },
-  
+
   // Tag endpoints
   tags: {
-    list: '/tags',
-    create: '/tags',
-    get: (id: string) => `/tags/${id}`,
-    update: (id: string) => `/tags/${id}`,
-    delete: (id: string) => `/tags/${id}`,
-    search: '/tags/search',
+    list: '/v1/tags',
+    create: '/v1/tags',
+    get: (id: string) => `/v1/tags/${id}`,
+    update: (id: string) => `/v1/tags/${id}`,
+    delete: (id: string) => `/v1/tags/${id}`,
+    search: '/v1/tags/search',
   },
-  
+
   // Search endpoints
   search: {
-    global: '/search',
-    suggestions: '/search/suggestions',
-    history: '/search/history',
+    global: '/v1/search',
+    suggestions: '/v1/search/suggestions',
+    history: '/v1/search/history',
   },
-  
+
   // File upload endpoints
   uploads: {
-    image: '/uploads/image',
-    document: '/uploads/document',
+    image: '/v1/uploads/image',
+    document: '/v1/uploads/document',
+  },
+
+  // Admin endpoints
+  admin: {
+    users: {
+      list: '/v1/admin/users',
+      create: '/v1/admin/users',
+      get: (id: string) => `/v1/admin/users/${id}`,
+      update: (id: string) => `/v1/admin/users/${id}`,
+      delete: (id: string) => `/v1/admin/users/${id}`,
+      batchDelete: '/v1/admin/users/batch-delete',
+      batchUpdateRole: '/v1/admin/users/batch-update-role',
+      stats: '/v1/admin/users/stats',
+    },
+    content: {
+      list: '/v1/admin/content',
+      create: '/v1/admin/content',
+      get: (id: string) => `/v1/admin/content/${id}`,
+      update: (id: string) => `/v1/admin/content/${id}`,
+      delete: (id: string) => `/v1/admin/content/${id}`,
+      publish: (id: string) => `/v1/admin/content/${id}/publish`,
+    },
+    plans: {
+      list: '/v1/admin/plans',
+      create: '/v1/admin/plans',
+      get: (id: string) => `/v1/admin/plans/${id}`,
+      update: (id: string) => `/v1/admin/plans/${id}`,
+      delete: (id: string) => `/v1/admin/plans/${id}`,
+      toggleActive: (id: string) => `/v1/admin/plans/${id}/toggle-active`,
+    },
+  },
+
+  // Public endpoints
+  public: {
+    content: (slug: string) => `/v1/content/${slug}`,
+    plans: '/v1/plans',
+    landing: '/v1/landing',
+    landingSection: (key: string) => `/v1/landing/${key}`,
+    siteSettings: '/v1/site-settings/global',
+    contact: '/v1/contact',
+  },
+
+  // Customization endpoints (admin)
+  customization: {
+    // Landing Page
+    landing: {
+      list: '/v1/admin/landing-page',
+      get: (id: string) => `/v1/admin/landing-page/${id}`,
+      getByKey: (key: string) => `/v1/admin/landing-page/by-key/${key}`,
+      create: '/v1/admin/landing-page',
+      update: (id: string) => `/v1/admin/landing-page/${id}`,
+      delete: (id: string) => `/v1/admin/landing-page/${id}`,
+      toggleActive: (id: string) => `/v1/admin/landing-page/${id}/toggle-active`,
+    },
+    // Site Settings
+    siteSettings: {
+      list: '/v1/admin/site-settings',
+      get: (id: string) => `/v1/admin/site-settings/${id}`,
+      getByKey: (key: string) => `/v1/admin/site-settings/by-key/${key}`,
+      global: '/v1/admin/site-settings/global',
+      create: '/v1/admin/site-settings',
+      update: (id: string) => `/v1/admin/site-settings/${id}`,
+      updateGlobal: '/v1/admin/site-settings/global',
+      delete: (id: string) => `/v1/admin/site-settings/${id}`,
+    },
+    // Contact Page
+    contact: {
+      list: '/v1/admin/contact-page',
+      get: (id: string) => `/v1/admin/contact-page/${id}`,
+      active: '/v1/admin/contact-page/active',
+      create: '/v1/admin/contact-page',
+      update: (id: string) => `/v1/admin/contact-page/${id}`,
+      delete: (id: string) => `/v1/admin/contact-page/${id}`,
+      toggleActive: (id: string) => `/v1/admin/contact-page/${id}/toggle-active`,
+    },
   },
 } as const;
 

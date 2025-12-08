@@ -25,7 +25,7 @@ import {
 } from '@nestjs/swagger';
 import { Response, Request } from 'express';
 import { SSEService } from '../services/sse.service';
-import { Auth0Middleware } from '../../auth/middleware/auth0.middleware';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { TenantContext } from '../../tenant/decorators/tenant-context.decorator';
 import {
   SSEStats,
@@ -35,9 +35,8 @@ import {
 
 @ApiTags('Real-time Events (SSE)')
 @ApiBearerAuth()
-@ApiSecurity('Auth0')
-@UseGuards(Auth0Middleware)
-@Controller('api/v1/events')
+@UseGuards(JwtAuthGuard)
+@Controller('v1/events')
 export class SSEController {
   private readonly logger = new Logger(SSEController.name);
 
@@ -77,8 +76,8 @@ export class SSEController {
     @Query('filters') filters?: string,
     @Query('heartbeat') heartbeatInterval?: number,
   ): Promise<void> {
-    const userId = (request as any).user?.sub; // Auth0 user ID
-    
+    const userId = (request as any).user?.id; // User ID from JWT payload
+
     this.logger.log(`Establishing SSE connection for tenant: ${tenantId}, user: ${userId}`);
 
     const options: Partial<SSEConnectionOptions> = {};

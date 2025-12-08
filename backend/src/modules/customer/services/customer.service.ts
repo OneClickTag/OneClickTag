@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { customAlphabet } from 'nanoid';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 import { TenantContextService } from '../../tenant/services/tenant-context.service';
 import { TenantCacheService } from '../../tenant/services/tenant-cache.service';
@@ -33,6 +34,7 @@ import {
 @Injectable()
 export class CustomerService {
   private readonly logger = new Logger(CustomerService.name);
+  private readonly generateSlug = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 8);
 
   constructor(
     private prisma: PrismaService,
@@ -78,10 +80,30 @@ export class CustomerService {
       // Generate full name
       const fullName = `${createCustomerDto.firstName} ${createCustomerDto.lastName}`.trim();
 
+      // Generate unique slug
+      let slug = this.generateSlug();
+      let attempts = 0;
+      const maxAttempts = 10;
+
+      // Ensure slug is unique
+      while (attempts < maxAttempts) {
+        const existingSlug = await this.prisma.customer.findUnique({
+          where: { slug },
+        });
+        if (!existingSlug) break;
+        slug = this.generateSlug();
+        attempts++;
+      }
+
+      if (attempts === maxAttempts) {
+        throw new InvalidCustomerDataException('Failed to generate unique slug');
+      }
+
       const customer = await this.prisma.tenantAware.customer.create({
         data: {
           ...createCustomerDto,
           fullName,
+          slug,
           tenantId,
           createdBy,
           tags: createCustomerDto.tags || [],
@@ -177,7 +199,7 @@ export class CustomerService {
 
   async findOne(id: string, includeGoogleAds = false): Promise<CustomerResponseDto> {
     const cacheKey = `customers:${id}:${includeGoogleAds}`;
-    
+
     return this.cacheService.getOrSet(
       cacheKey,
       async () => {
@@ -193,6 +215,32 @@ export class CustomerService {
 
         if (!customer) {
           throw new CustomerNotFoundException(id);
+        }
+
+        return this.mapToResponseDto(customer);
+      },
+      { ttl: 600 }, // 10 minutes cache
+    );
+  }
+
+  async findBySlug(slug: string, includeGoogleAds = false): Promise<CustomerResponseDto> {
+    const cacheKey = `customers:slug:${slug}:${includeGoogleAds}`;
+
+    return this.cacheService.getOrSet(
+      cacheKey,
+      async () => {
+        this.logger.log(`Fetching customer by slug: ${slug}`);
+
+        const customer = await this.prisma.tenantAware.customer.findUnique({
+          where: { slug },
+          include: {
+            googleAdsAccounts: includeGoogleAds,
+            ga4Properties: true,
+          },
+        });
+
+        if (!customer) {
+          throw new CustomerNotFoundException(`Customer with slug "${slug}" not found`);
         }
 
         return this.mapToResponseDto(customer);
@@ -500,6 +548,7 @@ export class CustomerService {
 
     return {
       id: customer.id,
+      slug: customer.slug,
       email: customer.email,
       firstName: customer.firstName,
       lastName: customer.lastName,
@@ -534,6 +583,101 @@ export class CustomerService {
       updatedAt: customer.updatedAt,
       createdBy: customer.createdBy,
       updatedBy: customer.updatedBy,
+    };
+  }
+
+  async getCustomerTrackings(
+    customerId: string,
+    page: number = 0,
+    limit: number = 20,
+  ) {
+    this.logger.log(`Fetching trackings for customer: ${customerId}`);
+
+    const skip = page * limit;
+    const [trackings, total] = await Promise.all([
+      this.prisma.tenantAware.tracking.findMany({
+        where: { customerId },
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          conversionAction: true,
+        },
+      }),
+      this.prisma.tenantAware.tracking.count({
+        where: { customerId },
+      }),
+    ]);
+
+    return {
+      trackings,
+      total,
+      page,
+      pageSize: limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getCustomerAnalytics(
+    customerId: string,
+    fromDate?: string,
+    toDate?: string,
+  ) {
+    this.logger.log(`Fetching analytics for customer: ${customerId}`);
+
+    const dateFilter: any = {};
+    if (fromDate) {
+      dateFilter.gte = new Date(fromDate);
+    }
+    if (toDate) {
+      dateFilter.lte = new Date(toDate);
+    }
+
+    const whereClause: any = { customerId };
+    if (Object.keys(dateFilter).length > 0) {
+      whereClause.createdAt = dateFilter;
+    }
+
+    const [
+      totalTrackings,
+      activeTrackings,
+      failedTrackings,
+      recentActivity,
+    ] = await Promise.all([
+      this.prisma.tenantAware.tracking.count({
+        where: { customerId },
+      }),
+      this.prisma.tenantAware.tracking.count({
+        where: { customerId, status: 'ACTIVE' },
+      }),
+      this.prisma.tenantAware.tracking.count({
+        where: { customerId, status: 'FAILED' },
+      }),
+      this.prisma.tenantAware.tracking.findMany({
+        where: whereClause,
+        orderBy: { updatedAt: 'desc' },
+        take: 10,
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          status: true,
+          updatedAt: true,
+        },
+      }),
+    ]);
+
+    const syncRate = totalTrackings > 0
+      ? Math.round((activeTrackings / totalTrackings) * 100)
+      : 0;
+
+    return {
+      totalTrackings,
+      activeTrackings,
+      failedTrackings,
+      syncRate,
+      totalEvents: 0,
+      recentActivity,
     };
   }
 }

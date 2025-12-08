@@ -12,7 +12,7 @@ export class Auth0Middleware implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
-    const token = this.extractTokenFromHeader(request);
+    const token = this.extractTokenFromHeader(request) || this.extractTokenFromQuery(request);
 
     if (!token) {
       throw new UnauthorizedException('Authentication token is required');
@@ -38,6 +38,11 @@ export class Auth0Middleware implements CanActivate {
   private extractTokenFromHeader(request: Request): string | undefined {
     const [type, token] = request.headers.authorization?.split(' ') ?? [];
     return type === 'Bearer' ? token : undefined;
+  }
+
+  private extractTokenFromQuery(request: Request): string | undefined {
+    // For SSE compatibility - EventSource doesn't support custom headers
+    return request.query.authorization as string | undefined;
   }
 }
 

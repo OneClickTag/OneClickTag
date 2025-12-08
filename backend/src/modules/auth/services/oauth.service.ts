@@ -9,6 +9,7 @@ export interface OAuthTokens {
   refreshToken?: string;
   expiresAt?: Date;
   scope: string;
+  updatedAt?: Date;
 }
 
 export interface GoogleTokenResponse {
@@ -126,6 +127,7 @@ export class OAuthService {
       refreshToken: tokenRecord.refreshToken,
       expiresAt: tokenRecord.expiresAt,
       scope: tokenRecord.scope,
+      updatedAt: tokenRecord.updatedAt,
     };
   }
 
@@ -165,6 +167,7 @@ export class OAuthService {
           refreshToken: credentials.refresh_token || tokenRecord.refreshToken,
           expiresAt,
           scope: tokenRecord.scope,
+          updatedAt: new Date(),
         };
 
         await this.storeOAuthTokens(

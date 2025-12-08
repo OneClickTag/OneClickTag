@@ -1,4 +1,4 @@
-import { AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+import { AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig, AxiosHeaders } from 'axios';
 import { ApiConfig } from './config';
 import { tokenManager } from './auth/tokenManager';
 import { loadingManager } from './loading/loadingManager';
@@ -42,7 +42,7 @@ export function createRequestInterceptor(config: ApiConfig) {
 
     // Add default headers
     if (!requestConfig.headers) {
-      requestConfig.headers = {};
+      requestConfig.headers = new AxiosHeaders();
     }
     Object.assign(requestConfig.headers, {
       'Content-Type': 'application/json',

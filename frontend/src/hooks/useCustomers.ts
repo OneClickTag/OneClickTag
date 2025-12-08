@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { customersApi } from '../services/customers';
+import { customersApi } from '../lib/api/services';
 import { CustomerTableParams, CreateCustomerRequest, UpdateCustomerRequest } from '../types/customer.types';
 
 export const CUSTOMERS_QUERY_KEY = 'customers';
@@ -17,6 +17,14 @@ export const useCustomer = (id: string) => {
     queryKey: [CUSTOMERS_QUERY_KEY, id],
     queryFn: () => customersApi.getCustomer(id),
     enabled: !!id,
+  });
+};
+
+export const useCustomerBySlug = (slug: string, options?: { enabled?: boolean }) => {
+  return useQuery({
+    queryKey: [CUSTOMERS_QUERY_KEY, 'slug', slug],
+    queryFn: () => customersApi.getCustomerBySlug(slug),
+    enabled: !!slug && (options?.enabled !== false),
   });
 };
 

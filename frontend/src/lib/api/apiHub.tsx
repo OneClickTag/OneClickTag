@@ -12,9 +12,7 @@ import { loadingManager } from './loading/loadingManager';
 import { errorHandler } from './errors/errorHandler';
 
 // Services
-import { customerService } from './services/customerService';
-import { authService } from './services/authService';
-import { campaignService } from './services/campaignService';
+import { authService, customersApi, campaignsApi } from './services';
 
 // Types
 export type * from './types';
@@ -39,9 +37,9 @@ export class ApiHub {
 
   // Services (legacy - for backward compatibility)
   public readonly legacy = {
-    customers: customerService,
+    customers: customersApi,
     auth: authService,
-    campaigns: campaignService,
+    campaigns: campaignsApi,
   };
 
   constructor(config?: Partial<ApiConfig>) {

@@ -5,6 +5,9 @@
 import { PrismaClient } from '@prisma/client';
 import { random } from '../utils/test-helpers';
 import { CustomerStatus } from '../../src/modules/customer/dto';
+import { customAlphabet } from 'nanoid';
+
+const generateSlug = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 8);
 
 export interface TenantFixtureData {
   tenant: any;
@@ -52,6 +55,7 @@ export class TenantFixtures {
     const customer = await this.prisma.customer.create({
       data: {
         id: random.uuid(),
+        slug: generateSlug(),
         firstName: 'Basic',
         lastName: 'Customer',
         fullName: 'Basic Customer',
@@ -159,6 +163,7 @@ export class TenantFixtures {
       this.prisma.customer.create({
         data: {
           id: random.uuid(),
+          slug: generateSlug(),
           firstName: 'Enterprise',
           lastName: 'Customer',
           fullName: 'Enterprise Customer',
@@ -172,6 +177,7 @@ export class TenantFixtures {
       this.prisma.customer.create({
         data: {
           id: random.uuid(),
+          slug: generateSlug(),
           firstName: 'Mid-Market',
           lastName: 'Customer',
           fullName: 'Mid-Market Customer',
@@ -185,6 +191,7 @@ export class TenantFixtures {
       this.prisma.customer.create({
         data: {
           id: random.uuid(),
+          slug: generateSlug(),
           firstName: 'Small Business',
           lastName: 'Customer',
           fullName: 'Small Business Customer',
@@ -356,6 +363,7 @@ export class TenantFixtures {
     const customer = await this.prisma.customer.create({
       data: {
         id: random.uuid(),
+        slug: generateSlug(),
         firstName: 'Google',
         lastName: 'Customer',
         fullName: 'Google Customer',

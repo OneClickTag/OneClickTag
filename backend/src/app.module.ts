@@ -9,6 +9,8 @@ import { RealtimeModule } from './modules/realtime/realtime.module';
 import { UsersModule } from './users/users.module';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { MonitoringModule } from './common/monitoring/monitoring.module';
+import { AdminModule } from './modules/admin/admin.module';
+import { PublicModule } from './modules/public/public.module';
 
 @Module({
   imports: [
@@ -19,6 +21,8 @@ import { MonitoringModule } from './common/monitoring/monitoring.module';
     PrismaModule,
     TenantModule, // Import before other modules for proper middleware order
     AuthModule,
+    AdminModule,
+    PublicModule,
     CustomerModule,
     GoogleIntegrationModule,
     JobsModule,

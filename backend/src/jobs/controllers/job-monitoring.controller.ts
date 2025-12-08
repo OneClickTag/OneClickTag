@@ -33,7 +33,7 @@ import {
 @ApiBearerAuth()
 @ApiSecurity('Auth0')
 @UseGuards(Auth0Middleware)
-@Controller('api/v1/jobs')
+@Controller('v1/jobs')
 export class JobMonitoringController {
   private readonly logger = new Logger(JobMonitoringController.name);
 
