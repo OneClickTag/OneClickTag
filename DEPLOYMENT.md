@@ -46,10 +46,13 @@ Ensure your infrastructure is deployed from the `oneclicktag-infra` repository:
 
 The workflow will:
 1. Build Docker image(s)
-2. Push to ECR with commit SHA and `latest` tags
-3. Force new ECS deployment
-4. Wait for deployment to stabilize
-5. Show deployment summary
+2. Push to ECR with unique timestamp tag (format: `YYYYMMDD-HHMMSS-{git-sha}`)
+3. Update ECS task definition with new image tag
+4. Deploy updated task definition to ECS service
+5. Wait for deployment to stabilize
+6. Show deployment summary
+
+**Note**: ECR repositories use immutable tags for security. Each deployment creates a unique tag.
 
 ### Manual Deployment
 
@@ -66,22 +69,24 @@ docker build -t test-frontend -f frontend/Dockerfile .
 #### Deploy Manually
 
 ```bash
-# Set environment
+# Set environment and create unique tag
 ENV=dev  # or stage, prod
+IMAGE_TAG=$(date +%Y%m%d-%H%M%S)-$(git rev-parse --short HEAD)
 
 # Get ECR credentials
 aws ecr get-login-password --region eu-central-1 | \
   docker login --username AWS --password-stdin 652617421418.dkr.ecr.eu-central-1.amazonaws.com
 
 # Build and push backend
-docker build -t 652617421418.dkr.ecr.eu-central-1.amazonaws.com/${ENV}-api:latest -f backend/Dockerfile .
-docker push 652617421418.dkr.ecr.eu-central-1.amazonaws.com/${ENV}-api:latest
+docker build -t 652617421418.dkr.ecr.eu-central-1.amazonaws.com/${ENV}-api:$IMAGE_TAG -f backend/Dockerfile .
+docker push 652617421418.dkr.ecr.eu-central-1.amazonaws.com/${ENV}-api:$IMAGE_TAG
 
 # Build and push frontend
-docker build -t 652617421418.dkr.ecr.eu-central-1.amazonaws.com/${ENV}-frontend:latest -f frontend/Dockerfile .
-docker push 652617421418.dkr.ecr.eu-central-1.amazonaws.com/${ENV}-frontend:latest
+docker build -t 652617421418.dkr.ecr.eu-central-1.amazonaws.com/${ENV}-frontend:$IMAGE_TAG -f frontend/Dockerfile .
+docker push 652617421418.dkr.ecr.eu-central-1.amazonaws.com/${ENV}-frontend:$IMAGE_TAG
 
-# Force ECS deployment
+# Update task definitions with new image tags
+# (You'll need to update the task definitions to use the new image tag, then update the service)
 aws ecs update-service --cluster ${ENV}-api-cluster --service ${ENV}-api-svc --force-new-deployment
 aws ecs update-service --cluster ${ENV}-frontend-cluster --service ${ENV}-frontend-svc --force-new-deployment
 ```
@@ -183,5 +188,7 @@ After deployment, services are available at:
 - **TypeScript checking**: Done in CI before Docker build, not during build
 - **Prisma**: Generates client in both builder and production stages
 - **Migrations**: Run automatically on container start via CMD
-- **Image tags**: Both `latest` and `{git-sha}` tags are pushed
+- **Image tags**: Unique timestamp-based tags (format: `YYYYMMDD-HHMMSS-{git-sha}`)
+- **Tag immutability**: ECR repositories use immutable tags for security
 - **Workspace**: Monorepo structure requires copying workspace files
+- **Task definitions**: Automatically updated with new image tags during deployment

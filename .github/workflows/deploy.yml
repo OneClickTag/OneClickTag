@@ -50,23 +50,39 @@ jobs:
           echo "ECR_REPOSITORY=${{ github.event.inputs.environment }}-api" >> $GITHUB_ENV
           echo "ECS_CLUSTER=${{ github.event.inputs.environment }}-api-cluster" >> $GITHUB_ENV
           echo "ECS_SERVICE=${{ github.event.inputs.environment }}-api-svc" >> $GITHUB_ENV
-          echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
+          echo "IMAGE_TAG=$(date +%Y%m%d-%H%M%S)-${GITHUB_SHA::7}" >> $GITHUB_ENV
 
       - name: Build and push Docker image
         run: |
-          docker build \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
-            -f backend/Dockerfile \
-            .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          # Build with unique tag
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f backend/Dockerfile .
 
-      - name: Force ECS deployment
+          # Push the image
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+      - name: Update ECS task definition
+        run: |
+          # Get current task definition
+          TASK_DEFINITION=$(aws ecs describe-task-definition --task-definition ${ECS_CLUSTER/-cluster/} --region $AWS_REGION)
+
+          # Create new task definition with updated image
+          NEW_TASK_DEF=$(echo $TASK_DEFINITION | jq --arg IMAGE "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
+            '.taskDefinition |
+            .containerDefinitions[0].image = $IMAGE |
+            del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
+
+          # Register new task definition
+          NEW_TASK_INFO=$(aws ecs register-task-definition --region $AWS_REGION --cli-input-json "$NEW_TASK_DEF")
+          NEW_REVISION=$(echo $NEW_TASK_INFO | jq -r '.taskDefinition.revision')
+
+          echo "NEW_TASK_REVISION=$NEW_REVISION" >> $GITHUB_ENV
+
+      - name: Update ECS service with new task definition
         run: |
           aws ecs update-service \
             --cluster $ECS_CLUSTER \
             --service $ECS_SERVICE \
+            --task-definition ${ECS_CLUSTER/-cluster/}:$NEW_TASK_REVISION \
             --force-new-deployment \
             --region $AWS_REGION
 
@@ -111,23 +127,39 @@ jobs:
           echo "ECR_REPOSITORY=${{ github.event.inputs.environment }}-frontend" >> $GITHUB_ENV
           echo "ECS_CLUSTER=${{ github.event.inputs.environment }}-frontend-cluster" >> $GITHUB_ENV
           echo "ECS_SERVICE=${{ github.event.inputs.environment }}-frontend-svc" >> $GITHUB_ENV
-          echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
+          echo "IMAGE_TAG=$(date +%Y%m%d-%H%M%S)-${GITHUB_SHA::7}" >> $GITHUB_ENV
 
       - name: Build and push Docker image
         run: |
-          docker build \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
-            -f frontend/Dockerfile \
-            .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          # Build with unique tag
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f frontend/Dockerfile .
 
-      - name: Force ECS deployment
+          # Push the image
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+      - name: Update ECS task definition
+        run: |
+          # Get current task definition
+          TASK_DEFINITION=$(aws ecs describe-task-definition --task-definition ${ECS_CLUSTER/-cluster/}-task --region $AWS_REGION)
+
+          # Create new task definition with updated image
+          NEW_TASK_DEF=$(echo $TASK_DEFINITION | jq --arg IMAGE "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
+            '.taskDefinition |
+            .containerDefinitions[0].image = $IMAGE |
+            del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
+
+          # Register new task definition
+          NEW_TASK_INFO=$(aws ecs register-task-definition --region $AWS_REGION --cli-input-json "$NEW_TASK_DEF")
+          NEW_REVISION=$(echo $NEW_TASK_INFO | jq -r '.taskDefinition.revision')
+
+          echo "NEW_TASK_REVISION=$NEW_REVISION" >> $GITHUB_ENV
+
+      - name: Update ECS service with new task definition
         run: |
           aws ecs update-service \
             --cluster $ECS_CLUSTER \
             --service $ECS_SERVICE \
+            --task-definition ${ECS_CLUSTER/-cluster/}-task:$NEW_TASK_REVISION \
             --force-new-deployment \
             --region $AWS_REGION
 
