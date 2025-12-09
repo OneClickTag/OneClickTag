@@ -63,4 +63,4 @@ RUN pnpm db:generate
 EXPOSE 80
 
 # Run migrations and start server
-CMD ["sh", "-c", "pnpm prisma migrate deploy && node dist/main.js"]
+CMD ["sh", "-c", "pnpm prisma migrate deploy && node dist/src/main.js"]
