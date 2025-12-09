@@ -55,4 +55,4 @@ pids
 
 # Temporary folders
 tmp/
-temp/
+temp/*.env.production
