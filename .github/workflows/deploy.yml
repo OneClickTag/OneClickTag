@@ -52,6 +52,19 @@ jobs:
           echo "ECS_SERVICE=${{ github.event.inputs.environment }}-api-svc" >> $GITHUB_ENV
           echo "IMAGE_TAG=$(date +%Y%m%d-%H%M%S)-${GITHUB_SHA::7}" >> $GITHUB_ENV
 
+      - name: Check S3 environment files exist
+        run: |
+          echo "🔍 Checking if environment file exists in S3..."
+          if aws s3 ls s3://oneclicktag-env-store-${{ github.event.inputs.environment }}/api.env --region $AWS_REGION; then
+            echo "✅ Backend environment file found"
+          else
+            echo "❌ Error: api.env not found in S3 bucket"
+            echo "Please upload environment files before deploying:"
+            echo "  1. Create backend/api.env from backend/.env.example.ecs"
+            echo "  2. Run: ./scripts/upload-env-files.sh ${{ github.event.inputs.environment }}"
+            exit 1
+          fi
+
       - name: Build and push Docker image
         run: |
           # Build with unique tag
@@ -129,9 +142,28 @@ jobs:
           echo "ECS_SERVICE=${{ github.event.inputs.environment }}-frontend-svc" >> $GITHUB_ENV
           echo "IMAGE_TAG=$(date +%Y%m%d-%H%M%S)-${GITHUB_SHA::7}" >> $GITHUB_ENV
 
+      - name: Check S3 environment files exist
+        run: |
+          echo "🔍 Checking if environment file exists in S3..."
+          if aws s3 ls s3://oneclicktag-env-store-${{ github.event.inputs.environment }}/frontend.env --region $AWS_REGION; then
+            echo "✅ Frontend environment file found"
+          else
+            echo "❌ Error: frontend.env not found in S3 bucket"
+            echo "Please upload environment files before deploying:"
+            echo "  1. Create frontend/frontend.env from frontend/.env.example.ecs"
+            echo "  2. Run: ./scripts/upload-env-files.sh ${{ github.event.inputs.environment }}"
+            exit 1
+          fi
+
+      - name: Download environment file from S3
+        run: |
+          echo "📥 Downloading environment file from S3..."
+          aws s3 cp s3://oneclicktag-env-store-${{ github.event.inputs.environment }}/frontend.env frontend/.env --region $AWS_REGION
+          echo "✅ Environment file downloaded"
+
       - name: Build and push Docker image
         run: |
-          # Build with unique tag
+          # Build with unique tag (environment variables will be baked into the build)
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f frontend/Dockerfile .
 
           # Push the image

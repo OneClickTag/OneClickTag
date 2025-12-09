@@ -14,7 +14,8 @@ COPY frontend/package.json ./frontend/
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
-# Copy frontend source
+# Copy frontend source (including .env file if present)
+# The .env file is downloaded from S3 in CI/CD before building
 COPY frontend ./frontend
 
 # Build shared package first (frontend depends on it)
@@ -23,7 +24,9 @@ RUN pnpm build
 
 # Build frontend
 WORKDIR /app/frontend
+
 # Skip TypeScript type checking in Docker build (run separately in CI)
+# Note: VITE_* environment variables from .env are embedded into JavaScript at build time
 RUN pnpm vite build
 
 # Production stage with nginx
