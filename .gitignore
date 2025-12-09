@@ -12,6 +12,16 @@ pnpm-debug.log*
 .env.test.local
 .env.production.local
 
+# ECS environment files (contain secrets, upload to S3 manually)
+backend/api.env
+backend/api.env.dev
+backend/api.env.stage
+backend/api.env.prod
+frontend/frontend.env
+frontend/frontend.env.dev
+frontend/frontend.env.stage
+frontend/frontend.env.prod
+
 # Build outputs
 dist/
 build/

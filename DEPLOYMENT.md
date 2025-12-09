@@ -31,6 +31,51 @@ Ensure your infrastructure is deployed from the `oneclicktag-infra` repository:
 - ECR repositories created
 - ECS clusters and services running
 - Load balancers configured
+- S3 buckets for environment files created
+
+### 3. Environment Files (⚠️ REQUIRED BEFORE FIRST DEPLOYMENT)
+
+**IMPORTANT**: You MUST upload environment files to S3 before deploying, or ECS tasks will fail to start with "403 Forbidden" errors.
+
+#### Quick Setup
+
+1. **Create environment files from templates**:
+   ```bash
+   # Backend
+   cp backend/.env.example.ecs backend/api.env
+   # Edit backend/api.env with your actual values (DATABASE_URL, JWT_SECRET, etc.)
+
+   # Frontend
+   cp frontend/.env.example.ecs frontend/frontend.env
+   # Edit frontend/frontend.env with your actual values (VITE_API_URL, etc.)
+   ```
+
+2. **Upload to S3**:
+   ```bash
+   # For dev environment
+   ./scripts/upload-env-files.sh dev
+
+   # For stage/prod (when ready)
+   ./scripts/upload-env-files.sh stage
+   ./scripts/upload-env-files.sh prod
+   ```
+
+3. **Verify upload**:
+   ```bash
+   aws s3 ls s3://oneclicktag-env-store-dev/ --region eu-central-1
+   ```
+
+#### Required Environment Variables
+
+**Backend** (`backend/api.env`):
+- `DATABASE_URL` - PostgreSQL connection string (REQUIRED)
+- `JWT_SECRET` - Secret for JWT tokens (REQUIRED)
+- `CORS_ORIGIN` - Frontend URL for CORS
+- See `backend/.env.example.ecs` for all options
+
+**Frontend** (`frontend/frontend.env`):
+- `VITE_API_URL` - Backend API URL (REQUIRED)
+- See `frontend/.env.example.ecs` for all options
 
 ## Deployment
 

@@ -1,0 +1,100 @@
+name: Database Migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to run migrations'
+        required: true
+        type: choice
+        options:
+          - dev
+          - stage
+          - prod
+      migration_command:
+        description: 'Migration command to run'
+        required: true
+        type: choice
+        options:
+          - deploy
+          - reset
+          - studio
+        default: deploy
+
+env:
+  AWS_REGION: eu-central-1
+
+jobs:
+  migrate:
+    name: Run Database Migration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Download environment file from S3
+        run: |
+          echo "📥 Downloading environment file from S3..."
+          aws s3 cp s3://oneclicktag-env-store-${{ github.event.inputs.environment }}/api.env backend/.env
+          echo "✅ Environment file downloaded"
+
+      - name: Install dependencies
+        run: |
+          echo "📦 Installing dependencies..."
+          pnpm install --frozen-lockfile
+          echo "✅ Dependencies installed"
+
+      - name: Generate Prisma Client
+        working-directory: backend
+        run: |
+          echo "🔧 Generating Prisma Client..."
+          pnpm db:generate
+          echo "✅ Prisma Client generated"
+
+      - name: Run Migration - Deploy
+        if: ${{ github.event.inputs.migration_command == 'deploy' }}
+        working-directory: backend
+        run: |
+          echo "🚀 Running Prisma migrations (deploy)..."
+          pnpm prisma migrate deploy
+          echo "✅ Migrations deployed successfully"
+
+      - name: Run Migration - Reset
+        if: ${{ github.event.inputs.migration_command == 'reset' }}
+        working-directory: backend
+        run: |
+          echo "⚠️  Running Prisma migration reset..."
+          echo "WARNING: This will reset the database and lose all data!"
+          pnpm prisma migrate reset --force
+          echo "✅ Database reset complete"
+
+      - name: Migration Summary
+        run: |
+          echo "🎉 Migration completed successfully!"
+          echo "Environment: ${{ github.event.inputs.environment }}"
+          echo "Command: prisma migrate ${{ github.event.inputs.migration_command }}"
+          echo ""
+          echo "📊 Database Status:"
+
+      - name: Check Database Status
+        working-directory: backend
+        run: |
+          pnpm prisma migrate status || true
