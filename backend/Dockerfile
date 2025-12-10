@@ -31,6 +31,9 @@ RUN pnpm db:generate
 # Build backend
 RUN pnpm build
 
+# Compile seed script (TypeScript to JavaScript)
+RUN npx tsc prisma/seed.ts --outDir prisma --module commonjs --esModuleInterop --skipLibCheck
+
 # Production stage
 FROM node:18-alpine
 
@@ -54,6 +57,8 @@ RUN pnpm install --frozen-lockfile --prod
 COPY --from=builder /app/shared/dist ./shared/dist
 COPY --from=builder /app/backend/dist ./backend/dist
 COPY --from=builder /app/backend/prisma ./backend/prisma
+# Copy compiled seed script
+COPY --from=builder /app/backend/prisma/seed.js ./backend/prisma/seed.js 2>/dev/null || true
 
 WORKDIR /app/backend
 
