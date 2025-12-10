@@ -53,23 +53,24 @@ jobs:
           echo "task_definition=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
           echo "✅ Found task definition: $TASK_DEF_ARN"
 
-          # Get network configuration from the service
+          # Get network configuration from the service (as comma-separated values)
           SUBNETS=$(aws ecs describe-services \
             --cluster $CLUSTER \
             --services $SERVICE \
             --region $AWS_REGION \
             --query 'services[0].networkConfiguration.awsvpcConfiguration.subnets' \
-            --output json)
+            --output text | tr '\t' ',')
 
           SECURITY_GROUPS=$(aws ecs describe-services \
             --cluster $CLUSTER \
             --services $SERVICE \
             --region $AWS_REGION \
             --query 'services[0].networkConfiguration.awsvpcConfiguration.securityGroups' \
-            --output json)
+            --output text | tr '\t' ',')
 
           echo "subnets=$SUBNETS" >> $GITHUB_OUTPUT
           echo "security_groups=$SECURITY_GROUPS" >> $GITHUB_OUTPUT
+          echo "✅ Network config: subnets=$SUBNETS, security_groups=$SECURITY_GROUPS"
 
       - name: Create task definition override for seeding
         id: task-override
@@ -93,12 +94,41 @@ jobs:
         run: |
           echo "🌱 Running seed task for ${{ github.event.inputs.environment }}..."
 
+          # Create network configuration JSON
+          cat > network-config.json <<EOF
+          {
+            "awsvpcConfiguration": {
+              "subnets": ["${{ steps.ecs-info.outputs.subnets }}"],
+              "securityGroups": ["${{ steps.ecs-info.outputs.security_groups }}"],
+              "assignPublicIp": "ENABLED"
+            }
+          }
+          EOF
+
+          # Parse comma-separated values into JSON arrays
+          SUBNETS_JSON=$(echo "${{ steps.ecs-info.outputs.subnets }}" | jq -R 'split(",") | map(select(length > 0))')
+          SG_JSON=$(echo "${{ steps.ecs-info.outputs.security_groups }}" | jq -R 'split(",") | map(select(length > 0))')
+
+          # Create proper network configuration
+          cat > network-config.json <<EOF
+          {
+            "awsvpcConfiguration": {
+              "subnets": $SUBNETS_JSON,
+              "securityGroups": $SG_JSON,
+              "assignPublicIp": "ENABLED"
+            }
+          }
+          EOF
+
+          echo "✅ Network configuration:"
+          cat network-config.json
+
           TASK_ARN=$(aws ecs run-task \
             --cluster ${{ steps.ecs-info.outputs.cluster }} \
             --task-definition ${{ steps.ecs-info.outputs.task_definition }} \
             --overrides file://task-override.json \
             --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=${{ steps.ecs-info.outputs.subnets }},securityGroups=${{ steps.ecs-info.outputs.security_groups }},assignPublicIp=ENABLED}" \
+            --network-configuration file://network-config.json \
             --region $AWS_REGION \
             --query 'tasks[0].taskArn' \
             --output text)
