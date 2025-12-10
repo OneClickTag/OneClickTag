@@ -17,21 +17,10 @@ env:
 
 jobs:
   seed:
-    name: Seed Database
+    name: Seed Database via ECS Task
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-
-      - name: Install pnpm
-        run: npm install -g pnpm
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -39,29 +28,123 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Download environment file from S3
+      - name: Get ECS cluster and task definition info
+        id: ecs-info
         run: |
-          echo "📥 Downloading environment file from S3..."
-          aws s3 cp s3://oneclicktag-env-store-${{ github.event.inputs.environment }}/api.env backend/.env --region $AWS_REGION
-          echo "✅ Environment file downloaded"
+          CLUSTER="${{ github.event.inputs.environment }}-api-cluster"
+          SERVICE="${{ github.event.inputs.environment }}-api-svc"
 
-      - name: Install dependencies
-        run: |
-          echo "📦 Installing dependencies..."
-          cd backend
-          pnpm install --frozen-lockfile
+          echo "cluster=$CLUSTER" >> $GITHUB_OUTPUT
+          echo "service=$SERVICE" >> $GITHUB_OUTPUT
 
-      - name: Generate Prisma Client
-        run: |
-          echo "🔧 Generating Prisma Client..."
-          cd backend
-          pnpm prisma generate
+          # Get the current task definition family
+          TASK_DEF_ARN=$(aws ecs describe-services \
+            --cluster $CLUSTER \
+            --services $SERVICE \
+            --region $AWS_REGION \
+            --query 'services[0].taskDefinition' \
+            --output text)
 
-      - name: Run database seed
+          if [ -z "$TASK_DEF_ARN" ] || [ "$TASK_DEF_ARN" = "None" ]; then
+            echo "❌ Error: Could not find task definition for service $SERVICE"
+            exit 1
+          fi
+
+          echo "task_definition=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
+          echo "✅ Found task definition: $TASK_DEF_ARN"
+
+          # Get network configuration from the service
+          SUBNETS=$(aws ecs describe-services \
+            --cluster $CLUSTER \
+            --services $SERVICE \
+            --region $AWS_REGION \
+            --query 'services[0].networkConfiguration.awsvpcConfiguration.subnets' \
+            --output json)
+
+          SECURITY_GROUPS=$(aws ecs describe-services \
+            --cluster $CLUSTER \
+            --services $SERVICE \
+            --region $AWS_REGION \
+            --query 'services[0].networkConfiguration.awsvpcConfiguration.securityGroups' \
+            --output json)
+
+          echo "subnets=$SUBNETS" >> $GITHUB_OUTPUT
+          echo "security_groups=$SECURITY_GROUPS" >> $GITHUB_OUTPUT
+
+      - name: Create task definition override for seeding
+        id: task-override
         run: |
-          echo "🌱 Running database seed for ${{ github.event.inputs.environment }}..."
-          cd backend
-          pnpm prisma db seed
+          # Create override JSON to run seed command instead of normal start
+          cat > task-override.json <<EOF
+          {
+            "containerOverrides": [
+              {
+                "name": "${{ github.event.inputs.environment }}-api-container",
+                "command": ["sh", "-c", "cd /app/backend && pnpm prisma db seed"]
+              }
+            ]
+          }
+          EOF
+
+          echo "✅ Task override created"
+          cat task-override.json
+
+      - name: Run seed task
+        run: |
+          echo "🌱 Running seed task for ${{ github.event.inputs.environment }}..."
+
+          TASK_ARN=$(aws ecs run-task \
+            --cluster ${{ steps.ecs-info.outputs.cluster }} \
+            --task-definition ${{ steps.ecs-info.outputs.task_definition }} \
+            --overrides file://task-override.json \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=${{ steps.ecs-info.outputs.subnets }},securityGroups=${{ steps.ecs-info.outputs.security_groups }},assignPublicIp=ENABLED}" \
+            --region $AWS_REGION \
+            --query 'tasks[0].taskArn' \
+            --output text)
+
+          if [ -z "$TASK_ARN" ] || [ "$TASK_ARN" = "None" ]; then
+            echo "❌ Error: Failed to start seed task"
+            exit 1
+          fi
+
+          echo "✅ Seed task started: $TASK_ARN"
+          echo "TASK_ARN=$TASK_ARN" >> $GITHUB_ENV
+
+      - name: Wait for seed task to complete
+        run: |
+          echo "⏳ Waiting for seed task to complete..."
+
+          # Wait for task to finish (max 10 minutes)
+          aws ecs wait tasks-stopped \
+            --cluster ${{ steps.ecs-info.outputs.cluster }} \
+            --tasks ${{ env.TASK_ARN }} \
+            --region $AWS_REGION
+
+          echo "✅ Seed task completed"
+
+      - name: Check task exit code
+        run: |
+          echo "🔍 Checking task exit code..."
+
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster ${{ steps.ecs-info.outputs.cluster }} \
+            --tasks ${{ env.TASK_ARN }} \
+            --region $AWS_REGION \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+
+          echo "Exit code: $EXIT_CODE"
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "❌ Seed task failed with exit code: $EXIT_CODE"
+            echo ""
+            echo "📋 Check CloudWatch logs for details:"
+            echo "https://console.aws.amazon.com/cloudwatch/home?region=$AWS_REGION#logsV2:log-groups/log-group/\$252Fecs\$252F${{ github.event.inputs.environment }}-api"
+            exit 1
+          fi
+
+          echo "✅ Seed task succeeded!"
 
       - name: Seed summary
         if: success()
