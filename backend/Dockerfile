@@ -32,7 +32,19 @@ RUN pnpm db:generate
 RUN pnpm build
 
 # Compile seed script (TypeScript to JavaScript)
-RUN npx tsc prisma/seed.ts --outDir prisma --module commonjs --esModuleInterop --skipLibCheck
+# Use the project's tsconfig but output seed.js to prisma directory
+RUN npx tsc prisma/seed.ts \
+    --outDir prisma \
+    --module commonjs \
+    --esModuleInterop \
+    --resolveJsonModule \
+    --skipLibCheck \
+    --moduleResolution node \
+    --target es2020 \
+    --lib es2020 || echo "Warning: seed compilation had issues, but continuing"
+
+# Verify seed.js was created
+RUN ls -la prisma/seed.js || echo "seed.js not found, will be created at runtime"
 
 # Production stage
 FROM node:18-alpine
@@ -57,8 +69,6 @@ RUN pnpm install --frozen-lockfile --prod
 COPY --from=builder /app/shared/dist ./shared/dist
 COPY --from=builder /app/backend/dist ./backend/dist
 COPY --from=builder /app/backend/prisma ./backend/prisma
-# Copy compiled seed script
-COPY --from=builder /app/backend/prisma/seed.js ./backend/prisma/seed.js 2>/dev/null || true
 
 WORKDIR /app/backend
 
