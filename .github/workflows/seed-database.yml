@@ -1,0 +1,78 @@
+name: Seed Database
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to seed'
+        required: true
+        type: choice
+        options:
+          - dev
+          - stage
+          - prod
+
+env:
+  AWS_REGION: eu-central-1
+
+jobs:
+  seed:
+    name: Seed Database
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Download environment file from S3
+        run: |
+          echo "📥 Downloading environment file from S3..."
+          aws s3 cp s3://oneclicktag-env-store-${{ github.event.inputs.environment }}/api.env backend/.env --region $AWS_REGION
+          echo "✅ Environment file downloaded"
+
+      - name: Install dependencies
+        run: |
+          echo "📦 Installing dependencies..."
+          cd backend
+          pnpm install --frozen-lockfile
+
+      - name: Run database seed
+        run: |
+          echo "🌱 Running database seed for ${{ github.event.inputs.environment }}..."
+          cd backend
+          pnpm prisma db seed
+
+      - name: Seed summary
+        if: success()
+        run: |
+          echo "✅ Database seeded successfully for ${{ github.event.inputs.environment }}!"
+          echo ""
+          echo "📋 Seeds include:"
+          echo "   - Admin user (admin@oneclicktag.com)"
+          echo "   - Content pages (About, Terms, Privacy)"
+          echo "   - Pricing plans (Starter, Pro, Enterprise)"
+          echo "   - Landing page content (Hero, Features, CTA)"
+          echo "   - Site settings (Branding, Colors, Meta)"
+          echo "   - Contact page content"
+
+      - name: Seed failed
+        if: failure()
+        run: |
+          echo "❌ Database seeding failed for ${{ github.event.inputs.environment }}"
+          echo "Check the logs above for error details"
+          exit 1
