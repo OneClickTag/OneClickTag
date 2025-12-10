@@ -51,6 +51,12 @@ jobs:
           cd backend
           pnpm install --frozen-lockfile
 
+      - name: Generate Prisma Client
+        run: |
+          echo "🔧 Generating Prisma Client..."
+          cd backend
+          pnpm prisma generate
+
       - name: Run database seed
         run: |
           echo "🌱 Running database seed for ${{ github.event.inputs.environment }}..."
