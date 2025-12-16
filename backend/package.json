@@ -27,9 +27,14 @@
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset",
     "db:seed": "prisma db seed",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "seed:rds:dev": "ts-node -r tsconfig-paths/register scripts/seed-rds.ts dev",
+    "seed:rds:stage": "ts-node -r tsconfig-paths/register scripts/seed-rds.ts stage",
+    "seed:rds:prod": "ts-node -r tsconfig-paths/register scripts/seed-rds.ts prod",
+    "seed:rds:all": "./scripts/seed-all-envs.sh --all"
   },
   "dependencies": {
+    "@aws-sdk/client-rds": "^3.952.0",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/bull": "^10.0.1",
     "@nestjs/common": "^10.3.0",
