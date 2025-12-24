@@ -95,13 +95,66 @@ export class GTMSyncProcessor {
       throw new Error('No valid GTM OAuth tokens found for customer');
     }
 
-    const oauth2Client = new google.auth.OAuth2();
+    const oauth2Client = new google.auth.OAuth2(
+      this.configService.get<string>('GOOGLE_CLIENT_ID'),
+      this.configService.get<string>('GOOGLE_CLIENT_SECRET'),
+      this.configService.get<string>('GOOGLE_CALLBACK_URL')
+    );
     oauth2Client.setCredentials({
       access_token: tokens.accessToken,
       refresh_token: tokens.refreshToken,
     });
 
     return google.tagmanager({ version: 'v2', auth: oauth2Client });
+  }
+
+  /**
+   * Get or create OneClickTag workspace for a container
+   */
+  private async getOrCreateWorkspace(
+    gtmClient: any,
+    containerId: string
+  ): Promise<string> {
+    try {
+      // Get GTM account ID first
+      const accountsResponse = await gtmClient.accounts.list();
+      if (!accountsResponse.data.account || accountsResponse.data.account.length === 0) {
+        throw new Error('No GTM accounts found');
+      }
+      const gtmAccountId = accountsResponse.data.account[0].accountId;
+
+      // List existing workspaces
+      const workspacesResponse = await gtmClient.accounts.containers.workspaces.list({
+        parent: `accounts/${gtmAccountId}/containers/${containerId}`,
+      });
+
+      // Check if OneClickTag workspace already exists
+      const existingWorkspace = workspacesResponse.data.workspace?.find(
+        (ws: any) => ws.name === 'OneClickTag'
+      );
+
+      if (existingWorkspace) {
+        this.logger.log(`Found existing OneClickTag workspace: ${existingWorkspace.workspaceId}`);
+        return existingWorkspace.workspaceId;
+      }
+
+      // Create new workspace
+      this.logger.log('Creating new OneClickTag workspace');
+      const createResponse = await gtmClient.accounts.containers.workspaces.create({
+        parent: `accounts/${gtmAccountId}/containers/${containerId}`,
+        requestBody: {
+          name: 'OneClickTag',
+          description: 'Workspace for OneClickTag automated tracking setup',
+        },
+      });
+
+      const workspaceId = createResponse.data.workspaceId;
+      this.logger.log(`Created OneClickTag workspace: ${workspaceId}`);
+      return workspaceId;
+    } catch (error) {
+      this.logger.error(`Failed to get/create workspace: ${error.message}`, error.stack);
+      throw error;
+    }
   }
 
   private async createGTMTag(
@@ -167,9 +220,12 @@ export class GTMSyncProcessor {
 
     await job.progress(70);
 
+    // Get OneClickTag workspace ID
+    const workspaceId = await this.getOrCreateWorkspace(gtmClient, data.gtmContainerId);
+
     // Create the tag in GTM
     const createTagResponse = await gtmClient.accounts.containers.workspaces.tags.create({
-      parent: `accounts/-/containers/${data.gtmContainerId}/workspaces/-`,
+      parent: `accounts/-/containers/${data.gtmContainerId}/workspaces/${workspaceId}`,
       requestBody: tagResource,
     });
 
@@ -179,7 +235,7 @@ export class GTMSyncProcessor {
 
     // Create trigger if conditions are provided
     if (data.changes.triggerConditions && data.changes.triggerConditions.length > 0) {
-      await this.createGTMTrigger(gtmClient, data.gtmContainerId, gtmTagId, data.changes.triggerConditions);
+      await this.createGTMTrigger(gtmClient, data.gtmContainerId, workspaceId, gtmTagId, data.changes.triggerConditions);
     }
 
     return {
@@ -212,15 +268,18 @@ export class GTMSyncProcessor {
       updateData.name = data.changes.tagName;
     }
 
+    // Get OneClickTag workspace ID
+    const workspaceId = await this.getOrCreateWorkspace(gtmClient, data.gtmContainerId);
+
     if (data.changes.customParameters) {
       // Get existing tag first
       const existingTag = await gtmClient.accounts.containers.workspaces.tags.get({
-        path: `accounts/-/containers/${data.gtmContainerId}/workspaces/-/tags/${existingTagId}`,
+        path: `accounts/-/containers/${data.gtmContainerId}/workspaces/${workspaceId}/tags/${existingTagId}`,
       });
 
       // Update parameters
       updateData.parameter = existingTag.data.parameter || [];
-      
+
       Object.entries(data.changes.customParameters).forEach(([key, value]) => {
         const existingParam = updateData.parameter.find((p: any) => p.key === key);
         if (existingParam) {
@@ -239,7 +298,7 @@ export class GTMSyncProcessor {
 
     // Update the tag
     const updateResponse = await gtmClient.accounts.containers.workspaces.tags.update({
-      path: `accounts/-/containers/${data.gtmContainerId}/workspaces/-/tags/${existingTagId}`,
+      path: `accounts/-/containers/${data.gtmContainerId}/workspaces/${workspaceId}/tags/${existingTagId}`,
       requestBody: updateData,
     });
 
@@ -266,9 +325,12 @@ export class GTMSyncProcessor {
 
     await job.progress(60);
 
+    // Get OneClickTag workspace ID
+    const workspaceId = await this.getOrCreateWorkspace(gtmClient, data.gtmContainerId);
+
     // Delete the tag
     await gtmClient.accounts.containers.workspaces.tags.delete({
-      path: `accounts/-/containers/${data.gtmContainerId}/workspaces/-/tags/${existingTagId}`,
+      path: `accounts/-/containers/${data.gtmContainerId}/workspaces/${workspaceId}/tags/${existingTagId}`,
     });
 
     await job.progress(90);
@@ -283,6 +345,7 @@ export class GTMSyncProcessor {
   private async createGTMTrigger(
     gtmClient: any,
     containerId: string,
+    workspaceId: string,
     tagId: string,
     triggerConditions: string[],
   ): Promise<void> {
@@ -313,7 +376,7 @@ export class GTMSyncProcessor {
     };
 
     const createTriggerResponse = await gtmClient.accounts.containers.workspaces.triggers.create({
-      parent: `accounts/-/containers/${containerId}/workspaces/-`,
+      parent: `accounts/-/containers/${containerId}/workspaces/${workspaceId}`,
       requestBody: triggerResource,
     });
 
@@ -321,7 +384,7 @@ export class GTMSyncProcessor {
 
     // Update tag to use the trigger
     await gtmClient.accounts.containers.workspaces.tags.update({
-      path: `accounts/-/containers/${containerId}/workspaces/-/tags/${tagId}`,
+      path: `accounts/-/containers/${containerId}/workspaces/${workspaceId}/tags/${tagId}`,
       requestBody: {
         firingTriggerId: [triggerId],
       },

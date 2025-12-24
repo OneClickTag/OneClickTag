@@ -83,7 +83,11 @@ export class ConversionActionsService {
       );
     }
 
-    const oauth2Client = new google.auth.OAuth2();
+    const oauth2Client = new google.auth.OAuth2(
+      this.configService.get<string>('GOOGLE_CLIENT_ID'),
+      this.configService.get<string>('GOOGLE_CLIENT_SECRET'),
+      this.configService.get<string>('GOOGLE_CALLBACK_URL')
+    );
     oauth2Client.setCredentials({
       access_token: tokens.accessToken,
       refresh_token: tokens.refreshToken,
@@ -501,6 +505,9 @@ export class ConversionActionsService {
       // Initialize GTM client
       const gtm = await this.initializeGTMClient(customerId);
 
+      // Get OneClickTag workspace ID
+      const workspaceId = await this.getOrCreateWorkspace(gtm, gtmData.containerId);
+
       // Create GTM tag for conversion tracking
       const tagName =
         gtmData.tagName || `Google Ads Conversion - ${conversionActionId}`;
@@ -546,7 +553,7 @@ export class ConversionActionsService {
       // Create the tag in GTM
       const createTagResponse =
         await gtm.accounts.containers.workspaces.tags.create({
-          parent: `accounts/-/containers/${gtmData.containerId}/workspaces/-`,
+          parent: `accounts/-/containers/${gtmData.containerId}/workspaces/${workspaceId}`,
           requestBody: tagResource,
         });
 
@@ -557,6 +564,7 @@ export class ConversionActionsService {
         await this.createGTMTrigger(
           gtm,
           gtmData.containerId,
+          workspaceId,
           gtmTagId,
           gtmData.triggerConditions
         );
@@ -581,11 +589,61 @@ export class ConversionActionsService {
   }
 
   /**
+   * Get or create OneClickTag workspace for a container
+   */
+  private async getOrCreateWorkspace(
+    gtmClient: any,
+    containerId: string
+  ): Promise<string> {
+    try {
+      // Get GTM account ID first
+      const accountsResponse = await gtmClient.accounts.list();
+      if (!accountsResponse.data.account || accountsResponse.data.account.length === 0) {
+        throw new Error('No GTM accounts found');
+      }
+      const gtmAccountId = accountsResponse.data.account[0].accountId;
+
+      // List existing workspaces
+      const workspacesResponse = await gtmClient.accounts.containers.workspaces.list({
+        parent: `accounts/${gtmAccountId}/containers/${containerId}`,
+      });
+
+      // Check if OneClickTag workspace already exists
+      const existingWorkspace = workspacesResponse.data.workspace?.find(
+        (ws: any) => ws.name === 'OneClickTag'
+      );
+
+      if (existingWorkspace) {
+        this.logger.log(`Found existing OneClickTag workspace: ${existingWorkspace.workspaceId}`);
+        return existingWorkspace.workspaceId;
+      }
+
+      // Create new workspace
+      this.logger.log('Creating new OneClickTag workspace');
+      const createResponse = await gtmClient.accounts.containers.workspaces.create({
+        parent: `accounts/${gtmAccountId}/containers/${containerId}`,
+        requestBody: {
+          name: 'OneClickTag',
+          description: 'Workspace for OneClickTag automated tracking setup',
+        },
+      });
+
+      const workspaceId = createResponse.data.workspaceId;
+      this.logger.log(`Created OneClickTag workspace: ${workspaceId}`);
+      return workspaceId;
+    } catch (error) {
+      this.logger.error(`Failed to get/create workspace: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  /**
    * Create GTM trigger for conversion tracking
    */
   private async createGTMTrigger(
     gtm: any,
     containerId: string,
+    workspaceId: string,
     tagId: string,
     triggerConditions: string[]
   ): Promise<void> {
@@ -618,7 +676,7 @@ export class ConversionActionsService {
 
       const createTriggerResponse =
         await gtm.accounts.containers.workspaces.triggers.create({
-          parent: `accounts/-/containers/${containerId}/workspaces/-`,
+          parent: `accounts/-/containers/${containerId}/workspaces/${workspaceId}`,
           requestBody: triggerResource,
         });
 
@@ -626,7 +684,7 @@ export class ConversionActionsService {
 
       // Update tag to use the trigger
       await gtm.accounts.containers.workspaces.tags.update({
-        path: `accounts/-/containers/${containerId}/workspaces/-/tags/${tagId}`,
+        path: `accounts/-/containers/${containerId}/workspaces/${workspaceId}/tags/${tagId}`,
         requestBody: {
           firingTriggerId: [triggerId],
         },

@@ -26,6 +26,7 @@ import {
 } from '../../google-integration/types/google-ads.types';
 import { Credentials } from 'google-auth-library';
 import { Observable, Subject } from 'rxjs';
+import { extractErrorMessage, extractErrorStack } from '../../../common/utils/error.utils';
 
 @Injectable()
 export class GoogleIntegrationService {
@@ -132,10 +133,10 @@ export class GoogleIntegrationService {
         tokens = tokenResponse.tokens;
         this.emitProgress(customerId, 'oauth', 'success', 'Authorization successful');
       } catch (tokenError) {
-        const errorMessage = tokenError?.message || String(tokenError) || 'Unknown error';
+        const errorMessage = extractErrorMessage(tokenError);
         this.logger.error(
           `Token exchange failed: ${errorMessage}`,
-          tokenError
+          extractErrorStack(tokenError)
         );
 
         this.emitProgress(customerId, 'oauth', 'error', 'Authorization failed', errorMessage);
@@ -370,31 +371,44 @@ export class GoogleIntegrationService {
         try {
           const gtmClient = await this.initializeGTMClient(userId);
 
-          for (const tracking of customer.trackings) {
-            try {
-              // Delete GTM tag if it exists
-              if (tracking.gtmTagId && tracking.gtmContainerId) {
-                await gtmClient.accounts.containers.workspaces.tags.delete({
-                  path: `accounts/-/containers/${tracking.gtmContainerId}/workspaces/-/tags/${tracking.gtmTagId}`,
-                });
-                this.logger.log(`Deleted GTM tag: ${tracking.gtmTagId}`);
-              }
+          // Get GTM account ID
+          const accountsResponse = await gtmClient.accounts.list();
+          if (!accountsResponse.data.account || accountsResponse.data.account.length === 0) {
+            this.logger.warn('No GTM accounts found during cleanup, skipping GTM component cleanup');
+          } else {
+            const gtmAccountId = accountsResponse.data.account[0].accountId;
 
-              // Delete GTM trigger if it exists
-              if (tracking.gtmTriggerId && tracking.gtmContainerId) {
-                await gtmClient.accounts.containers.workspaces.triggers.delete({
-                  path: `accounts/-/containers/${tracking.gtmContainerId}/workspaces/-/triggers/${tracking.gtmTriggerId}`,
-                });
-                this.logger.log(
-                  `Deleted GTM trigger: ${tracking.gtmTriggerId}`
+            for (const tracking of customer.trackings) {
+              try {
+                if (tracking.gtmContainerId) {
+                  // Get the OneClickTag workspace ID for this container
+                  const workspaceId = await this.getOrCreateWorkspace(gtmClient, gtmAccountId, tracking.gtmContainerId);
+
+                  // Delete GTM tag if it exists
+                  if (tracking.gtmTagId) {
+                    await gtmClient.accounts.containers.workspaces.tags.delete({
+                      path: `accounts/-/containers/${tracking.gtmContainerId}/workspaces/${workspaceId}/tags/${tracking.gtmTagId}`,
+                    });
+                    this.logger.log(`Deleted GTM tag: ${tracking.gtmTagId}`);
+                  }
+
+                  // Delete GTM trigger if it exists
+                  if (tracking.gtmTriggerId) {
+                    await gtmClient.accounts.containers.workspaces.triggers.delete({
+                      path: `accounts/-/containers/${tracking.gtmContainerId}/workspaces/${workspaceId}/triggers/${tracking.gtmTriggerId}`,
+                    });
+                    this.logger.log(
+                      `Deleted GTM trigger: ${tracking.gtmTriggerId}`
+                    );
+                  }
+                }
+              } catch (gtmError) {
+                const errorMessage = gtmError?.message || String(gtmError) || 'Unknown error';
+                this.logger.warn(
+                  `Failed to delete GTM components for tracking ${tracking.id}: ${errorMessage}`
                 );
+                // Continue with other trackings
               }
-            } catch (gtmError) {
-              const errorMessage = gtmError?.message || String(gtmError) || 'Unknown error';
-              this.logger.warn(
-                `Failed to delete GTM components for tracking ${tracking.id}: ${errorMessage}`
-              );
-              // Continue with other trackings
             }
           }
         } catch (gtmClientError) {
@@ -739,43 +753,43 @@ export class GoogleIntegrationService {
         this.logger.log(`Found existing OneClickTag property: ${oneClickTagProperty.propertyId}`);
       }
 
-      // Store/update GA4 properties in database
-      const savedProperties = [];
-      for (const propertyInfo of ga4Properties) {
-        const savedProperty = await this.prisma.gA4Property.upsert({
-          where: {
-            propertyId_tenantId: {
+      // Store/update GA4 properties in database using transaction for better performance
+      const savedProperties = await this.prisma.$transaction(
+        ga4Properties.map(propertyInfo =>
+          this.prisma.gA4Property.upsert({
+            where: {
+              propertyId_tenantId: {
+                propertyId: propertyInfo.propertyId,
+                tenantId,
+              },
+            },
+            update: {
+              propertyName: propertyInfo.propertyName,
+              displayName: propertyInfo.displayName,
+              websiteUrl: propertyInfo.websiteUrl,
+              timeZone: propertyInfo.timeZone,
+              currency: propertyInfo.currency,
+              industryCategory: propertyInfo.industryCategory,
+              measurementId: propertyInfo.measurementId,
+              isActive: propertyInfo.isActive,
+            },
+            create: {
+              googleAccountId: customer.googleAccountId,
               propertyId: propertyInfo.propertyId,
+              propertyName: propertyInfo.propertyName,
+              displayName: propertyInfo.displayName,
+              websiteUrl: propertyInfo.websiteUrl,
+              timeZone: propertyInfo.timeZone,
+              currency: propertyInfo.currency,
+              industryCategory: propertyInfo.industryCategory,
+              measurementId: propertyInfo.measurementId,
+              isActive: propertyInfo.isActive,
+              customerId,
               tenantId,
             },
-          },
-          update: {
-            propertyName: propertyInfo.propertyName,
-            displayName: propertyInfo.displayName,
-            websiteUrl: propertyInfo.websiteUrl,
-            timeZone: propertyInfo.timeZone,
-            currency: propertyInfo.currency,
-            industryCategory: propertyInfo.industryCategory,
-            measurementId: propertyInfo.measurementId,
-            isActive: propertyInfo.isActive,
-          },
-          create: {
-            googleAccountId: customer.googleAccountId,
-            propertyId: propertyInfo.propertyId,
-            propertyName: propertyInfo.propertyName,
-            displayName: propertyInfo.displayName,
-            websiteUrl: propertyInfo.websiteUrl,
-            timeZone: propertyInfo.timeZone,
-            currency: propertyInfo.currency,
-            industryCategory: propertyInfo.industryCategory,
-            measurementId: propertyInfo.measurementId,
-            isActive: propertyInfo.isActive,
-            customerId,
-            tenantId,
-          },
-        });
-        savedProperties.push(savedProperty);
-      }
+          })
+        )
+      );
 
       this.logger.log(
         `Setup complete: ${savedProperties.length} GA4 properties for customer: ${customerId}`
@@ -842,43 +856,43 @@ export class GoogleIntegrationService {
 
       this.logger.log(`Found ${ga4Properties.length} GA4 properties to sync`);
 
-      // Store/update GA4 properties in database
-      const savedProperties = [];
-      for (const propertyInfo of ga4Properties) {
-        const savedProperty = await this.prisma.gA4Property.upsert({
-          where: {
-            propertyId_tenantId: {
+      // Store/update GA4 properties in database using transaction for better performance
+      const savedProperties = await this.prisma.$transaction(
+        ga4Properties.map(propertyInfo =>
+          this.prisma.gA4Property.upsert({
+            where: {
+              propertyId_tenantId: {
+                propertyId: propertyInfo.propertyId,
+                tenantId,
+              },
+            },
+            update: {
+              propertyName: propertyInfo.propertyName,
+              displayName: propertyInfo.displayName,
+              websiteUrl: propertyInfo.websiteUrl,
+              timeZone: propertyInfo.timeZone,
+              currency: propertyInfo.currency,
+              industryCategory: propertyInfo.industryCategory,
+              measurementId: propertyInfo.measurementId,
+              isActive: propertyInfo.isActive,
+            },
+            create: {
+              googleAccountId: customer.googleAccountId,
               propertyId: propertyInfo.propertyId,
+              propertyName: propertyInfo.propertyName,
+              displayName: propertyInfo.displayName,
+              websiteUrl: propertyInfo.websiteUrl,
+              timeZone: propertyInfo.timeZone,
+              currency: propertyInfo.currency,
+              industryCategory: propertyInfo.industryCategory,
+              measurementId: propertyInfo.measurementId,
+              isActive: propertyInfo.isActive,
+              customerId,
               tenantId,
             },
-          },
-          update: {
-            propertyName: propertyInfo.propertyName,
-            displayName: propertyInfo.displayName,
-            websiteUrl: propertyInfo.websiteUrl,
-            timeZone: propertyInfo.timeZone,
-            currency: propertyInfo.currency,
-            industryCategory: propertyInfo.industryCategory,
-            measurementId: propertyInfo.measurementId,
-            isActive: propertyInfo.isActive,
-          },
-          create: {
-            googleAccountId: customer.googleAccountId,
-            propertyId: propertyInfo.propertyId,
-            propertyName: propertyInfo.propertyName,
-            displayName: propertyInfo.displayName,
-            websiteUrl: propertyInfo.websiteUrl,
-            timeZone: propertyInfo.timeZone,
-            currency: propertyInfo.currency,
-            industryCategory: propertyInfo.industryCategory,
-            measurementId: propertyInfo.measurementId,
-            isActive: propertyInfo.isActive,
-            customerId,
-            tenantId,
-          },
-        });
-        savedProperties.push(savedProperty);
-      }
+          })
+        )
+      );
 
       this.logger.log(
         `Synced ${savedProperties.length} GA4 properties for customer: ${customerId}`

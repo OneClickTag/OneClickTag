@@ -81,6 +81,62 @@ export class TenantCacheService {
   }
 
   /**
+   * Delete multiple keys at once
+   */
+  async delMany(keys: string[], options: CacheOptions = {}): Promise<number> {
+    let deletedCount = 0;
+    for (const key of keys) {
+      const deleted = await this.del(key, options);
+      if (deleted) {
+        deletedCount++;
+      }
+    }
+    return deletedCount;
+  }
+
+  /**
+   * Delete all keys matching a pattern
+   * Pattern supports simple wildcards: 'customers:*', 'customers:123:*', etc.
+   */
+  async delPattern(pattern: string, options: CacheOptions = {}): Promise<number> {
+    const tenantId = options.global ? undefined : (options.tenantId || TenantContextService.getTenantId());
+    const regexPattern = pattern.replace(/\*/g, '.*');
+    const regex = new RegExp(`^${regexPattern}$`);
+
+    let deletedCount = 0;
+    for (const [cacheKey, entry] of this.cache.entries()) {
+      // Check tenant isolation
+      if (!options.global && entry.tenantId !== tenantId) {
+        continue;
+      }
+
+      // Extract the original key from the cache key (remove tenant prefix)
+      const originalKey = this.extractOriginalKey(cacheKey, entry.tenantId);
+
+      if (regex.test(originalKey)) {
+        this.cache.delete(cacheKey);
+        deletedCount++;
+      }
+    }
+
+    this.logger.log(`Deleted ${deletedCount} cache entries matching pattern: ${pattern}`);
+    return deletedCount;
+  }
+
+  /**
+   * Extract original key from cache key (removing tenant prefix)
+   */
+  private extractOriginalKey(cacheKey: string, tenantId?: string): string {
+    if (tenantId) {
+      const prefix = `tenant:${tenantId}:`;
+      if (cacheKey.startsWith(prefix)) {
+        return cacheKey.substring(prefix.length);
+      }
+    }
+    return cacheKey;
+  }
+
+  /**
    * Check if key exists in cache
    */
   async has(key: string, options: CacheOptions = {}): Promise<boolean> {

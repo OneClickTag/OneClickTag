@@ -58,22 +58,11 @@ export const customersApi = {
       searchParams.append('toDate', filters.dateRange.to);
     }
 
-    console.log('Fetching customers with URL:', `/v1/customers?${searchParams.toString()}`);
-    console.log('Search params object:', Object.fromEntries(searchParams.entries()));
-
     const response = await api.get(`/v1/customers?${searchParams.toString()}`);
     // Transform backend response to frontend format
     const backendData = response.data;
     const transformedCustomers = (backendData.data || []).map((customer: any) => {
       const name = customer.fullName || customer.name || `${customer.firstName || ''} ${customer.lastName || ''}`.trim() || 'Unnamed Customer';
-      console.log('Transforming customer:', {
-        id: customer.id,
-        fullName: customer.fullName,
-        firstName: customer.firstName,
-        lastName: customer.lastName,
-        name: customer.name,
-        computed: name
-      });
       return {
         ...customer,
         name,

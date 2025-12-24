@@ -298,10 +298,8 @@ export class CustomerService {
       });
 
       // Clear cache
-      await this.cacheService.del(`customers:${id}:true`);
-      await this.cacheService.del(`customers:${id}:false`);
-      await this.cacheService.del('customers:list');
-      await this.cacheService.del('customers:stats');
+      await this.cacheService.delPattern(`customers:${id}:*`);
+      await this.cacheService.delMany(['customers:list', 'customers:stats']);
 
       this.logger.log(`Customer updated successfully: ${id}`);
       return this.mapToResponseDto(customer);
@@ -331,10 +329,8 @@ export class CustomerService {
       });
 
       // Clear cache
-      await this.cacheService.del(`customers:${id}:true`);
-      await this.cacheService.del(`customers:${id}:false`);
-      await this.cacheService.del('customers:list');
-      await this.cacheService.del('customers:stats');
+      await this.cacheService.delPattern(`customers:${id}:*`);
+      await this.cacheService.delMany(['customers:list', 'customers:stats']);
 
       this.logger.log(`Customer deleted successfully: ${id}`);
     } catch (error) {

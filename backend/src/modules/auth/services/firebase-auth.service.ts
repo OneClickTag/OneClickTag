@@ -9,12 +9,10 @@ export class FirebaseAuthService {
   async verifyIdToken(idToken: string): Promise<admin.auth.DecodedIdToken> {
     try {
       const auth = this.firebaseConfig.getAuth();
-      console.log('auth', auth);
       if (!auth) {
         throw new UnauthorizedException('Firebase is not configured');
       }
       const decodedToken = await auth.verifyIdToken(idToken);
-      console.log('decodedToken', decodedToken);
       return decodedToken;
     } catch (error) {
       throw new UnauthorizedException(
