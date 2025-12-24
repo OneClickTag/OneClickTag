@@ -39,32 +39,44 @@ export function LandingHero() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+
     const loadContent = async () => {
       try {
         const section = await publicService.getLandingSection('hero');
-        if (section.isActive && section.content) {
+        if (!cancelled && section.isActive && section.content) {
           setContent(section.content as HeroContent);
         }
       } catch (error) {
-        console.error('Failed to load hero content:', error);
-        // Use default content on error
-        setContent({
-          badge: { icon: 'Zap', text: 'Automated Conversion Tracking' },
-          headline: 'Setup Google Tracking',
-          headlineHighlight: 'In One Click',
-          subtitle: 'Stop wasting hours on manual tag setup. OneClickTag automatically creates GTM tags, Google Ads conversions, and GA4 events in seconds.',
-          benefits: ['No coding required', 'GTM + Google Ads + GA4', 'Setup in 2 minutes'],
-          primaryCTA: { text: 'Start Free Trial', url: '/register' },
-          secondaryCTA: { text: 'View Pricing', url: '/plans' },
-          trustIndicators: 'No credit card required • Cancel anytime • 14-day free trial',
-          demoVideo: { enabled: true, thumbnail: null, stats: [{ label: 'Setup Time', value: '2 min', icon: 'Zap' }] }
-        });
+        if (!cancelled) {
+          console.error('Failed to load hero content:', error);
+          // Use default content on error
+          setContent({
+            badge: { icon: 'Zap', text: 'Automated Conversion Tracking' },
+            headline: 'Setup Google Tracking',
+            headlineHighlight: 'In One Click',
+            subtitle: 'Stop wasting hours on manual tag setup. OneClickTag automatically creates GTM tags, Google Ads conversions, and GA4 events in seconds.',
+            benefits: ['No coding required', 'GTM + Google Ads + GA4', 'Setup in 2 minutes'],
+            primaryCTA: { text: 'Start Free Trial', url: '/register' },
+            secondaryCTA: { text: 'View Pricing', url: '/plans' },
+            trustIndicators: 'No credit card required • Cancel anytime • 14-day free trial',
+            demoVideo: { enabled: true, thumbnail: null, stats: [{ label: 'Setup Time', value: '2 min', icon: 'Zap' }] }
+          });
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
     loadContent();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, []);
 
   if (loading || !content) {

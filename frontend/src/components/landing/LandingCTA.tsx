@@ -44,39 +44,51 @@ export function LandingCTA() {
   });
 
   useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+
     const loadContent = async () => {
       try {
         const section = await publicService.getLandingSection('cta');
-        if (section.isActive && section.content) {
+        if (!cancelled && section.isActive && section.content) {
           setContent(section.content as CTAContent);
         }
       } catch (error) {
-        console.error('Failed to load CTA content:', error);
-        // Use default content on error
-        setContent({
-          badge: { icon: 'Sparkles', text: 'Limited Time Offer' },
-          headline: 'Ready to Transform Your',
-          headlineSecondLine: 'Tracking Workflow?',
-          subtitle: 'Join 1,000+ marketers who are saving hours every week with automated tracking setup. Start your 14-day free trial today—no credit card required.',
-          features: ['14-day free trial', 'No credit card required', 'Cancel anytime', 'Setup in 2 minutes'],
-          primaryCTA: { text: 'Start Free Trial', url: '/register' },
-          secondaryCTA: { text: 'View Pricing', url: '/plans' },
-          trustBadge: 'Secure OAuth connection • GDPR compliant • SOC 2 certified',
-          testimonial: {
-            quote: 'OneClickTag is the tool I wish I had 5 years ago. It\'s saved our team countless hours and eliminated tracking errors completely.',
-            author: {
-              name: 'James Davis',
-              initials: 'JD',
-              role: 'Head of Marketing, TechCorp'
+        if (!cancelled) {
+          console.error('Failed to load CTA content:', error);
+          // Use default content on error
+          setContent({
+            badge: { icon: 'Sparkles', text: 'Limited Time Offer' },
+            headline: 'Ready to Transform Your',
+            headlineSecondLine: 'Tracking Workflow?',
+            subtitle: 'Join 1,000+ marketers who are saving hours every week with automated tracking setup. Start your 14-day free trial today—no credit card required.',
+            features: ['14-day free trial', 'No credit card required', 'Cancel anytime', 'Setup in 2 minutes'],
+            primaryCTA: { text: 'Start Free Trial', url: '/register' },
+            secondaryCTA: { text: 'View Pricing', url: '/plans' },
+            trustBadge: 'Secure OAuth connection • GDPR compliant • SOC 2 certified',
+            testimonial: {
+              quote: 'OneClickTag is the tool I wish I had 5 years ago. It\'s saved our team countless hours and eliminated tracking errors completely.',
+              author: {
+                name: 'James Davis',
+                initials: 'JD',
+                role: 'Head of Marketing, TechCorp'
+              }
             }
-          }
-        });
+          });
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
     loadContent();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, []);
 
   if (loading || !content) {

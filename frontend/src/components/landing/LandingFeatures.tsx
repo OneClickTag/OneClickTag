@@ -64,40 +64,44 @@ export function LandingFeatures() {
   });
 
   useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+
     const loadContent = async () => {
       try {
         const section = await publicService.getLandingSection('features');
-        if (section.isActive && section.content) {
+        if (!cancelled && section.isActive && section.content) {
           setContent(section.content as FeaturesContent);
         }
       } catch (error) {
-        console.error('Failed to load features content:', error);
-        // Use default content on error
-        setContent({
-          title: 'Everything You Need',
-          titleHighlight: 'In One Platform',
-          subtitle: 'Stop juggling multiple tools. OneClickTag brings all your tracking needs together in one simple interface.',
-          features: [
-            {
-              icon: 'Tag',
-              title: 'Google Tag Manager',
-              description: 'Automatically create tags, triggers, and variables in your GTM container. No manual setup needed.',
-              color: 'from-blue-500 to-blue-600',
-            },
-            {
-              icon: 'Target',
-              title: 'Google Ads Integration',
-              description: 'Sync conversion actions to Google Ads instantly. Track ROI and optimize campaigns effortlessly.',
-              color: 'from-green-500 to-green-600',
-            },
-            {
-              icon: 'BarChart3',
-              title: 'GA4 Events',
-              description: 'Create custom GA4 events with proper parameters. Get accurate analytics data from day one.',
-              color: 'from-purple-500 to-purple-600',
-            },
-            {
-              icon: 'Zap',
+        if (!cancelled) {
+          console.error('Failed to load features content:', error);
+          // Use default content on error
+          setContent({
+            title: 'Everything You Need',
+            titleHighlight: 'In One Platform',
+            subtitle: 'Stop juggling multiple tools. OneClickTag brings all your tracking needs together in one simple interface.',
+            features: [
+              {
+                icon: 'Tag',
+                title: 'Google Tag Manager',
+                description: 'Automatically create tags, triggers, and variables in your GTM container. No manual setup needed.',
+                color: 'from-blue-500 to-blue-600',
+              },
+              {
+                icon: 'Target',
+                title: 'Google Ads Integration',
+                description: 'Sync conversion actions to Google Ads instantly. Track ROI and optimize campaigns effortlessly.',
+                color: 'from-green-500 to-green-600',
+              },
+              {
+                icon: 'BarChart3',
+                title: 'GA4 Events',
+                description: 'Create custom GA4 events with proper parameters. Get accurate analytics data from day one.',
+                color: 'from-purple-500 to-purple-600',
+              },
+              {
+                icon: 'Zap',
               title: 'Lightning Fast',
               description: 'What takes 30 minutes manually takes 2 minutes with OneClickTag. Save time, reduce errors.',
               color: 'from-yellow-500 to-orange-600',
@@ -121,12 +125,20 @@ export function LandingFeatures() {
             linkUrl: '/register',
           },
         });
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
     loadContent();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, []);
 
   if (loading || !content) {
