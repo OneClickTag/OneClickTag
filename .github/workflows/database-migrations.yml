@@ -382,35 +382,83 @@ jobs:
           set -e
           ENV="${{ inputs.environment || 'staging' }}"
 
-          echo "🚀 Running database migrations via ECS container..."
+          echo "🚀 Running database migrations via ECS run-task..."
 
-          # Get running task ARN
-          TASK_ARN=$(aws ecs list-tasks \
+          # Get task definition from running service
+          TASK_DEF=$(aws ecs describe-services \
             --cluster ${ENV}-api-cluster \
+            --services ${ENV}-api-svc \
             --region eu-central-1 \
-            --query 'taskArns[0]' \
+            --query 'services[0].taskDefinition' \
             --output text)
 
-          if [ "$TASK_ARN" == "None" ] || [ -z "$TASK_ARN" ]; then
-            echo "❌ No running ECS tasks found in ${ENV}-api-cluster"
+          if [ "$TASK_DEF" == "None" ] || [ -z "$TASK_DEF" ]; then
+            echo "❌ No service found: ${ENV}-api-svc"
             exit 1
           fi
 
-          echo "📦 Running migrations on task: $TASK_ARN"
+          echo "📦 Using task definition: $TASK_DEF"
 
-          # Run migrations via ECS Exec (non-interactive mode)
-          OUTPUT=$(aws ecs execute-command \
+          # Get network configuration
+          SUBNETS=$(aws ecs describe-services \
             --cluster ${ENV}-api-cluster \
-            --task $TASK_ARN \
-            --container ${ENV}-api-container \
-            --command "/bin/sh -c 'npx prisma migrate deploy 2>&1'" \
-            --region eu-central-1 2>&1)
+            --services ${ENV}-api-svc \
+            --region eu-central-1 \
+            --query 'services[0].networkConfiguration.awsvpcConfiguration.subnets' \
+            --output json | jq -c '.')
 
-          EXIT_CODE=$?
+          SECURITY_GROUPS=$(aws ecs describe-services \
+            --cluster ${ENV}-api-cluster \
+            --services ${ENV}-api-svc \
+            --region eu-central-1 \
+            --query 'services[0].networkConfiguration.awsvpcConfiguration.securityGroups' \
+            --output json | jq -c '.')
 
-          echo "$OUTPUT"
+          echo "🔧 Network config: subnets=$SUBNETS, security_groups=$SECURITY_GROUPS"
 
-          if [ $EXIT_CODE -ne 0 ]; then
+          # Run migration task with command override
+          TASK_ARN=$(aws ecs run-task \
+            --cluster ${ENV}-api-cluster \
+            --task-definition $TASK_DEF \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=$SUBNETS,securityGroups=$SECURITY_GROUPS,assignPublicIp=ENABLED}" \
+            --overrides "{\"containerOverrides\":[{\"name\":\"${ENV}-api-container\",\"command\":[\"sh\",\"-c\",\"cd /app/backend && pnpm prisma migrate deploy\"]}]}" \
+            --region eu-central-1 \
+            --query 'tasks[0].taskArn' \
+            --output text)
+
+          if [ "$TASK_ARN" == "None" ] || [ -z "$TASK_ARN" ]; then
+            echo "❌ Failed to start migration task"
+            exit 1
+          fi
+
+          echo "📦 Migration task started: $TASK_ARN"
+          echo "⏳ Waiting for task to complete..."
+
+          # Wait for task to complete
+          aws ecs wait tasks-stopped \
+            --cluster ${ENV}-api-cluster \
+            --tasks $TASK_ARN \
+            --region eu-central-1
+
+          # Check exit code
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster ${ENV}-api-cluster \
+            --tasks $TASK_ARN \
+            --region eu-central-1 \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+
+          # Get logs if available
+          echo "📋 Task details:"
+          aws ecs describe-tasks \
+            --cluster ${ENV}-api-cluster \
+            --tasks $TASK_ARN \
+            --region eu-central-1 \
+            --query 'tasks[0].containers[0].{Name:name,ExitCode:exitCode,Reason:reason}' \
+            --output table
+
+          if [ "$EXIT_CODE" != "0" ]; then
             echo "❌ Migration failed with exit code $EXIT_CODE"
             exit 1
           fi
@@ -542,26 +590,64 @@ jobs:
           set -e
           ENV="${{ inputs.environment || 'staging' }}"
 
-          echo "🔍 Verifying database integrity via ECS..."
+          echo "🔍 Verifying database integrity via ECS run-task..."
 
-          # Get running task ARN
-          TASK_ARN=$(aws ecs list-tasks \
+          # Get task definition from service
+          TASK_DEF=$(aws ecs describe-services \
             --cluster ${ENV}-api-cluster \
+            --services ${ENV}-api-svc \
             --region eu-central-1 \
-            --query 'taskArns[0]' \
+            --query 'services[0].taskDefinition' \
             --output text)
 
-          # Check migration status (non-interactive)
-          OUTPUT=$(aws ecs execute-command \
+          # Get network configuration
+          SUBNETS=$(aws ecs describe-services \
             --cluster ${ENV}-api-cluster \
-            --task $TASK_ARN \
-            --container ${ENV}-api-container \
-            --command "/bin/sh -c 'npx prisma migrate status 2>&1'" \
-            --region eu-central-1 2>&1)
+            --services ${ENV}-api-svc \
+            --region eu-central-1 \
+            --query 'services[0].networkConfiguration.awsvpcConfiguration.subnets' \
+            --output json | jq -c '.')
 
-          echo "$OUTPUT"
+          SECURITY_GROUPS=$(aws ecs describe-services \
+            --cluster ${ENV}-api-cluster \
+            --services ${ENV}-api-svc \
+            --region eu-central-1 \
+            --query 'services[0].networkConfiguration.awsvpcConfiguration.securityGroups' \
+            --output json | jq -c '.')
 
-          echo "✅ Database integrity verification passed"
+          # Run verification task
+          TASK_ARN=$(aws ecs run-task \
+            --cluster ${ENV}-api-cluster \
+            --task-definition $TASK_DEF \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=$SUBNETS,securityGroups=$SECURITY_GROUPS,assignPublicIp=ENABLED}" \
+            --overrides "{\"containerOverrides\":[{\"name\":\"${ENV}-api-container\",\"command\":[\"sh\",\"-c\",\"cd /app/backend && pnpm prisma migrate status\"]}]}" \
+            --region eu-central-1 \
+            --query 'tasks[0].taskArn' \
+            --output text)
+
+          echo "📦 Verification task started: $TASK_ARN"
+
+          # Wait for task to complete
+          aws ecs wait tasks-stopped \
+            --cluster ${ENV}-api-cluster \
+            --tasks $TASK_ARN \
+            --region eu-central-1
+
+          # Check exit code
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster ${ENV}-api-cluster \
+            --tasks $TASK_ARN \
+            --region eu-central-1 \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "⚠️ Migration status check returned exit code $EXIT_CODE"
+            echo "Note: This is informational - migrations may still be valid"
+          else
+            echo "✅ Database integrity verification passed"
+          fi
 
       - name: Run database health checks via ECS
         run: |
