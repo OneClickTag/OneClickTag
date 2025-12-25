@@ -26,6 +26,7 @@ import {
 import { GoogleAdsService } from '../services/google-ads.service';
 import { ConversionActionsService } from '../services/conversion-actions.service';
 import { Auth0Middleware } from '../../auth/middleware/auth0.middleware';
+import { EarlyAccessGuard } from '../../auth/guards/early-access.guard';
 import { TenantContextMiddleware } from '../../auth/middleware/tenant-context.middleware';
 import { TenantContext } from '../../tenant/decorators/tenant-context.decorator';
 import {
@@ -48,7 +49,7 @@ import {
 @ApiTags('Google Ads Integration')
 @ApiBearerAuth()
 @ApiSecurity('Auth0')
-@UseGuards(Auth0Middleware)
+@UseGuards(Auth0Middleware, EarlyAccessGuard)
 @Controller('v1/customers/:customerId/google-ads')
 export class GoogleAdsController {
   private readonly logger = new Logger(GoogleAdsController.name);

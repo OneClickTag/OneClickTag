@@ -191,15 +191,26 @@ export function LandingHero() {
             transition={{ duration: 0.6, delay: 0.8 }}
             className="flex flex-col sm:flex-row gap-4 justify-center items-center"
           >
-            <Button asChild size="lg" className="text-lg px-8 py-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
-              <Link to={content.primaryCTA.url} className="flex items-center space-x-2">
-                <span>{content.primaryCTA.text}</span>
-                <ArrowRight className="w-5 h-5" />
-              </Link>
-            </Button>
-            <Button asChild variant="outline" size="lg" className="text-lg px-8 py-6">
-              <Link to={content.secondaryCTA.url}>{content.secondaryCTA.text}</Link>
-            </Button>
+            {import.meta.env.VITE_EARLY_ACCESS_MODE === 'true' ? (
+              <Button asChild size="lg" className="text-lg px-8 py-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
+                <Link to="/early-access" className="flex items-center space-x-2">
+                  <span>Get Early Access</span>
+                  <ArrowRight className="w-5 h-5" />
+                </Link>
+              </Button>
+            ) : (
+              <>
+                <Button asChild size="lg" className="text-lg px-8 py-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
+                  <Link to={content.primaryCTA.url} className="flex items-center space-x-2">
+                    <span>{content.primaryCTA.text}</span>
+                    <ArrowRight className="w-5 h-5" />
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" size="lg" className="text-lg px-8 py-6">
+                  <Link to={content.secondaryCTA.url}>{content.secondaryCTA.text}</Link>
+                </Button>
+              </>
+            )}
           </motion.div>
 
           {/* Trust Indicators */}

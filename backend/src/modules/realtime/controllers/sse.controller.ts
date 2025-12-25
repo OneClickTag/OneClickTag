@@ -26,6 +26,7 @@ import {
 import { Response, Request } from 'express';
 import { SSEService } from '../services/sse.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { EarlyAccessGuard } from '../../auth/guards/early-access.guard';
 import { TenantContext } from '../../tenant/decorators/tenant-context.decorator';
 import {
   SSEStats,
@@ -35,7 +36,7 @@ import {
 
 @ApiTags('Real-time Events (SSE)')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, EarlyAccessGuard)
 @Controller('v1/events')
 export class SSEController {
   private readonly logger = new Logger(SSEController.name);

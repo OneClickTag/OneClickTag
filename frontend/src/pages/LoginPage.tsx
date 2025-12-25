@@ -17,12 +17,9 @@ export function LoginPage() {
   // Get redirect URL from query params, default to dashboard
   const redirectUrl = searchParams.get('redirect') || '/dashboard'
 
-  // Redirect authenticated users to intended destination
-  useEffect(() => {
-    if (isAuthenticated && !isSubmitting) {
-      window.location.href = redirectUrl;
-    }
-  }, [isAuthenticated, isSubmitting, redirectUrl]);
+  // Note: We don't auto-redirect authenticated users here
+  // This allows users to logout and login as different user
+  // Redirect only happens after successful login attempt
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -70,6 +67,36 @@ export function LoginPage() {
             Welcome back to OneClickTag
           </p>
         </div>
+
+        {isAuthenticated && (
+          <div className="bg-blue-50 border border-blue-200 text-blue-800 text-sm p-4 rounded-md">
+            <p className="font-medium mb-2">You're already signed in</p>
+            <p className="mb-3">You can continue to your dashboard or sign in as a different user.</p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => window.location.href = redirectUrl}
+                className="flex-1"
+              >
+                Continue to App
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  localStorage.removeItem('oneclicktag_auth_tokens');
+                  window.location.reload();
+                }}
+                className="flex-1"
+              >
+                Logout & Sign In
+              </Button>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="bg-destructive/15 text-destructive text-sm p-3 rounded-md">

@@ -22,7 +22,10 @@
     "db:reset": "pnpm --filter backend db:reset",
     "upload-firebase-secret:dev": "node scripts/upload-firebase-secret.js dev",
     "upload-firebase-secret:stage": "node scripts/upload-firebase-secret.js stage",
-    "upload-firebase-secret:prod": "node scripts/upload-firebase-secret.js prod"
+    "upload-firebase-secret:prod": "node scripts/upload-firebase-secret.js prod",
+    "db:tunnel:dev": "bash scripts/db-tunnel.sh dev",
+    "db:tunnel:stage": "bash scripts/db-tunnel.sh stage",
+    "db:tunnel:prod": "bash scripts/db-tunnel.sh prod"
   },
   "dependencies": {
     "@aws-sdk/client-secrets-manager": "^3.705.0"

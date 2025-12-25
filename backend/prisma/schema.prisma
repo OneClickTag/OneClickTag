@@ -493,3 +493,100 @@ model ContactPageContent {
 
   @@map("contact_page_content")
 }
+
+// Early Access / Lead Generation Models
+
+model Lead {
+  id                String   @id @default(cuid())
+  name              String
+  email             String
+  purpose           String   @db.Text
+
+  // Metadata
+  ipAddress         String?
+  userAgent         String?
+  source            String?  // 'landing', 'hero', 'cta'
+  utmSource         String?
+  utmMedium         String?
+  utmCampaign       String?
+
+  // Relations
+  responses         QuestionnaireResponse[]
+  pageViews         LeadPageView[]
+
+  // Status
+  questionnaireCompleted Boolean @default(false)
+  completedAt       DateTime?
+
+  // Audit
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([email])
+  @@index([email])
+  @@index([createdAt])
+  @@index([questionnaireCompleted])
+  @@map("leads")
+}
+
+model QuestionnaireQuestion {
+  id          String       @id @default(cuid())
+  question    String       @db.Text
+  type        QuestionType @default(TEXT)
+  options     Json?        // For radio/checkbox questions: ["Option 1", "Option 2"]
+  placeholder String?
+  order       Int          @default(0)
+  isRequired  Boolean      @default(true)
+  isActive    Boolean      @default(true)
+  category    String?      // 'behavior', 'issues', 'needs', 'demographics'
+
+  // Relations
+  responses   QuestionnaireResponse[]
+
+  // Audit
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String?
+
+  @@index([isActive, order])
+  @@map("questionnaire_questions")
+}
+
+model QuestionnaireResponse {
+  id          String                 @id @default(cuid())
+  leadId      String
+  lead        Lead                   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  questionId  String
+  question    QuestionnaireQuestion  @relation(fields: [questionId], references: [id])
+  answer      Json                   // Flexible: string, number, array
+
+  createdAt   DateTime @default(now())
+
+  @@unique([leadId, questionId])
+  @@index([leadId])
+  @@map("questionnaire_responses")
+}
+
+model LeadPageView {
+  id          String   @id @default(cuid())
+  leadId      String?
+  lead        Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  sessionId   String   // Anonymous tracking before lead capture
+  path        String
+  referrer    String?
+  createdAt   DateTime @default(now())
+
+  @@index([leadId])
+  @@index([sessionId])
+  @@index([createdAt])
+  @@map("lead_page_views")
+}
+
+enum QuestionType {
+  TEXT           // Short text input
+  TEXTAREA       // Long text
+  RADIO          // Single choice
+  CHECKBOX       // Multiple choice
+  RATING         // 1-5 stars
+  SCALE          // 1-10 scale
+}

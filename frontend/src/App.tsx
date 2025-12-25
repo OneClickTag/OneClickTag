@@ -19,6 +19,11 @@ const CustomerDetailPage = lazy(() => import('./pages/CustomerDetailPage'))
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage').then(m => ({ default: m.AnalyticsPage })))
 const OAuthCallbackPage = lazy(() => import('./pages/OAuthCallbackPage').then(m => ({ default: m.OAuthCallbackPage })))
 
+// Lazy load early access pages
+const EarlyAccessPage = lazy(() => import('./pages/EarlyAccessPage').then(m => ({ default: m.EarlyAccessPage })))
+const QuestionnairePage = lazy(() => import('./pages/QuestionnairePage').then(m => ({ default: m.QuestionnairePage })))
+const ThankYouPage = lazy(() => import('./pages/ThankYouPage').then(m => ({ default: m.ThankYouPage })))
+
 // Lazy load admin pages (rarely used, heavy features)
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard').then(m => ({ default: m.AdminDashboard })))
 const AdminUsersPage = lazy(() => import('./pages/admin/AdminUsersPage').then(m => ({ default: m.AdminUsersPage })))
@@ -28,7 +33,12 @@ const AdminFooterPage = lazy(() => import('./pages/admin/AdminFooterPage').then(
 const AdminLandingPage = lazy(() => import('./pages/admin/AdminLandingPage').then(m => ({ default: m.AdminLandingPage })))
 const AdminSiteSettingsPage = lazy(() => import('./pages/admin/AdminSiteSettingsPage').then(m => ({ default: m.AdminSiteSettingsPage })))
 const AdminContactPage = lazy(() => import('./pages/admin/AdminContactPage').then(m => ({ default: m.AdminContactPage })))
+const AdminLeadsPage = lazy(() => import('./pages/admin/AdminLeadsPage').then(m => ({ default: m.AdminLeadsPage })))
+const AdminLeadDetailPage = lazy(() => import('./pages/admin/AdminLeadDetailPage').then(m => ({ default: m.AdminLeadDetailPage })))
+const AdminLeadsAnalyticsPage = lazy(() => import('./pages/admin/AdminLeadsAnalyticsPage').then(m => ({ default: m.AdminLeadsAnalyticsPage })))
+const AdminQuestionnairePage = lazy(() => import('./pages/admin/AdminQuestionnairePage').then(m => ({ default: m.AdminQuestionnairePage })))
 const AdminRoute = lazy(() => import('./components/AdminRoute').then(m => ({ default: m.AdminRoute })))
+const EarlyAccessGuard = lazy(() => import('./components/EarlyAccessGuard').then(m => ({ default: m.EarlyAccessGuard })))
 
 // Loading fallback component
 const PageLoader = () => (
@@ -43,9 +53,8 @@ function App() {
       <ScrollToTop />
       <Suspense fallback={<PageLoader />}>
         <Routes>
-          {/* Public Routes */}
+          {/* Public Routes - Always accessible */}
           <Route path="/" element={<LandingPage />} />
-          <Route path="/plans" element={<PlansPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/terms" element={<TermsPage />} />
@@ -53,17 +62,25 @@ function App() {
           {/* Keep generic content route for other dynamic pages */}
           <Route path="/content/:slug" element={<ContentPage />} />
 
-          {/* Auth Routes */}
+          {/* Auth Routes - Always accessible (admins need to register/login) */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
 
-          {/* App Routes */}
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/customers" element={<CustomersPage />} />
-          <Route path="/customers/new" element={<CreateCustomerPage />} />
-          <Route path="/customer/:customerName" element={<CustomerDetailPage />} />
-          <Route path="/analytics" element={<AnalyticsPage />} />
+          {/* Protected Routes - Only accessible in early access mode to admins */}
+          <Route path="/plans" element={<EarlyAccessGuard><PlansPage /></EarlyAccessGuard>} />
+
+          {/* Early Access Routes - Always accessible */}
+          <Route path="/early-access" element={<EarlyAccessPage />} />
+          <Route path="/questionnaire/:leadId" element={<QuestionnairePage />} />
+          <Route path="/thank-you" element={<ThankYouPage />} />
+
+          {/* App Routes - Protected in Early Access Mode (Admin only) */}
+          <Route path="/dashboard" element={<EarlyAccessGuard><DashboardPage /></EarlyAccessGuard>} />
+          <Route path="/customers" element={<EarlyAccessGuard><CustomersPage /></EarlyAccessGuard>} />
+          <Route path="/customers/new" element={<EarlyAccessGuard><CreateCustomerPage /></EarlyAccessGuard>} />
+          <Route path="/customer/:customerName" element={<EarlyAccessGuard><CustomerDetailPage /></EarlyAccessGuard>} />
+          <Route path="/analytics" element={<EarlyAccessGuard><AnalyticsPage /></EarlyAccessGuard>} />
 
           {/* Admin Routes - Protected */}
           <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
@@ -74,6 +91,10 @@ function App() {
           <Route path="/admin/site-settings" element={<AdminRoute><AdminSiteSettingsPage /></AdminRoute>} />
           <Route path="/admin/contact-page" element={<AdminRoute><AdminContactPage /></AdminRoute>} />
           <Route path="/admin/footer" element={<AdminRoute><AdminFooterPage /></AdminRoute>} />
+          <Route path="/admin/leads" element={<AdminRoute><AdminLeadsPage /></AdminRoute>} />
+          <Route path="/admin/leads/:id" element={<AdminRoute><AdminLeadDetailPage /></AdminRoute>} />
+          <Route path="/admin/leads/analytics" element={<AdminRoute><AdminLeadsAnalyticsPage /></AdminRoute>} />
+          <Route path="/admin/questionnaire" element={<AdminRoute><AdminQuestionnairePage /></AdminRoute>} />
         </Routes>
       </Suspense>
     </div>

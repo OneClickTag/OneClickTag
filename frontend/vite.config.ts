@@ -1,24 +1,25 @@
-import { defineConfig, loadEnv } from 'vite'
-import react from '@vitejs/plugin-react'
-import { resolve } from 'path'
-import { visualizer } from 'rollup-plugin-visualizer'
+import { defineConfig, loadEnv } from 'vite';
+import react from '@vitejs/plugin-react';
+import { resolve } from 'path';
+import { visualizer } from 'rollup-plugin-visualizer';
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command, mode }) => {
-  const env = loadEnv(mode, process.cwd(), '')
-  
+  const env = loadEnv(mode, process.cwd(), '');
+
   return {
     plugins: [
       react(),
       // Bundle analyzer for production builds
-      mode === 'production' && visualizer({
-        filename: 'dist/stats.html',
-        open: false,
-        gzipSize: true,
-        brotliSize: true
-      })
+      mode === 'production' &&
+        visualizer({
+          filename: 'dist/stats.html',
+          open: false,
+          gzipSize: true,
+          brotliSize: true,
+        }),
     ].filter(Boolean),
-    
+
     resolve: {
       alias: {
         '@': resolve(__dirname, './src'),
@@ -32,7 +33,7 @@ export default defineConfig(({ command, mode }) => {
       sourcemap: mode === 'development',
       minify: mode === 'production' ? 'esbuild' : false,
       target: ['es2020', 'edge88', 'firefox78', 'chrome87', 'safari13.1'],
-      
+
       rollupOptions: {
         output: {
           manualChunks: {
@@ -42,25 +43,21 @@ export default defineConfig(({ command, mode }) => {
               '@radix-ui/react-dialog',
               '@radix-ui/react-dropdown-menu',
               '@radix-ui/react-toast',
-              '@radix-ui/react-select'
+              '@radix-ui/react-select',
             ],
             'data-vendor': [
               '@tanstack/react-query',
               '@tanstack/react-table',
-              'axios'
+              'axios',
             ],
-            'form-vendor': [
-              'react-hook-form',
-              '@hookform/resolvers',
-              'zod'
-            ],
+            'form-vendor': ['react-hook-form', '@hookform/resolvers', 'zod'],
             'chart-vendor': ['recharts'],
-            'utils': ['clsx', 'tailwind-merge', 'class-variance-authority']
+            utils: ['clsx', 'tailwind-merge', 'class-variance-authority'],
           },
           chunkFileNames: 'assets/[name]-[hash].js',
           entryFileNames: 'assets/[name]-[hash].js',
-          assetFileNames: 'assets/[name]-[hash].[ext]'
-        }
+          assetFileNames: 'assets/[name]-[hash].[ext]',
+        },
       },
 
       // Optimize chunk size
@@ -69,14 +66,14 @@ export default defineConfig(({ command, mode }) => {
 
     // Development server configuration
     server: {
-      port: 3000,
+      port: 3002,
       host: true,
     },
 
     // Preview server for production builds
     preview: {
       port: 3000,
-      host: true
+      host: true,
     },
 
     // Environment variables
@@ -89,7 +86,7 @@ export default defineConfig(({ command, mode }) => {
     // CSS configuration
     css: {
       devSourcemap: mode === 'development',
-      postcss: './postcss.config.js'
+      postcss: './postcss.config.js',
     },
 
     // Optimize dependencies
@@ -102,14 +99,14 @@ export default defineConfig(({ command, mode }) => {
         '@tanstack/react-table',
         'axios',
         'clsx',
-        'tailwind-merge'
+        'tailwind-merge',
       ],
-      exclude: ['@shared']
+      exclude: ['@shared'],
     },
 
     // ESBuild configuration
     esbuild: {
       drop: mode === 'production' ? ['console', 'debugger'] : [],
-    }
-  }
-})
+    },
+  };
+});

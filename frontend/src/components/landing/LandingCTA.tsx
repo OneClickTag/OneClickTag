@@ -192,24 +192,39 @@ export function LandingCTA() {
           transition={{ duration: 0.6, delay: 0.8 }}
           className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8"
         >
-          <Button
-            asChild
-            size="lg"
-            className="text-lg px-10 py-7 bg-white text-blue-600 hover:bg-gray-100 shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105"
-          >
-            <Link to={content.primaryCTA.url} className="flex items-center space-x-2">
-              <span>{content.primaryCTA.text}</span>
-              <ArrowRight className="w-5 h-5" />
-            </Link>
-          </Button>
-          <Button
-            asChild
-            variant="outline"
-            size="lg"
-            className="text-lg px-10 py-7 border-2 border-white text-white hover:bg-white hover:text-blue-600 transition-all duration-300"
-          >
-            <Link to={content.secondaryCTA.url}>{content.secondaryCTA.text}</Link>
-          </Button>
+          {import.meta.env.VITE_EARLY_ACCESS_MODE === 'true' ? (
+            <Button
+              asChild
+              size="lg"
+              className="text-lg px-10 py-7 bg-white text-blue-600 hover:bg-gray-100 shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105"
+            >
+              <Link to="/early-access" className="flex items-center space-x-2">
+                <span>Get Early Access</span>
+                <ArrowRight className="w-5 h-5" />
+              </Link>
+            </Button>
+          ) : (
+            <>
+              <Button
+                asChild
+                size="lg"
+                className="text-lg px-10 py-7 bg-white text-blue-600 hover:bg-gray-100 shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105"
+              >
+                <Link to={content.primaryCTA.url} className="flex items-center space-x-2">
+                  <span>{content.primaryCTA.text}</span>
+                  <ArrowRight className="w-5 h-5" />
+                </Link>
+              </Button>
+              <Button
+                asChild
+                variant="outline"
+                size="lg"
+                className="text-lg px-10 py-7 border-2 border-white text-white hover:bg-white hover:text-blue-600 transition-all duration-300"
+              >
+                <Link to={content.secondaryCTA.url}>{content.secondaryCTA.text}</Link>
+              </Button>
+            </>
+          )}
         </motion.div>
 
         {/* Trust Badge */}

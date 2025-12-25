@@ -4,3 +4,5 @@ export * from './adminPlansService';
 export * from './adminLandingService';
 export * from './adminSiteSettingsService';
 export * from './adminContactService';
+export * from './adminLeadsService';
+export * from './adminQuestionnaireService';

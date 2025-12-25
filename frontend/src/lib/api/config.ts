@@ -130,6 +130,25 @@ export const apiEndpoints = {
       delete: (id: string) => `/v1/admin/plans/${id}`,
       toggleActive: (id: string) => `/v1/admin/plans/${id}/toggle-active`,
     },
+    leads: {
+      list: '/v1/admin/leads',
+      get: (id: string) => `/v1/admin/leads/${id}`,
+      delete: (id: string) => `/v1/admin/leads/${id}`,
+      stats: '/v1/admin/leads/stats',
+      dailyCounts: '/v1/admin/leads/analytics/daily',
+      pageViews: '/v1/admin/leads/analytics/page-views',
+      export: '/v1/admin/leads/export',
+    },
+    questionnaire: {
+      list: '/v1/admin/questionnaire/questions',
+      create: '/v1/admin/questionnaire/questions',
+      get: (id: string) => `/v1/admin/questionnaire/questions/${id}`,
+      update: (id: string) => `/v1/admin/questionnaire/questions/${id}`,
+      delete: (id: string) => `/v1/admin/questionnaire/questions/${id}`,
+      toggleActive: (id: string) => `/v1/admin/questionnaire/questions/${id}/toggle-active`,
+      reorder: '/v1/admin/questionnaire/questions/reorder',
+      responses: (id: string) => `/v1/admin/questionnaire/questions/${id}/responses`,
+    },
   },
 
   // Public endpoints
@@ -140,6 +159,19 @@ export const apiEndpoints = {
     landingSection: (key: string) => `/v1/landing/${key}`,
     siteSettings: '/v1/site-settings/global',
     contact: '/v1/contact',
+  },
+
+  // Leads endpoints (public)
+  leads: {
+    create: '/v1/leads',
+    get: (id: string) => `/v1/leads/${id}`,
+    submitQuestionnaire: (id: string) => `/v1/leads/${id}/responses`,
+    trackPageView: '/v1/leads/page-views',
+  },
+
+  // Questionnaire endpoints (public)
+  questionnaire: {
+    getQuestions: '/v1/questionnaire/questions',
   },
 
   // Customization endpoints (admin)

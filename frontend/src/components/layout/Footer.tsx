@@ -84,6 +84,7 @@ export function Footer() {
   const currentYear = new Date().getFullYear();
   const [config, setConfig] = useState<FooterConfig>(defaultFooterConfig);
   const [loading, setLoading] = useState(true);
+  const isEarlyAccessMode = import.meta.env.VITE_EARLY_ACCESS_MODE === 'true';
 
   useEffect(() => {
     const fetchFooterConfig = async () => {
@@ -150,24 +151,32 @@ export function Footer() {
             <div key={index}>
               <h3 className="text-white font-semibold mb-4">{section.title}</h3>
               <ul className="space-y-2">
-                {section.links.map((link, linkIndex) => (
-                  <li key={linkIndex}>
-                    {link.url.startsWith('http') ? (
-                      <a
-                        href={link.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm hover:text-white transition-colors"
-                      >
-                        {link.label}
-                      </a>
-                    ) : (
-                      <Link to={link.url} className="text-sm hover:text-white transition-colors">
-                        {link.label}
-                      </Link>
-                    )}
-                  </li>
-                ))}
+                {section.links
+                  .filter((link) => {
+                    // Hide "Pricing" link in early access mode
+                    if (isEarlyAccessMode && (link.url === '/plans' || link.label.toLowerCase().includes('pricing'))) {
+                      return false;
+                    }
+                    return true;
+                  })
+                  .map((link, linkIndex) => (
+                    <li key={linkIndex}>
+                      {link.url.startsWith('http') ? (
+                        <a
+                          href={link.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm hover:text-white transition-colors"
+                        >
+                          {link.label}
+                        </a>
+                      ) : (
+                        <Link to={link.url} className="text-sm hover:text-white transition-colors">
+                          {link.label}
+                        </Link>
+                      )}
+                    </li>
+                  ))}
               </ul>
             </div>
           ))}

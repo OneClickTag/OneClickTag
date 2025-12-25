@@ -11,6 +11,7 @@ import { PrismaModule } from './common/prisma/prisma.module';
 import { MonitoringModule } from './common/monitoring/monitoring.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { PublicModule } from './modules/public/public.module';
+import { LeadsModule } from './modules/leads/leads.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { PublicModule } from './modules/public/public.module';
     AuthModule,
     AdminModule,
     PublicModule,
+    LeadsModule,
     CustomerModule,
     GoogleIntegrationModule,
     JobsModule,

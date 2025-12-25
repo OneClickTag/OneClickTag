@@ -11,7 +11,8 @@ import {
   Home,
   Layout,
   Settings,
-  Mail
+  Mail,
+  BarChart3
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -21,6 +22,7 @@ interface AdminLayoutProps {
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { name: 'Users', href: '/admin/users', icon: Users },
+  { name: 'Leads', href: '/admin/leads', icon: BarChart3 },
   { name: 'Content Pages', href: '/admin/content', icon: FileText },
   { name: 'Plans', href: '/admin/plans', icon: CreditCard },
   { name: 'Landing Page', href: '/admin/landing', icon: Layout },

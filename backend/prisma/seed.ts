@@ -520,6 +520,87 @@ Privacy questions? Contact us at privacy@oneclicktag.com`,
 
   console.log('✅ Created contact page content');
 
+  // Seed Questionnaire Questions
+  const questions = [
+    {
+      question: 'What is your primary use case for conversion tracking?',
+      type: 'RADIO' as const,
+      options: ['E-commerce', 'Lead Generation', 'SaaS', 'Content/Publishing', 'Agency/Consulting', 'Other'],
+      category: 'behavior',
+      order: 0,
+      isRequired: true,
+    },
+    {
+      question: 'What challenges do you face with current tracking solutions?',
+      type: 'TEXTAREA' as const,
+      placeholder: 'Tell us about the problems you encounter...',
+      category: 'issues',
+      order: 1,
+      isRequired: true,
+    },
+    {
+      question: 'How many marketing campaigns do you run monthly?',
+      type: 'RADIO' as const,
+      options: ['1-5', '6-10', '11-20', '20+', 'Not sure'],
+      category: 'behavior',
+      order: 2,
+      isRequired: true,
+    },
+    {
+      question: 'Which advertising platforms do you primarily use?',
+      type: 'CHECKBOX' as const,
+      options: ['Google Ads', 'Facebook Ads', 'LinkedIn Ads', 'TikTok Ads', 'Pinterest Ads', 'Other'],
+      category: 'behavior',
+      order: 3,
+      isRequired: true,
+    },
+    {
+      question: 'What is your biggest pain point in tracking setup?',
+      type: 'TEXTAREA' as const,
+      placeholder: 'What frustrates you the most...',
+      category: 'issues',
+      order: 4,
+      isRequired: true,
+    },
+    {
+      question: 'How many hours per week do you spend on tracking setup and maintenance?',
+      type: 'SCALE' as const,
+      options: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10+'],
+      category: 'behavior',
+      order: 5,
+      isRequired: true,
+    },
+    {
+      question: 'What is your role?',
+      type: 'RADIO' as const,
+      options: ['Marketing Manager', 'Digital Marketing Specialist', 'Agency Owner', 'Developer', 'Business Owner', 'Other'],
+      category: 'demographics',
+      order: 6,
+      isRequired: true,
+    },
+    {
+      question: 'What would make you switch from your current solution?',
+      type: 'TEXTAREA' as const,
+      placeholder: 'What features or improvements would convince you...',
+      category: 'needs',
+      order: 7,
+      isRequired: false,
+    },
+  ];
+
+  for (const q of questions) {
+    await prisma.questionnaireQuestion.upsert({
+      where: { id: `question-${q.order}` },
+      update: {},
+      create: {
+        id: `question-${q.order}`,
+        ...q,
+      },
+    });
+  }
+
+  console.log('✅ Created questionnaire questions:', questions.length);
+
   console.log('🎉 Seeding complete!');
 }
 

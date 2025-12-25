@@ -24,3 +24,11 @@ export { searchService } from './searchService';
 // Public services (no auth required)
 export { publicService } from './publicService';
 export type { ContentPage, Plan } from './publicService';
+
+// Leads services (public)
+export { leadsService } from './leadsService';
+export type { Lead, CreateLeadData, SubmitQuestionnaireData } from './leadsService';
+
+// Questionnaire services (public)
+export { questionnaireService } from './questionnaireService';
+export type { Question, QuestionType } from './questionnaireService';

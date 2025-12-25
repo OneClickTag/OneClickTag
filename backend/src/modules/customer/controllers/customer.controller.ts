@@ -36,6 +36,7 @@ import {
   ApiForbiddenResponse,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { EarlyAccessGuard } from '../../auth/guards/early-access.guard';
 import { TenantGuard } from '../../tenant/guards/tenant.guard';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../auth/strategies/jwt.strategy';
@@ -63,7 +64,7 @@ import {
 
 @ApiTags('Customers')
 @Controller('v1/customers')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, EarlyAccessGuard)
 @ApiBearerAuth()
 export class CustomerController {
   private readonly logger = new Logger(CustomerController.name);
