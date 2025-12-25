@@ -21,19 +21,19 @@ on:
         default: 'dev'
         type: choice
         options:
-        - dev
-        - staging
-        - production
+          - dev
+          - stage
+          - prod
       operation:
         description: 'Operation to perform'
         required: true
         default: 'migrate'
         type: choice
         options:
-        - migrate
-        - rollback
-        - reset
-        - seed
+          - migrate
+          - rollback
+          - reset
+          - seed
       dry_run:
         description: 'Perform dry run (preview only)'
         required: false
@@ -52,7 +52,7 @@ jobs:
   validate-schema:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -96,7 +96,7 @@ jobs:
   test-migrations:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
-    
+
     services:
       postgres:
         image: postgres:15
@@ -136,13 +136,13 @@ jobs:
           DATABASE_URL: postgresql://test:testpass@localhost:5432/migration_test
         run: |
           cd backend
-          
+
           # Reset database to clean state
           pnpm prisma migrate reset --force --skip-seed
-          
+
           # Apply all migrations
           pnpm prisma migrate deploy
-          
+
           # Verify database state
           pnpm prisma db pull --print > /tmp/db_schema.prisma
           diff <(pnpm prisma format --schema=prisma/schema.prisma --stdout) <(pnpm prisma format --schema=/tmp/db_schema.prisma --stdout)
@@ -152,10 +152,10 @@ jobs:
           DATABASE_URL: postgresql://test:testpass@localhost:5432/migration_test
         run: |
           cd backend
-          
+
           # Get current migration count
           CURRENT_MIGRATIONS=$(ls -1 prisma/migrations | wc -l)
-          
+
           if [ $CURRENT_MIGRATIONS -gt 1 ]; then
             # Get the latest migration directory
             LATEST_MIGRATION=$(ls -1 prisma/migrations | tail -n 1)
@@ -186,10 +186,10 @@ jobs:
           DATABASE_URL: postgresql://test:testpass@localhost:5432/migration_test
         run: |
           cd backend
-          
+
           # Run seed script
           pnpm prisma db seed
-          
+
           # Verify seed data was inserted
           pnpm prisma studio --browser=none &
           STUDIO_PID=$!
@@ -199,8 +199,8 @@ jobs:
   backup-database:
     runs-on: ubuntu-latest
     needs: [validate-schema, test-migrations]
-    if: false  # Disabled - RDS in private subnet, not accessible from GitHub Actions
-    environment: ${{ inputs.environment || 'staging' }}
+    if: false # Disabled - RDS in private subnet, not accessible from GitHub Actions
+    environment: ${{ inputs.environment || 'dev' }}
 
     steps:
       - name: Configure AWS credentials
@@ -213,7 +213,7 @@ jobs:
       - name: Load database credentials from S3
         id: load-env
         run: |
-          ENV="${{ inputs.environment || 'staging' }}"
+          ENV="${{ inputs.environment || 'dev' }}"
 
           # Download .env file from S3
           aws s3 cp "s3://oneclicktag-env-store-${ENV}/api.env" /tmp/api.env
@@ -244,7 +244,7 @@ jobs:
       - name: Create database backup
         run: |
           TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-          BACKUP_NAME="${{ inputs.environment || 'staging' }}_backup_${TIMESTAMP}"
+          BACKUP_NAME="${{ inputs.environment || 'dev' }}_backup_${TIMESTAMP}"
 
           # Create backup using pg_dump
           pg_dump \
@@ -271,12 +271,12 @@ jobs:
 
       - name: Store backup in S3
         run: |
-          aws s3 cp "${BACKUP_FILE}" s3://${{ secrets.BACKUP_S3_BUCKET }}/database-backups/${{ inputs.environment || 'staging' }}/${BACKUP_FILE}
-          
+          aws s3 cp "${BACKUP_FILE}" s3://${{ secrets.BACKUP_S3_BUCKET }}/database-backups/${{ inputs.environment || 'dev' }}/${BACKUP_FILE}
+
           # Set lifecycle policy to delete backups older than 30 days
           aws s3api put-object-tagging \
             --bucket ${{ secrets.BACKUP_S3_BUCKET }} \
-            --key "database-backups/${{ inputs.environment || 'staging' }}/${BACKUP_FILE}" \
+            --key "database-backups/${{ inputs.environment || 'dev' }}/${BACKUP_FILE}" \
             --tagging 'TagSet=[{Key=RetentionDays,Value=30}]'
 
       - name: Notify backup completion
@@ -286,10 +286,10 @@ jobs:
           channel: '#database-ops'
           text: |
             📦 Database Backup Created
-            
-            **Environment**: ${{ inputs.environment || 'staging' }}
+
+            **Environment**: ${{ inputs.environment || 'dev' }}
             **Backup File**: ${BACKUP_FILE}
-            **Location**: s3://${{ secrets.BACKUP_S3_BUCKET }}/database-backups/${{ inputs.environment || 'staging' }}/
+            **Location**: s3://${{ secrets.BACKUP_S3_BUCKET }}/database-backups/${{ inputs.environment || 'dev' }}/
             **Triggered by**: ${{ github.actor }}
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
@@ -298,7 +298,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [validate-schema, test-migrations]
     if: always() && (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main')
-    environment: ${{ inputs.environment || (github.ref == 'refs/heads/main' && 'production' || 'staging') }}
+    environment: ${{ inputs.environment || (github.ref == 'refs/heads/main' && 'prod' || 'dev') }}
 
     steps:
       - name: Checkout
@@ -313,7 +313,7 @@ jobs:
 
       - name: Load database credentials from S3
         run: |
-          ENV="${{ inputs.environment || 'staging' }}"
+          ENV="${{ inputs.environment || 'dev' }}"
 
           # Download .env file from S3
           aws s3 cp "s3://oneclicktag-env-store-${ENV}/api.env" /tmp/api.env
@@ -355,21 +355,21 @@ jobs:
         if: inputs.dry_run == true
         run: |
           cd backend
-          
+
           echo "🔍 Migration Preview (Dry Run)"
           echo "=============================="
-          
+
           # Show pending migrations
           pnpm prisma migrate status
-          
+
           echo ""
           echo "📋 Migration Plan:"
           echo "=================="
-          
+
           # Generate migration diff (without shadow database)
           echo "Note: Shadow database not configured - showing migration status only"
           pnpm prisma migrate status > migration_preview.txt || true
-          
+
           if [ -s migration_preview.txt ]; then
             cat migration_preview.txt
           else
@@ -380,7 +380,7 @@ jobs:
         if: inputs.dry_run != true && (inputs.operation == 'migrate' || inputs.operation == '')
         run: |
           set -e
-          ENV="${{ inputs.environment || 'staging' }}"
+          ENV="${{ inputs.environment || 'dev' }}"
 
           echo "🚀 Running database migrations via ECS run-task..."
 
@@ -417,12 +417,13 @@ jobs:
           echo "🔧 Network config: subnets=$SUBNETS, security_groups=$SECURITY_GROUPS"
 
           # Run migration task with command override
+          # Note: WORKDIR is already /app/backend in the container, environment variables loaded from S3
           TASK_ARN=$(aws ecs run-task \
             --cluster ${ENV}-api-cluster \
             --task-definition $TASK_DEF \
             --launch-type FARGATE \
             --network-configuration "awsvpcConfiguration={subnets=$SUBNETS,securityGroups=$SECURITY_GROUPS,assignPublicIp=ENABLED}" \
-            --overrides "{\"containerOverrides\":[{\"name\":\"${ENV}-api-container\",\"command\":[\"sh\",\"-c\",\"cd /app/backend && pnpm prisma migrate deploy\"]}]}" \
+            --overrides "{\"containerOverrides\":[{\"name\":\"${ENV}-api-container\",\"command\":[\"sh\",\"-c\",\"pnpm prisma migrate deploy\"]}]}" \
             --region eu-central-1 \
             --query 'tasks[0].taskArn' \
             --output text)
@@ -469,12 +470,12 @@ jobs:
         if: inputs.dry_run != true && inputs.operation == 'rollback'
         run: |
           cd backend
-          
+
           echo "🔄 Rolling back migrations..."
-          
+
           # Get the latest migration
           LATEST_MIGRATION=$(ls -1 prisma/migrations | tail -n 1)
-          
+
           if [ ! -z "$LATEST_MIGRATION" ]; then
             # Create rollback SQL
             echo "Rolling back migration: $LATEST_MIGRATION"
@@ -496,31 +497,31 @@ jobs:
         if: inputs.dry_run != true && inputs.operation == 'reset'
         run: |
           cd backend
-          
+
           echo "🔄 Resetting database..."
           echo "⚠️  WARNING: This will delete all data!"
-          
+
           # Reset database
           pnpm prisma migrate reset --force --skip-seed
-          
+
           # Apply all migrations
           pnpm prisma migrate deploy
-          
+
           echo "✅ Database reset completed"
 
       - name: Seed database
         if: inputs.dry_run != true && (inputs.operation == 'seed' || inputs.operation == 'reset')
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          NODE_ENV: ${{ inputs.environment || 'staging' }}
+          NODE_ENV: ${{ inputs.environment || 'dev' }}
         run: |
           cd backend
-          
+
           echo "🌱 Seeding database..."
-          
+
           # Run seed script
           pnpm prisma db seed
-          
+
           echo "✅ Database seeding completed"
 
       - name: Update database schema documentation
@@ -538,7 +539,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [run-migrations]
     if: always() && needs.run-migrations.result == 'success' && inputs.dry_run != true
-    environment: ${{ inputs.environment || (github.ref == 'refs/heads/main' && 'production' || 'staging') }}
+    environment: ${{ inputs.environment || (github.ref == 'refs/heads/main' && 'prod' || 'dev') }}
 
     steps:
       - name: Checkout
@@ -553,7 +554,7 @@ jobs:
 
       - name: Load database credentials from S3
         run: |
-          ENV="${{ inputs.environment || 'staging' }}"
+          ENV="${{ inputs.environment || 'dev' }}"
           aws s3 cp "s3://oneclicktag-env-store-${ENV}/api.env" /tmp/api.env
           DATABASE_URL=$(grep '^DATABASE_URL=' /tmp/api.env | cut -d'=' -f2-)
           DB_PASS=$(echo "$DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
@@ -579,7 +580,7 @@ jobs:
       - name: Verify database integrity via ECS
         run: |
           set -e
-          ENV="${{ inputs.environment || 'staging' }}"
+          ENV="${{ inputs.environment || 'dev' }}"
 
           echo "🔍 Verifying database integrity via ECS run-task..."
 
@@ -612,7 +613,7 @@ jobs:
             --task-definition $TASK_DEF \
             --launch-type FARGATE \
             --network-configuration "awsvpcConfiguration={subnets=$SUBNETS,securityGroups=$SECURITY_GROUPS,assignPublicIp=ENABLED}" \
-            --overrides "{\"containerOverrides\":[{\"name\":\"${ENV}-api-container\",\"command\":[\"sh\",\"-c\",\"cd /app/backend && pnpm prisma migrate status\"]}]}" \
+            --overrides "{\"containerOverrides\":[{\"name\":\"${ENV}-api-container\",\"command\":[\"sh\",\"-c\",\"pnpm prisma migrate status\"]}]}" \
             --region eu-central-1 \
             --query 'tasks[0].taskArn' \
             --output text)
@@ -649,7 +650,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [validate-schema, test-migrations, run-migrations, verify-deployment]
     if: always()
-    
+
     steps:
       - name: Notify success
         if: needs.run-migrations.result == 'success' && needs.verify-deployment.result == 'success'
@@ -659,12 +660,12 @@ jobs:
           channel: '#database-ops'
           text: |
             ✅ Database Migration Completed Successfully
-            
-            **Environment**: ${{ inputs.environment || (github.ref == 'refs/heads/main' && 'production' || 'staging') }}
+
+            **Environment**: ${{ inputs.environment || (github.ref == 'refs/heads/main' && 'prod' || 'dev') }}
             **Operation**: ${{ inputs.operation || 'migrate' }}
             **Triggered by**: ${{ github.actor }}
             **Commit**: ${{ github.sha }}
-            
+
             **Results**:
             - Migration: ${{ needs.run-migrations.result == 'success' && '✅' || '❌' }}
             - Verification: ${{ needs.verify-deployment.result == 'success' && '✅' || '❌' }}
@@ -679,11 +680,11 @@ jobs:
           channel: '#dev-alerts'
           text: |
             🚨 Database Migration Failed
-            
-            **Environment**: ${{ inputs.environment || (github.ref == 'refs/heads/main' && 'production' || 'staging') }}
+
+            **Environment**: ${{ inputs.environment || (github.ref == 'refs/heads/main' && 'prod' || 'dev') }}
             **Operation**: ${{ inputs.operation || 'migrate' }}
             **Triggered by**: ${{ github.actor }}
-            
+
             **Failed Steps**:
             ${{ needs.validate-schema.result == 'failure' && '- Schema Validation' || '' }}
             ${{ needs.test-migrations.result == 'failure' && '- Migration Tests' || '' }}
@@ -692,15 +693,15 @@ jobs:
 
             [View Logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
 
-            ⚠️ **Note**: Manual backup recommended for production before migrations.
+            ⚠️ **Note**: Manual backup recommended for prod before migrations.
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
   emergency-rollback:
     runs-on: ubuntu-latest
-    if: failure() && github.event_name == 'workflow_dispatch' && inputs.environment == 'production'
-    environment: production
-    
+    if: failure() && github.event_name == 'workflow_dispatch' && inputs.environment == 'prod'
+    environment: prod
+
     steps:
       - name: Emergency rollback procedure
         env:
@@ -715,7 +716,7 @@ jobs:
           echo "==============================="
 
           # Find latest backup
-          LATEST_BACKUP=$(aws s3 ls "s3://${BACKUP_S3_BUCKET}/database-backups/production/" --recursive | sort | tail -n 1 | awk '{print $4}')
+          LATEST_BACKUP=$(aws s3 ls "s3://${BACKUP_S3_BUCKET}/database-backups/prod/" --recursive | sort | tail -n 1 | awk '{print $4}')
 
           if [ ! -z "$LATEST_BACKUP" ]; then
             echo "📦 Latest backup found: $LATEST_BACKUP"
