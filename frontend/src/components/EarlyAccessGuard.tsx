@@ -22,7 +22,12 @@ export function EarlyAccessGuard({ children }: EarlyAccessGuardProps) {
 
   // Not logged in - redirect to login with return URL (allows admin to login)
   if (!isAuthenticated) {
-    return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
+    return (
+      <Navigate
+        to={`/login?redirect=${encodeURIComponent(location.pathname)}`}
+        replace
+      />
+    );
   }
 
   // If user is authenticated, check their role
@@ -40,7 +45,7 @@ export function EarlyAccessGuard({ children }: EarlyAccessGuardProps) {
   const formattedDate = new Date(launchDate).toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',
-    day: 'numeric'
+    day: 'numeric',
   });
 
   return (
@@ -68,7 +73,7 @@ export function EarlyAccessGuard({ children }: EarlyAccessGuardProps) {
 
           {/* Heading */}
           <h1 className="text-4xl md:text-5xl font-bold text-center mb-4 bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600">
-            Coming Very Soon! 🚀
+            Coming Very Soon! ⏳
           </h1>
 
           {/* Subheading */}
@@ -80,32 +85,44 @@ export function EarlyAccessGuard({ children }: EarlyAccessGuardProps) {
           <div className="flex items-center justify-center space-x-3 mb-8 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border border-blue-100">
             <Calendar className="w-5 h-5 text-blue-600" />
             <span className="text-lg font-semibold text-gray-700">
-              Expected Launch: <span className="text-blue-600">{formattedDate}</span>
+              Expected Launch:{' '}
+              <span className="text-blue-600">{formattedDate}</span>
             </span>
           </div>
 
           {/* Description */}
           <div className="space-y-4 mb-8 text-center">
             <p className="text-gray-600 leading-relaxed">
-              OneClickTag is revolutionizing conversion tracking by automating Google Tag Manager and Google Ads setup.
-              No more manual tag configuration, no more tracking errors.
+              OneClickTag is revolutionizing conversion tracking by automating
+              Google Tag Manager and Google Ads setup. No more manual tag
+              configuration, no more tracking errors.
             </p>
             <p className="text-gray-600 leading-relaxed">
-              <strong className="text-gray-900">Want early access?</strong> Join our waitlist and be the first to experience
-              one-click tracking automation!
+              <strong className="text-gray-900">Want early access?</strong> Join
+              our waitlist and be the first to experience one-click tracking
+              automation!
             </p>
           </div>
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <Button asChild size="lg" className="w-full sm:w-auto text-lg px-8 py-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all">
+            <Button
+              asChild
+              size="lg"
+              className="w-full sm:w-auto text-lg px-8 py-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all"
+            >
               <Link to="/early-access" className="flex items-center space-x-2">
                 <Mail className="w-5 h-5" />
                 <span>Join the Waitlist</span>
               </Link>
             </Button>
 
-            <Button asChild variant="outline" size="lg" className="w-full sm:w-auto text-lg px-8 py-6 border-2 hover:bg-gray-50">
+            <Button
+              asChild
+              variant="outline"
+              size="lg"
+              className="w-full sm:w-auto text-lg px-8 py-6 border-2 hover:bg-gray-50"
+            >
               <Link to="/">
                 <span>Back to Home</span>
               </Link>
@@ -122,7 +139,13 @@ export function EarlyAccessGuard({ children }: EarlyAccessGuardProps) {
 
         {/* Bottom text */}
         <p className="text-center mt-6 text-sm text-gray-500">
-          Have questions? <Link to="/contact" className="text-blue-600 hover:text-blue-700 font-medium underline">Contact us</Link>
+          Have questions?{' '}
+          <Link
+            to="/contact"
+            className="text-blue-600 hover:text-blue-700 font-medium underline"
+          >
+            Contact us
+          </Link>
         </p>
       </div>
 
