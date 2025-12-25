@@ -403,7 +403,7 @@ jobs:
             --task $TASK_ARN \
             --container ${ENV}-api-container \
             --interactive \
-            --command "cd /app && npx prisma migrate deploy" \
+            --command "/bin/sh -c 'cd /app && npx prisma migrate deploy'" \
             --region eu-central-1
 
           echo "✅ Migrations completed successfully"
@@ -547,7 +547,7 @@ jobs:
             --task $TASK_ARN \
             --container ${ENV}-api-container \
             --interactive \
-            --command "cd /app && npx prisma migrate status" \
+            --command "/bin/sh -c 'cd /app && npx prisma migrate status'" \
             --region eu-central-1
 
           echo "✅ Database integrity verification passed"
