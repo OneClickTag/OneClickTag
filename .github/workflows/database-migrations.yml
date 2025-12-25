@@ -379,6 +379,7 @@ jobs:
       - name: Run database migrations via ECS
         if: inputs.dry_run != true && (inputs.operation == 'migrate' || inputs.operation == '')
         run: |
+          set -e
           ENV="${{ inputs.environment || 'staging' }}"
 
           echo "🚀 Running database migrations via ECS container..."
@@ -397,14 +398,22 @@ jobs:
 
           echo "📦 Running migrations on task: $TASK_ARN"
 
-          # Run migrations via ECS Exec
-          aws ecs execute-command \
+          # Run migrations via ECS Exec (non-interactive mode)
+          OUTPUT=$(aws ecs execute-command \
             --cluster ${ENV}-api-cluster \
             --task $TASK_ARN \
             --container ${ENV}-api-container \
-            --interactive \
-            --command "/bin/sh -c 'cd /app && npx prisma migrate deploy'" \
-            --region eu-central-1
+            --command "/bin/sh -c 'npx prisma migrate deploy 2>&1'" \
+            --region eu-central-1 2>&1)
+
+          EXIT_CODE=$?
+
+          echo "$OUTPUT"
+
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "❌ Migration failed with exit code $EXIT_CODE"
+            exit 1
+          fi
 
           echo "✅ Migrations completed successfully"
 
@@ -530,6 +539,7 @@ jobs:
 
       - name: Verify database integrity via ECS
         run: |
+          set -e
           ENV="${{ inputs.environment || 'staging' }}"
 
           echo "🔍 Verifying database integrity via ECS..."
@@ -541,14 +551,15 @@ jobs:
             --query 'taskArns[0]' \
             --output text)
 
-          # Check migration status
-          aws ecs execute-command \
+          # Check migration status (non-interactive)
+          OUTPUT=$(aws ecs execute-command \
             --cluster ${ENV}-api-cluster \
             --task $TASK_ARN \
             --container ${ENV}-api-container \
-            --interactive \
-            --command "/bin/sh -c 'cd /app && npx prisma migrate status'" \
-            --region eu-central-1
+            --command "/bin/sh -c 'npx prisma migrate status 2>&1'" \
+            --region eu-central-1 2>&1)
+
+          echo "$OUTPUT"
 
           echo "✅ Database integrity verification passed"
 
