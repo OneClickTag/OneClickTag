@@ -527,21 +527,12 @@ jobs:
         if: inputs.dry_run != true && (inputs.operation == 'migrate' || inputs.operation == '')
         run: |
           cd backend
-          
-          # Generate ERD (Entity Relationship Diagram)
+
+          # Generate Prisma Client (updates types)
           pnpm prisma generate
-          
-          # Create schema documentation
-          pnpm prisma-docs generate --output ../docs/database-schema.md
-          
-          # Commit documentation updates if in main branch
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            git config --local user.email "action@github.com"
-            git config --local user.name "GitHub Action"
-            git add ../docs/database-schema.md
-            git diff --staged --quiet || git commit -m "docs: update database schema documentation [skip ci]"
-            git push
-          fi
+
+          echo "✅ Prisma Client generated successfully"
+          echo "📝 Note: Install prisma-docs or prisma-erd-generator for automated schema documentation"
 
   verify-deployment:
     runs-on: ubuntu-latest
