@@ -201,27 +201,65 @@ jobs:
     needs: [validate-schema, test-migrations]
     if: always() && (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main')
     environment: ${{ inputs.environment || 'staging' }}
-    
+
     steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'eu-central-1' }}
+
+      - name: Load database credentials from S3
+        id: load-env
+        run: |
+          ENV="${{ inputs.environment || 'staging' }}"
+
+          # Download .env file from S3
+          aws s3 cp "s3://oneclicktag-env-store-${ENV}/api.env" /tmp/api.env
+
+          # Extract DATABASE_URL and parse it
+          DATABASE_URL=$(grep '^DATABASE_URL=' /tmp/api.env | cut -d'=' -f2-)
+
+          # Parse DATABASE_URL: postgresql://user:pass@host:port/dbname
+          # Extract components
+          DB_USER=$(echo "$DATABASE_URL" | sed -n 's|.*://\([^:]*\):.*|\1|p')
+          DB_PASS=$(echo "$DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
+          DB_HOST=$(echo "$DATABASE_URL" | sed -n 's|.*@\([^:]*\):.*|\1|p')
+          DB_PORT=$(echo "$DATABASE_URL" | sed -n 's|.*:\([0-9]*\)/.*|\1|p')
+          DB_NAME=$(echo "$DATABASE_URL" | sed -n 's|.*/\([^?]*\).*|\1|p')
+
+          # Set outputs (masked for security)
+          echo "::add-mask::$DB_PASS"
+          echo "DATABASE_URL=$DATABASE_URL" >> $GITHUB_ENV
+          echo "DATABASE_HOST=$DB_HOST" >> $GITHUB_ENV
+          echo "DATABASE_PORT=$DB_PORT" >> $GITHUB_ENV
+          echo "DATABASE_USER=$DB_USER" >> $GITHUB_ENV
+          echo "DATABASE_PASSWORD=$DB_PASS" >> $GITHUB_ENV
+          echo "DATABASE_NAME=$DB_NAME" >> $GITHUB_ENV
+
+          # Clean up
+          rm /tmp/api.env
+
       - name: Create database backup
         run: |
           TIMESTAMP=$(date +%Y%m%d_%H%M%S)
           BACKUP_NAME="${{ inputs.environment || 'staging' }}_backup_${TIMESTAMP}"
-          
+
           # Create backup using pg_dump
-          PGPASSWORD="${{ secrets.DATABASE_PASSWORD }}" pg_dump \
-            -h ${{ secrets.DATABASE_HOST }} \
-            -p ${{ secrets.DATABASE_PORT }} \
-            -U ${{ secrets.DATABASE_USER }} \
-            -d ${{ secrets.DATABASE_NAME }} \
+          pg_dump \
+            -h "${DATABASE_HOST}" \
+            -p "${DATABASE_PORT}" \
+            -U "${DATABASE_USER}" \
+            -d "${DATABASE_NAME}" \
             --no-password \
             --verbose \
             --format=custom \
             --file="${BACKUP_NAME}.dump"
-          
+
           # Compress backup
           gzip "${BACKUP_NAME}.dump"
-          
+
           echo "BACKUP_FILE=${BACKUP_NAME}.dump.gz" >> $GITHUB_ENV
 
       - name: Upload backup to S3
@@ -261,10 +299,37 @@ jobs:
     needs: [backup-database]
     if: always() && needs.backup-database.result == 'success'
     environment: ${{ inputs.environment || (github.ref == 'refs/heads/main' && 'production' || 'staging') }}
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'eu-central-1' }}
+
+      - name: Load database credentials from S3
+        run: |
+          ENV="${{ inputs.environment || 'staging' }}"
+
+          # Download .env file from S3
+          aws s3 cp "s3://oneclicktag-env-store-${ENV}/api.env" /tmp/api.env
+
+          # Extract DATABASE_URL
+          DATABASE_URL=$(grep '^DATABASE_URL=' /tmp/api.env | cut -d'=' -f2-)
+
+          # Mask password in logs
+          DB_PASS=$(echo "$DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
+          echo "::add-mask::$DB_PASS"
+
+          # Set env var
+          echo "DATABASE_URL=$DATABASE_URL" >> $GITHUB_ENV
+
+          # Clean up
+          rm /tmp/api.env
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -282,8 +347,6 @@ jobs:
           pnpm install --frozen-lockfile
 
       - name: Check database connection
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           cd backend
           pnpm prisma db pull --print > /dev/null
@@ -291,8 +354,6 @@ jobs:
 
       - name: Preview migrations (dry run)
         if: inputs.dry_run == true
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           cd backend
           
@@ -306,24 +367,18 @@ jobs:
           echo "📋 Migration Plan:"
           echo "=================="
           
-          # Generate migration diff
-          pnpm prisma migrate diff \
-            --from-migrations prisma/migrations \
-            --to-schema-datamodel prisma/schema.prisma \
-            --shadow-database-url ${{ secrets.SHADOW_DATABASE_URL }} \
-            --script > migration_preview.sql
+          # Generate migration diff (without shadow database)
+          echo "Note: Shadow database not configured - showing migration status only"
+          pnpm prisma migrate status > migration_preview.txt || true
           
-          if [ -s migration_preview.sql ]; then
-            echo "SQL to be executed:"
-            cat migration_preview.sql
+          if [ -s migration_preview.txt ]; then
+            cat migration_preview.txt
           else
             echo "No pending migrations found."
           fi
 
       - name: Run database migrations
         if: inputs.dry_run != true && (inputs.operation == 'migrate' || inputs.operation == '')
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           cd backend
           
@@ -339,8 +394,6 @@ jobs:
 
       - name: Rollback migrations
         if: inputs.dry_run != true && inputs.operation == 'rollback'
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           cd backend
           
@@ -368,8 +421,6 @@ jobs:
 
       - name: Reset database
         if: inputs.dry_run != true && inputs.operation == 'reset'
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           cd backend
           
@@ -401,8 +452,6 @@ jobs:
 
       - name: Update database schema documentation
         if: inputs.dry_run != true && (inputs.operation == 'migrate' || inputs.operation == '')
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           cd backend
           
@@ -426,10 +475,27 @@ jobs:
     needs: [run-migrations]
     if: always() && needs.run-migrations.result == 'success' && inputs.dry_run != true
     environment: ${{ inputs.environment || (github.ref == 'refs/heads/main' && 'production' || 'staging') }}
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'eu-central-1' }}
+
+      - name: Load database credentials from S3
+        run: |
+          ENV="${{ inputs.environment || 'staging' }}"
+          aws s3 cp "s3://oneclicktag-env-store-${ENV}/api.env" /tmp/api.env
+          DATABASE_URL=$(grep '^DATABASE_URL=' /tmp/api.env | cut -d'=' -f2-)
+          DB_PASS=$(echo "$DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
+          echo "::add-mask::$DB_PASS"
+          echo "DATABASE_URL=$DATABASE_URL" >> $GITHUB_ENV
+          rm /tmp/api.env
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -447,8 +513,6 @@ jobs:
           pnpm install --frozen-lockfile
 
       - name: Verify database integrity
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           cd backend
           
@@ -470,8 +534,6 @@ jobs:
           echo "✅ Database integrity verification passed"
 
       - name: Run database health checks
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           cd backend
           
@@ -565,31 +627,38 @@ jobs:
     
     steps:
       - name: Emergency rollback procedure
+        env:
+          PGPASSWORD: ${{ secrets.DATABASE_PASSWORD }}
+          DATABASE_HOST: ${{ secrets.DATABASE_HOST }}
+          DATABASE_PORT: ${{ secrets.DATABASE_PORT }}
+          DATABASE_USER: ${{ secrets.DATABASE_USER }}
+          DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
+          BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
         run: |
           echo "🚨 EMERGENCY ROLLBACK INITIATED"
           echo "==============================="
-          
+
           # Find latest backup
-          LATEST_BACKUP=$(aws s3 ls s3://${{ secrets.BACKUP_S3_BUCKET }}/database-backups/production/ --recursive | sort | tail -n 1 | awk '{print $4}')
-          
+          LATEST_BACKUP=$(aws s3 ls "s3://${BACKUP_S3_BUCKET}/database-backups/production/" --recursive | sort | tail -n 1 | awk '{print $4}')
+
           if [ ! -z "$LATEST_BACKUP" ]; then
             echo "📦 Latest backup found: $LATEST_BACKUP"
-            
+
             # Download backup
-            aws s3 cp "s3://${{ secrets.BACKUP_S3_BUCKET }}/$LATEST_BACKUP" ./latest_backup.dump.gz
+            aws s3 cp "s3://${BACKUP_S3_BUCKET}/$LATEST_BACKUP" ./latest_backup.dump.gz
             gunzip latest_backup.dump.gz
-            
+
             # Restore database
-            PGPASSWORD="${{ secrets.DATABASE_PASSWORD }}" pg_restore \
-              -h ${{ secrets.DATABASE_HOST }} \
-              -p ${{ secrets.DATABASE_PORT }} \
-              -U ${{ secrets.DATABASE_USER }} \
-              -d ${{ secrets.DATABASE_NAME }} \
+            pg_restore \
+              -h "${DATABASE_HOST}" \
+              -p "${DATABASE_PORT}" \
+              -U "${DATABASE_USER}" \
+              -d "${DATABASE_NAME}" \
               --clean \
               --if-exists \
               --verbose \
               latest_backup.dump
-            
+
             echo "✅ Emergency rollback completed"
           else
             echo "❌ No backup found for rollback"
