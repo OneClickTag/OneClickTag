@@ -1,5 +1,5 @@
 -- Insert How It Works section
-INSERT INTO "landing_page_content" ("id", "key", "content", "is_active", "created_at", "updated_at")
+INSERT INTO "landing_page_content" ("id", "key", "content", "isActive", "createdAt", "updatedAt")
 VALUES (
   gen_random_uuid(),
   'how-it-works',
@@ -45,7 +45,7 @@ VALUES (
 ) ON CONFLICT (key) DO NOTHING;
 
 -- Insert Social Proof section
-INSERT INTO "landing_page_content" ("id", "key", "content", "is_active", "created_at", "updated_at")
+INSERT INTO "landing_page_content" ("id", "key", "content", "isActive", "createdAt", "updatedAt")
 VALUES (
   gen_random_uuid(),
   'social-proof',
