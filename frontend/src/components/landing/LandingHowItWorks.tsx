@@ -1,39 +1,134 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
 import { MousePointerClick, Link2, Rocket, CheckCircle2 } from 'lucide-react';
+import { publicService } from '@/lib/api/services/publicService';
 
-const steps = [
-  {
-    icon: MousePointerClick,
-    title: 'Connect Google Account',
-    description: 'One-click OAuth connection. We securely access your GTM, Google Ads, and GA4 with your permission.',
-    step: '01',
-  },
-  {
-    icon: Link2,
-    title: 'Configure Tracking',
-    description: 'Select what you want to track (button clicks, form submits, page views). Just enter the CSS selector.',
-    step: '02',
-  },
-  {
-    icon: Rocket,
-    title: 'Deploy Instantly',
-    description: 'We automatically create tags, triggers, conversions, and events. Everything is synced in seconds.',
-    step: '03',
-  },
-  {
-    icon: CheckCircle2,
-    title: 'Monitor & Optimize',
-    description: 'See all your trackings in one dashboard. Update or delete anytime. Track status in real-time.',
-    step: '04',
-  },
-];
+// Icon mapping
+const iconMap = {
+  MousePointerClick,
+  Link2,
+  Rocket,
+  CheckCircle2,
+};
+
+interface Step {
+  id: string;
+  isActive: boolean;
+  order: number;
+  icon: string;
+  title: string;
+  description: string;
+  step: string;
+}
+
+interface Stat {
+  id: string;
+  isActive: boolean;
+  order: number;
+  value: string;
+  label: string;
+}
+
+interface HowItWorksContent {
+  title: string;
+  subtitle: string;
+  steps: Step[];
+  stats: Stat[];
+}
+
+// Helper function to get only active items sorted by order
+function getActiveItems<T extends { isActive: boolean; order: number }>(items: T[]): T[] {
+  return items
+    .filter((item) => item.isActive)
+    .sort((a, b) => a.order - b.order);
+}
+
+const defaultContent: HowItWorksContent = {
+  title: 'How It Works',
+  subtitle: 'Get up and running in minutes, not hours. Our streamlined process makes tracking setup effortless.',
+  steps: [
+    {
+      id: 'step-1',
+      isActive: true,
+      order: 0,
+      icon: 'MousePointerClick',
+      title: 'Connect Google Account',
+      description: 'One-click OAuth connection. We securely access your GTM, Google Ads, and GA4 with your permission.',
+      step: '01',
+    },
+    {
+      id: 'step-2',
+      isActive: true,
+      order: 1,
+      icon: 'Link2',
+      title: 'Configure Tracking',
+      description: 'Select what you want to track (button clicks, form submits, page views). Just enter the CSS selector.',
+      step: '02',
+    },
+    {
+      id: 'step-3',
+      isActive: true,
+      order: 2,
+      icon: 'Rocket',
+      title: 'Deploy Instantly',
+      description: 'We automatically create tags, triggers, conversions, and events. Everything is synced in seconds.',
+      step: '03',
+    },
+    {
+      id: 'step-4',
+      isActive: true,
+      order: 3,
+      icon: 'CheckCircle2',
+      title: 'Monitor & Optimize',
+      description: 'See all your trackings in one dashboard. Update or delete anytime. Track status in real-time.',
+      step: '04',
+    },
+  ],
+  stats: [
+    { id: 'stat-1', isActive: true, order: 0, value: '2 min', label: 'Average Setup Time' },
+    { id: 'stat-2', isActive: true, order: 1, value: '95%', label: 'Time Saved' },
+    { id: 'stat-3', isActive: true, order: 2, value: '100%', label: 'Accuracy' },
+    { id: 'stat-4', isActive: true, order: 3, value: '0', label: 'Code Required' },
+  ],
+};
 
 export function LandingHowItWorks() {
+  const [content, setContent] = useState<HowItWorksContent>(defaultContent);
+  const [isActive, setIsActive] = useState(true); // default to true for default content
   const [ref, inView] = useInView({
     triggerOnce: true,
     threshold: 0.1,
   });
+
+  useEffect(() => {
+    async function fetchContent() {
+      try {
+        const data = await publicService.getLandingSection('how-it-works');
+        if (data && data.isActive && data.content) {
+          setContent(data.content as HowItWorksContent);
+          setIsActive(true);
+        } else if (data && !data.isActive) {
+          setIsActive(false);
+        }
+      } catch (error: any) {
+        // If section is inactive, backend returns 404 - hide the section
+        if (error?.response?.status === 404) {
+          console.log('How It Works section is inactive or not found');
+          setIsActive(false);
+        } else {
+          console.error('Failed to fetch How It Works content:', error);
+          // Keep default content and stay active for other errors
+        }
+      }
+    }
+    fetchContent();
+  }, []);
+
+  // Don't render if section is inactive
+  if (!isActive) {
+    return null;
+  }
 
   return (
     <section className="py-20 bg-gradient-to-b from-gray-50 to-white" ref={ref}>
@@ -46,10 +141,10 @@ export function LandingHowItWorks() {
           className="text-center mb-20"
         >
           <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
-            How It Works
+            {content.title}
           </h2>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Get up and running in minutes, not hours. Our streamlined process makes tracking setup effortless.
+            {content.subtitle}
           </p>
         </motion.div>
 
@@ -59,11 +154,12 @@ export function LandingHowItWorks() {
           <div className="hidden lg:block absolute top-1/2 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-200 via-purple-200 to-pink-200 transform -translate-y-1/2" />
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-4">
-            {steps.map((step, index) => {
-              const Icon = step.icon;
+            {getActiveItems(content.steps).map((step, index) => {
+              const Icon = iconMap[step.icon as keyof typeof iconMap] || MousePointerClick;
+              const activeSteps = getActiveItems(content.steps);
               return (
                 <motion.div
-                  key={index}
+                  key={step.id}
                   initial={{ opacity: 0, y: 40 }}
                   animate={inView ? { opacity: 1, y: 0 } : {}}
                   transition={{ duration: 0.6, delay: index * 0.2 }}
@@ -90,7 +186,7 @@ export function LandingHowItWorks() {
                   </div>
 
                   {/* Arrow (hidden on mobile) */}
-                  {index < steps.length - 1 && (
+                  {index < activeSteps.length - 1 && (
                     <div className="hidden lg:block absolute top-1/2 -right-4 transform -translate-y-1/2 z-20">
                       <div className="w-8 h-8 bg-white rounded-full shadow-md flex items-center justify-center">
                         <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -112,13 +208,8 @@ export function LandingHowItWorks() {
           transition={{ duration: 0.6, delay: 1 }}
           className="mt-20 grid grid-cols-2 md:grid-cols-4 gap-8"
         >
-          {[
-            { value: '2 min', label: 'Average Setup Time' },
-            { value: '95%', label: 'Time Saved' },
-            { value: '100%', label: 'Accuracy' },
-            { value: '0', label: 'Code Required' },
-          ].map((stat, index) => (
-            <div key={index} className="text-center">
+          {getActiveItems(content.stats).map((stat, index) => (
+            <div key={stat.id} className="text-center">
               <div className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
                 {stat.value}
               </div>

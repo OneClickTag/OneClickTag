@@ -37,6 +37,7 @@ interface HeroContent {
 export function LandingHero() {
   const [content, setContent] = useState<HeroContent | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isActive, setIsActive] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -45,24 +46,36 @@ export function LandingHero() {
     const loadContent = async () => {
       try {
         const section = await publicService.getLandingSection('hero');
-        if (!cancelled && section.isActive && section.content) {
-          setContent(section.content as HeroContent);
-        }
-      } catch (error) {
         if (!cancelled) {
-          console.error('Failed to load hero content:', error);
-          // Use default content on error
-          setContent({
-            badge: { icon: 'Zap', text: 'Automated Conversion Tracking' },
-            headline: 'Setup Google Tracking',
-            headlineHighlight: 'In One Click',
-            subtitle: 'Stop wasting hours on manual tag setup. OneClickTag automatically creates GTM tags, Google Ads conversions, and GA4 events in seconds.',
-            benefits: ['No coding required', 'GTM + Google Ads + GA4', 'Setup in 2 minutes'],
-            primaryCTA: { text: 'Start Free Trial', url: '/register' },
-            secondaryCTA: { text: 'View Pricing', url: '/plans' },
-            trustIndicators: 'No credit card required • Cancel anytime • 14-day free trial',
-            demoVideo: { enabled: true, thumbnail: null, stats: [{ label: 'Setup Time', value: '2 min', icon: 'Zap' }] }
-          });
+          if (section.isActive && section.content) {
+            setContent(section.content as HeroContent);
+            setIsActive(true);
+          } else {
+            setIsActive(false);
+          }
+        }
+      } catch (error: any) {
+        if (!cancelled) {
+          // If section is inactive, backend returns 404 - hide the section
+          if (error?.response?.status === 404) {
+            console.log('Hero section is inactive or not found');
+            setIsActive(false);
+          } else {
+            console.error('Failed to load hero content:', error);
+            // Use default content on error for other errors
+            setContent({
+              badge: { icon: 'Zap', text: 'Automated Conversion Tracking' },
+              headline: 'Setup Google Tracking',
+              headlineHighlight: 'In One Click',
+              subtitle: 'Stop wasting hours on manual tag setup. OneClickTag automatically creates GTM tags, Google Ads conversions, and GA4 events in seconds.',
+              benefits: ['No coding required', 'GTM + Google Ads + GA4', 'Setup in 2 minutes'],
+              primaryCTA: { text: 'Start Free Trial', url: '/register' },
+              secondaryCTA: { text: 'View Pricing', url: '/plans' },
+              trustIndicators: 'No credit card required • Cancel anytime • 14-day free trial',
+              demoVideo: { enabled: true, thumbnail: null, stats: [{ label: 'Setup Time', value: '2 min', icon: 'Zap' }] }
+            });
+            setIsActive(true);
+          }
         }
       } finally {
         if (!cancelled) {
@@ -79,7 +92,7 @@ export function LandingHero() {
     };
   }, []);
 
-  if (loading || !content) {
+  if (loading) {
     return (
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-blue-50 via-white to-purple-50">
         <div className="text-center">
@@ -87,6 +100,11 @@ export function LandingHero() {
         </div>
       </section>
     );
+  }
+
+  // Don't render if section is inactive
+  if (!isActive || !content) {
+    return null;
   }
 
   return (

@@ -1,0 +1,7 @@
+{
+  "enabledPlugins": {
+    "greptile@claude-plugins-official": true,
+    "github@claude-plugins-official": true,
+    "superpowers@claude-plugins-official": true
+  }
+}

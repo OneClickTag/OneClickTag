@@ -9,8 +9,6 @@ import { useSortableItems } from './hooks/useSortableItems';
 import { SortableItemList } from '@/components/admin/landing/SortableItemList';
 import { DraggableItemCard } from '@/components/admin/landing/DraggableItemCard';
 import { SocialProofEditor } from '@/components/admin/landing/sections/SocialProofEditor';
-import { HowItWorksEditor } from '@/components/admin/landing/sections/HowItWorksEditor';
-import { FeaturesEditor } from '@/components/admin/landing/sections/FeaturesEditor';
 
 // Base interface for draggable/togglable items
 interface BaseItem {
@@ -797,17 +795,207 @@ export function AdminLandingPage() {
                 </div>
               )}
             </TabsContent>
+
             {/* FEATURES SECTION */}
             <TabsContent value="features" className="mt-6">
               {featuresData && (
-                <FeaturesEditor
-                  data={featuresData}
-                  sectionIsActive={sections.find(s => s.key === 'features')?.isActive || false}
-                  onToggleSection={() => handleToggleActive(sections.find(s => s.key === 'features')!)}
-                  onSave={() => handleSaveSection('features')}
-                  onChange={setFeaturesData}
-                  saving={saving}
-                />
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                  {/* Section Header */}
+                  <div className="p-6 border-b border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">Features Section</h3>
+                        <p className="text-sm text-gray-500 mt-1">
+                          Showcase product features with icons and descriptions
+                        </p>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => handleToggleActive(sections.find(s => s.key === 'features')!)}
+                          className={`flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                            sections.find(s => s.key === 'features')?.isActive
+                              ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                              : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                          }`}
+                        >
+                          {sections.find(s => s.key === 'features')?.isActive ? (
+                            <>
+                              <Eye className="w-4 h-4" />
+                              <span>Active</span>
+                            </>
+                          ) : (
+                            <>
+                              <EyeOff className="w-4 h-4" />
+                              <span>Inactive</span>
+                            </>
+                          )}
+                        </button>
+                        <Button
+                          onClick={() => handleSaveSection('features')}
+                          disabled={saving}
+                          className="flex items-center space-x-2"
+                        >
+                          {saving ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                              <span>Saving...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Save className="w-4 h-4" />
+                              <span>Save</span>
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Form Content */}
+                  <div className="p-6 space-y-6">
+                    {/* Title */}
+                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Section Title</h4>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
+                          <input
+                            type="text"
+                            value={featuresData.title}
+                            onChange={(e) => updateFeaturesField('title', e.target.value)}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-md"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Title Highlight</label>
+                          <input
+                            type="text"
+                            value={featuresData.titleHighlight}
+                            onChange={(e) => updateFeaturesField('titleHighlight', e.target.value)}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-md"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Subtitle */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Subtitle</label>
+                      <textarea
+                        value={featuresData.subtitle}
+                        onChange={(e) => updateFeaturesField('subtitle', e.target.value)}
+                        rows={2}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-md"
+                      />
+                    </div>
+
+                    {/* Features List */}
+                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-semibold text-gray-900">Features</h4>
+                        <Button onClick={addFeature} size="sm" variant="outline">
+                          <Plus className="w-4 h-4 mr-1" />
+                          Add Feature
+                        </Button>
+                      </div>
+                      <div className="space-y-4">
+                        {featuresData.features.map((feature, index) => (
+                          <div key={index} className="bg-white p-4 rounded-lg border border-gray-200">
+                            <div className="flex items-start justify-between mb-3">
+                              <h5 className="text-sm font-medium text-gray-900">Feature #{index + 1}</h5>
+                              <Button
+                                onClick={() => removeFeature(index)}
+                                size="sm"
+                                variant="outline"
+                                className="text-red-600 hover:bg-red-50"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-xs text-gray-600 mb-1">Icon</label>
+                                <select
+                                  value={feature.icon}
+                                  onChange={(e) => updateFeature(index, 'icon', e.target.value)}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md"
+                                >
+                                  {iconOptions.map(opt => (
+                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-xs text-gray-600 mb-1">Color Gradient</label>
+                                <select
+                                  value={feature.color}
+                                  onChange={(e) => updateFeature(index, 'color', e.target.value)}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md"
+                                >
+                                  {colorOptions.map(opt => (
+                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="col-span-2">
+                                <label className="block text-xs text-gray-600 mb-1">Title</label>
+                                <input
+                                  type="text"
+                                  value={feature.title}
+                                  onChange={(e) => updateFeature(index, 'title', e.target.value)}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md"
+                                />
+                              </div>
+                              <div className="col-span-2">
+                                <label className="block text-xs text-gray-600 mb-1">Description</label>
+                                <textarea
+                                  value={feature.description}
+                                  onChange={(e) => updateFeature(index, 'description', e.target.value)}
+                                  rows={2}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Bottom CTA */}
+                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Bottom CTA</h4>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Text</label>
+                          <input
+                            type="text"
+                            value={featuresData.bottomCTA.text}
+                            onChange={(e) => updateBottomCTA('text', e.target.value)}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-md"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Link Text</label>
+                          <input
+                            type="text"
+                            value={featuresData.bottomCTA.linkText}
+                            onChange={(e) => updateBottomCTA('linkText', e.target.value)}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-md"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Link URL</label>
+                          <input
+                            type="text"
+                            value={featuresData.bottomCTA.linkUrl}
+                            onChange={(e) => updateBottomCTA('linkUrl', e.target.value)}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-md"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               )}
             </TabsContent>
 
@@ -1064,32 +1252,568 @@ export function AdminLandingPage() {
                 </div>
               )}
             </TabsContent>
-
             {/* HOW IT WORKS SECTION */}
             <TabsContent value="how-it-works" className="mt-6">
               {howItWorksData && (
-                <HowItWorksEditor
-                  data={howItWorksData}
-                  sectionIsActive={sections.find(s => s.key === 'how-it-works')?.isActive || false}
-                  onToggleSection={() => handleToggleActive(sections.find(s => s.key === 'how-it-works')!)}
-                  onSave={() => handleSaveSection('how-it-works')}
-                  onChange={setHowItWorksData}
-                  saving={saving}
-                />
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                  {/* Section Header */}
+                  <div className="p-6 border-b border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">How It Works</h3>
+                        <p className="text-sm text-gray-500 mt-1">
+                          4-step process section with stats
+                        </p>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => handleToggleActive(sections.find(s => s.key === 'how-it-works')!)}
+                          className={`flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                            sections.find(s => s.key === 'how-it-works')?.isActive
+                              ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                              : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                          }`}
+                        >
+                          {sections.find(s => s.key === 'how-it-works')?.isActive ? (
+                            <>
+                              <Eye className="w-4 h-4" />
+                              <span>Active</span>
+                            </>
+                          ) : (
+                            <>
+                              <EyeOff className="w-4 h-4" />
+                              <span>Inactive</span>
+                            </>
+                          )}
+                        </button>
+                        <Button
+                          onClick={() => handleSaveSection('how-it-works')}
+                          disabled={saving}
+                          className="bg-blue-600 hover:bg-blue-700"
+                        >
+                          <Save className="w-4 h-4 mr-2" />
+                          <span>Save</span>
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Form */}
+                  <div className="p-6 space-y-6">
+                    {/* Title */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Section Title</label>
+                      <input
+                        type="text"
+                        value={howItWorksData.title}
+                        onChange={(e) => setHowItWorksData({ ...howItWorksData, title: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-md"
+                      />
+                    </div>
+
+                    {/* Subtitle */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Subtitle</label>
+                      <textarea
+                        value={howItWorksData.subtitle}
+                        onChange={(e) => setHowItWorksData({ ...howItWorksData, subtitle: e.target.value })}
+                        rows={2}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-md"
+                      />
+                    </div>
+
+                    {/* Steps */}
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-semibold text-gray-900">Steps</h4>
+                        <Button
+                          onClick={() => setHowItWorksData({
+                            ...howItWorksData,
+                            steps: [...howItWorksData.steps, { icon: 'MousePointerClick', title: '', description: '', step: String(howItWorksData.steps.length + 1).padStart(2, '0') }]
+                          })}
+                          variant="outline"
+                          size="sm"
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          Add Step
+                        </Button>
+                      </div>
+                      <div className="space-y-4">
+                        {howItWorksData.steps.map((step, index) => (
+                          <div key={index} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                            <div className="flex items-start justify-between mb-3">
+                              <span className="text-sm font-medium text-gray-900">Step {step.step}</span>
+                              <button
+                                onClick={() => setHowItWorksData({
+                                  ...howItWorksData,
+                                  steps: howItWorksData.steps.filter((_, i) => i !== index)
+                                })}
+                                className="text-red-600 hover:text-red-700"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">Icon</label>
+                                  <select
+                                    value={step.icon}
+                                    onChange={(e) => {
+                                      const newSteps = [...howItWorksData.steps];
+                                      newSteps[index].icon = e.target.value;
+                                      setHowItWorksData({ ...howItWorksData, steps: newSteps });
+                                    }}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md"
+                                  >
+                                    <option value="MousePointerClick">Mouse Click</option>
+                                    <option value="Link2">Link</option>
+                                    <option value="Rocket">Rocket</option>
+                                    <option value="CheckCircle2">Check Circle</option>
+                                    <option value="Zap">Lightning</option>
+                                    <option value="Target">Target</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">Step Number</label>
+                                  <input
+                                    type="text"
+                                    value={step.step}
+                                    onChange={(e) => {
+                                      const newSteps = [...howItWorksData.steps];
+                                      newSteps[index].step = e.target.value;
+                                      setHowItWorksData({ ...howItWorksData, steps: newSteps });
+                                    }}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md"
+                                    placeholder="01"
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Title</label>
+                                <input
+                                  type="text"
+                                  value={step.title}
+                                  onChange={(e) => {
+                                    const newSteps = [...howItWorksData.steps];
+                                    newSteps[index].title = e.target.value;
+                                    setHowItWorksData({ ...howItWorksData, steps: newSteps });
+                                  }}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
+                                <textarea
+                                  value={step.description}
+                                  onChange={(e) => {
+                                    const newSteps = [...howItWorksData.steps];
+                                    newSteps[index].description = e.target.value;
+                                    setHowItWorksData({ ...howItWorksData, steps: newSteps });
+                                  }}
+                                  rows={2}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Stats */}
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-semibold text-gray-900">Stats</h4>
+                        <Button
+                          onClick={() => setHowItWorksData({
+                            ...howItWorksData,
+                            stats: [...howItWorksData.stats, { value: '', label: '' }]
+                          })}
+                          variant="outline"
+                          size="sm"
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          Add Stat
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        {howItWorksData.stats.map((stat, index) => (
+                          <div key={index} className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                            <div className="flex items-start justify-between mb-2">
+                              <span className="text-xs font-medium text-gray-700">Stat {index + 1}</span>
+                              <button
+                                onClick={() => setHowItWorksData({
+                                  ...howItWorksData,
+                                  stats: howItWorksData.stats.filter((_, i) => i !== index)
+                                })}
+                                className="text-red-600 hover:text-red-700"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                            <div className="space-y-2">
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Value</label>
+                                <input
+                                  type="text"
+                                  value={stat.value}
+                                  onChange={(e) => {
+                                    const newStats = [...howItWorksData.stats];
+                                    newStats[index].value = e.target.value;
+                                    setHowItWorksData({ ...howItWorksData, stats: newStats });
+                                  }}
+                                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md"
+                                  placeholder="2 min"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Label</label>
+                                <input
+                                  type="text"
+                                  value={stat.label}
+                                  onChange={(e) => {
+                                    const newStats = [...howItWorksData.stats];
+                                    newStats[index].label = e.target.value;
+                                    setHowItWorksData({ ...howItWorksData, stats: newStats });
+                                  }}
+                                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md"
+                                  placeholder="Average Setup Time"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               )}
             </TabsContent>
 
             {/* SOCIAL PROOF SECTION */}
             <TabsContent value="social-proof" className="mt-6">
               {socialProofData && (
-                <SocialProofEditor
-                  data={socialProofData}
-                  sectionIsActive={sections.find(s => s.key === 'social-proof')?.isActive || false}
-                  onToggleSection={() => handleToggleActive(sections.find(s => s.key === 'social-proof')!)}
-                  onSave={() => handleSaveSection('social-proof')}
-                  onChange={setSocialProofData}
-                  saving={saving}
-                />
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                  {/* Section Header */}
+                  <div className="p-6 border-b border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">Social Proof</h3>
+                        <p className="text-sm text-gray-500 mt-1">
+                          Stats, logos, and testimonials section
+                        </p>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => handleToggleActive(sections.find(s => s.key === 'social-proof')!)}
+                          className={`flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                            sections.find(s => s.key === 'social-proof')?.isActive
+                              ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                              : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                          }`}
+                        >
+                          {sections.find(s => s.key === 'social-proof')?.isActive ? (
+                            <>
+                              <Eye className="w-4 h-4" />
+                              <span>Active</span>
+                            </>
+                          ) : (
+                            <>
+                              <EyeOff className="w-4 h-4" />
+                              <span>Inactive</span>
+                            </>
+                          )}
+                        </button>
+                        <Button
+                          onClick={() => handleSaveSection('social-proof')}
+                          disabled={saving}
+                          className="bg-blue-600 hover:bg-blue-700"
+                        >
+                          <Save className="w-4 h-4 mr-2" />
+                          <span>Save</span>
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Form */}
+                  <div className="p-6 space-y-6">
+                    {/* Stats */}
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-semibold text-gray-900">Stats</h4>
+                        <Button
+                          onClick={() => setSocialProofData({
+                            ...socialProofData,
+                            stats: [...socialProofData.stats, { icon: 'Users', value: '', label: '', description: '' }]
+                          })}
+                          variant="outline"
+                          size="sm"
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          Add Stat
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        {socialProofData.stats.map((stat, index) => (
+                          <div key={index} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                            <div className="flex items-start justify-between mb-3">
+                              <span className="text-sm font-medium text-gray-900">Stat {index + 1}</span>
+                              <button
+                                onClick={() => setSocialProofData({
+                                  ...socialProofData,
+                                  stats: socialProofData.stats.filter((_, i) => i !== index)
+                                })}
+                                className="text-red-600 hover:text-red-700"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                            <div className="space-y-3">
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Icon</label>
+                                <select
+                                  value={stat.icon}
+                                  onChange={(e) => {
+                                    const newStats = [...socialProofData.stats];
+                                    newStats[index].icon = e.target.value;
+                                    setSocialProofData({ ...socialProofData, stats: newStats });
+                                  }}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md"
+                                >
+                                  <option value="Users">Users</option>
+                                  <option value="Target">Target</option>
+                                  <option value="Clock">Clock</option>
+                                  <option value="TrendingUp">Trending Up</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Value</label>
+                                <input
+                                  type="text"
+                                  value={stat.value}
+                                  onChange={(e) => {
+                                    const newStats = [...socialProofData.stats];
+                                    newStats[index].value = e.target.value;
+                                    setSocialProofData({ ...socialProofData, stats: newStats });
+                                  }}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md"
+                                  placeholder="1,000+"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Label</label>
+                                <input
+                                  type="text"
+                                  value={stat.label}
+                                  onChange={(e) => {
+                                    const newStats = [...socialProofData.stats];
+                                    newStats[index].label = e.target.value;
+                                    setSocialProofData({ ...socialProofData, stats: newStats });
+                                  }}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md"
+                                  placeholder="Active Users"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
+                                <input
+                                  type="text"
+                                  value={stat.description}
+                                  onChange={(e) => {
+                                    const newStats = [...socialProofData.stats];
+                                    newStats[index].description = e.target.value;
+                                    setSocialProofData({ ...socialProofData, stats: newStats });
+                                  }}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md"
+                                  placeholder="Marketers trust OneClickTag"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Trust Title */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Trust Section Title</label>
+                      <input
+                        type="text"
+                        value={socialProofData.trustTitle}
+                        onChange={(e) => setSocialProofData({ ...socialProofData, trustTitle: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-md"
+                        placeholder="Powered By Industry Leaders"
+                      />
+                    </div>
+
+                    {/* Logos */}
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-semibold text-gray-900">Partner Logos</h4>
+                        <Button
+                          onClick={() => setSocialProofData({
+                            ...socialProofData,
+                            logos: [...socialProofData.logos, { name: '', width: 'w-24' }]
+                          })}
+                          variant="outline"
+                          size="sm"
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          Add Logo
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        {socialProofData.logos.map((logo, index) => (
+                          <div key={index} className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                            <div className="flex items-start justify-between mb-2">
+                              <span className="text-xs font-medium text-gray-700">Logo {index + 1}</span>
+                              <button
+                                onClick={() => setSocialProofData({
+                                  ...socialProofData,
+                                  logos: socialProofData.logos.filter((_, i) => i !== index)
+                                })}
+                                className="text-red-600 hover:text-red-700"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                            <div className="space-y-2">
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Name</label>
+                                <input
+                                  type="text"
+                                  value={logo.name}
+                                  onChange={(e) => {
+                                    const newLogos = [...socialProofData.logos];
+                                    newLogos[index].name = e.target.value;
+                                    setSocialProofData({ ...socialProofData, logos: newLogos });
+                                  }}
+                                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md"
+                                  placeholder="Google"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Width (Tailwind)</label>
+                                <select
+                                  value={logo.width}
+                                  onChange={(e) => {
+                                    const newLogos = [...socialProofData.logos];
+                                    newLogos[index].width = e.target.value;
+                                    setSocialProofData({ ...socialProofData, logos: newLogos });
+                                  }}
+                                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md"
+                                >
+                                  <option value="w-20">Small (w-20)</option>
+                                  <option value="w-24">Medium (w-24)</option>
+                                  <option value="w-28">Large (w-28)</option>
+                                  <option value="w-32">Extra Large (w-32)</option>
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Testimonials */}
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-semibold text-gray-900">Testimonials</h4>
+                        <Button
+                          onClick={() => setSocialProofData({
+                            ...socialProofData,
+                            testimonials: [...socialProofData.testimonials, { quote: '', author: '', role: '', company: '' }]
+                          })}
+                          variant="outline"
+                          size="sm"
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          Add Testimonial
+                        </Button>
+                      </div>
+                      <div className="space-y-4">
+                        {socialProofData.testimonials.map((testimonial, index) => (
+                          <div key={index} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                            <div className="flex items-start justify-between mb-3">
+                              <span className="text-sm font-medium text-gray-900">Testimonial {index + 1}</span>
+                              <button
+                                onClick={() => setSocialProofData({
+                                  ...socialProofData,
+                                  testimonials: socialProofData.testimonials.filter((_, i) => i !== index)
+                                })}
+                                className="text-red-600 hover:text-red-700"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                            <div className="space-y-3">
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Quote</label>
+                                <textarea
+                                  value={testimonial.quote}
+                                  onChange={(e) => {
+                                    const newTestimonials = [...socialProofData.testimonials];
+                                    newTestimonials[index].quote = e.target.value;
+                                    setSocialProofData({ ...socialProofData, testimonials: newTestimonials });
+                                  }}
+                                  rows={2}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md"
+                                  placeholder="This product changed my life..."
+                                />
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">Author Name</label>
+                                  <input
+                                    type="text"
+                                    value={testimonial.author}
+                                    onChange={(e) => {
+                                      const newTestimonials = [...socialProofData.testimonials];
+                                      newTestimonials[index].author = e.target.value;
+                                      setSocialProofData({ ...socialProofData, testimonials: newTestimonials });
+                                    }}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md"
+                                    placeholder="John Doe"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">Role</label>
+                                  <input
+                                    type="text"
+                                    value={testimonial.role}
+                                    onChange={(e) => {
+                                      const newTestimonials = [...socialProofData.testimonials];
+                                      newTestimonials[index].role = e.target.value;
+                                      setSocialProofData({ ...socialProofData, testimonials: newTestimonials });
+                                    }}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md"
+                                    placeholder="Marketing Director"
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Company</label>
+                                <input
+                                  type="text"
+                                  value={testimonial.company}
+                                  onChange={(e) => {
+                                    const newTestimonials = [...socialProofData.testimonials];
+                                    newTestimonials[index].company = e.target.value;
+                                    setSocialProofData({ ...socialProofData, testimonials: newTestimonials });
+                                  }}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md"
+                                  placeholder="Acme Corp"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               )}
             </TabsContent>
           </Tabs>

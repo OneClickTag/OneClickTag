@@ -26,13 +26,20 @@ export function LoginPage() {
     setIsSubmitting(true)
 
     try {
+      console.log('[Login] Starting sign in process...', { email });
       await signIn({ email, password })
+
+      console.log('[Login] Sign in successful, redirecting...');
       // Wait a bit for auth state to settle then redirect
       setTimeout(() => {
         window.location.href = redirectUrl;
       }, 500);
     } catch (error) {
-      console.error('Login failed:', error)
+      console.error('[Login] Sign in failed:', {
+        error,
+        message: error?.message,
+        code: error?.code
+      });
       setIsSubmitting(false)
     }
   }

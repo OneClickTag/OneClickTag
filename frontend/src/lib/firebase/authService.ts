@@ -119,12 +119,24 @@ export class FirebaseAuthService {
     try {
       // Get Firebase ID token
       const idToken = await user.getIdToken();
-      
+
+      console.log('[Auth] Authenticating with backend...', {
+        uid: user.uid,
+        email: user.email,
+        tokenLength: idToken.length
+      });
+
       // Send to backend for authentication directly
       const response = await apiClient.post(apiEndpoints.auth.firebase, {
         idToken,
         tenantId: null, // Will be set later if needed
       }, { skipAuth: true });
+
+      console.log('[Auth] Backend response:', {
+        hasAccessToken: !!response.data?.accessToken,
+        hasRefreshToken: !!response.data?.refreshToken,
+        expiresIn: response.data?.expiresIn
+      });
 
       if (response.data && response.data.accessToken) {
         // Store tokens manually
@@ -137,11 +149,23 @@ export class FirebaseAuthService {
 
         // Set auth token in client
         apiClient.setAuthToken(response.data.accessToken);
-        console.log('Successfully authenticated with backend');
+        console.log('[Auth] Successfully authenticated with backend');
+      } else {
+        throw new Error('No access token received from backend');
       }
     } catch (error) {
-      console.error('Backend authentication error:', error);
-      throw error;
+      const errorMessage = error?.response?.data?.message ||
+                          error?.message ||
+                          'Backend authentication failed';
+      const statusCode = error?.response?.status;
+
+      console.error('[Auth] Backend authentication error:', {
+        message: errorMessage,
+        statusCode,
+        fullError: error
+      });
+
+      throw new Error(`Backend authentication failed: ${errorMessage}`);
     }
   }
 

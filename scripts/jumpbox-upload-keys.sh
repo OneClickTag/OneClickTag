@@ -27,6 +27,20 @@ fi
 # Get S3 bucket name
 BUCKET="${ENV}-oneclicktag-jumpbox-keys"
 
+# Check if bucket exists
+if ! aws s3 ls "s3://$BUCKET" --region eu-central-1 &>/dev/null; then
+  echo "❌ S3 bucket s3://$BUCKET does not exist"
+  echo ""
+  echo "The jump box infrastructure for '$ENV' hasn't been deployed yet."
+  echo ""
+  echo "To deploy:"
+  echo "  1. cd ~/oneclicktag-infra"
+  echo "  2. terraform workspace select $ENV (or terraform workspace new $ENV)"
+  echo "  3. terraform apply -var-file=\"environments/$ENV.tfvars\""
+  echo ""
+  exit 1
+fi
+
 # Create temporary authorized_keys file (in case you want to add multiple keys)
 TEMP_FILE=$(mktemp)
 cat "$KEY_FILE" > "$TEMP_FILE"

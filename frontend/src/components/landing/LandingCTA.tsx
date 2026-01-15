@@ -37,6 +37,7 @@ interface CTAContent {
 export function LandingCTA() {
   const [content, setContent] = useState<CTAContent | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isActive, setIsActive] = useState(false);
 
   const [ref, inView] = useInView({
     triggerOnce: true,
@@ -50,31 +51,43 @@ export function LandingCTA() {
     const loadContent = async () => {
       try {
         const section = await publicService.getLandingSection('cta');
-        if (!cancelled && section.isActive && section.content) {
-          setContent(section.content as CTAContent);
-        }
-      } catch (error) {
         if (!cancelled) {
-          console.error('Failed to load CTA content:', error);
-          // Use default content on error
-          setContent({
-            badge: { icon: 'Sparkles', text: 'Limited Time Offer' },
-            headline: 'Ready to Transform Your',
-            headlineSecondLine: 'Tracking Workflow?',
-            subtitle: 'Join 1,000+ marketers who are saving hours every week with automated tracking setup. Start your 14-day free trial today—no credit card required.',
-            features: ['14-day free trial', 'No credit card required', 'Cancel anytime', 'Setup in 2 minutes'],
-            primaryCTA: { text: 'Start Free Trial', url: '/register' },
-            secondaryCTA: { text: 'View Pricing', url: '/plans' },
-            trustBadge: 'Secure OAuth connection • GDPR compliant • SOC 2 certified',
-            testimonial: {
-              quote: 'OneClickTag is the tool I wish I had 5 years ago. It\'s saved our team countless hours and eliminated tracking errors completely.',
-              author: {
-                name: 'James Davis',
-                initials: 'JD',
-                role: 'Head of Marketing, TechCorp'
+          if (section.isActive && section.content) {
+            setContent(section.content as CTAContent);
+            setIsActive(true);
+          } else {
+            setIsActive(false);
+          }
+        }
+      } catch (error: any) {
+        if (!cancelled) {
+          // If section is inactive, backend returns 404 - hide the section
+          if (error?.response?.status === 404) {
+            console.log('CTA section is inactive or not found');
+            setIsActive(false);
+          } else {
+            console.error('Failed to load CTA content:', error);
+            // Use default content on error for other errors
+            setContent({
+              badge: { icon: 'Sparkles', text: 'Limited Time Offer' },
+              headline: 'Ready to Transform Your',
+              headlineSecondLine: 'Tracking Workflow?',
+              subtitle: 'Join 1,000+ marketers who are saving hours every week with automated tracking setup. Start your 14-day free trial today—no credit card required.',
+              features: ['14-day free trial', 'No credit card required', 'Cancel anytime', 'Setup in 2 minutes'],
+              primaryCTA: { text: 'Start Free Trial', url: '/register' },
+              secondaryCTA: { text: 'View Pricing', url: '/plans' },
+              trustBadge: 'Secure OAuth connection • GDPR compliant • SOC 2 certified',
+              testimonial: {
+                quote: 'OneClickTag is the tool I wish I had 5 years ago. It\'s saved our team countless hours and eliminated tracking errors completely.',
+                author: {
+                  name: 'James Davis',
+                  initials: 'JD',
+                  role: 'Head of Marketing, TechCorp'
+                }
               }
-            }
-          });
+            });
+            setIsActive(true);
+          }
         }
       } finally {
         if (!cancelled) {
@@ -91,7 +104,7 @@ export function LandingCTA() {
     };
   }, []);
 
-  if (loading || !content) {
+  if (loading) {
     return (
       <section className="py-20 bg-gradient-to-br from-blue-600 via-purple-600 to-pink-600">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
@@ -99,6 +112,11 @@ export function LandingCTA() {
         </div>
       </section>
     );
+  }
+
+  // Don't render if section is inactive
+  if (!isActive || !content) {
+    return null;
   }
 
   return (

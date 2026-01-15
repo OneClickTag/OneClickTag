@@ -182,11 +182,13 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
+      expiresIn: 3600, // 1 hour (3600 seconds) - matches JWT_ACCESS_TOKEN_EXPIRATION
       user: {
         id: user.id,
         email: user.email,
         name: user.name,
         tenantId: user.tenantId,
+        role: user.role, // Include role in response
       },
       tenant: user.tenant || undefined,
     };
@@ -238,11 +240,13 @@ export class AuthService {
       return {
         accessToken,
         refreshToken: newRefreshToken,
+        expiresIn: 3600, // 1 hour
         user: {
           id: user.id,
           email: user.email,
           name: user.name,
           tenantId: user.tenantId,
+          role: user.role, // Include role in response
         },
         tenant: user.tenant || undefined,
       };

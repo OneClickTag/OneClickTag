@@ -1,47 +1,173 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
 import { TrendingUp, Users, Target, Clock } from 'lucide-react';
+import { publicService } from '@/lib/api/services/publicService';
 
-const stats = [
-  {
-    icon: Users,
-    value: '1,000+',
-    label: 'Active Users',
-    description: 'Marketers trust OneClickTag',
-  },
-  {
-    icon: Target,
-    value: '50,000+',
-    label: 'Trackings Created',
-    description: 'Automated conversions deployed',
-  },
-  {
-    icon: Clock,
-    value: '10,000+',
-    label: 'Hours Saved',
-    description: 'Time freed for strategy',
-  },
-  {
-    icon: TrendingUp,
-    value: '99.9%',
-    label: 'Uptime',
-    description: 'Reliable performance',
-  },
-];
+// Icon mapping
+const iconMap = {
+  Users,
+  Target,
+  Clock,
+  TrendingUp,
+};
 
-const logos = [
-  { name: 'Google', width: 'w-24' },
-  { name: 'Analytics', width: 'w-28' },
-  { name: 'Ads', width: 'w-20' },
-  { name: 'Tag Manager', width: 'w-32' },
-  { name: 'Firebase', width: 'w-24' },
-];
+interface Stat {
+  id: string;
+  isActive: boolean;
+  order: number;
+  icon: string;
+  value: string;
+  label: string;
+  description: string;
+}
+
+interface Logo {
+  id: string;
+  isActive: boolean;
+  order: number;
+  name: string;
+  width: string;
+}
+
+interface Testimonial {
+  id: string;
+  isActive: boolean;
+  order: number;
+  quote: string;
+  author: string;
+  role: string;
+  company: string;
+}
+
+interface SocialProofContent {
+  stats: Stat[];
+  trustTitle: string;
+  logos: Logo[];
+  testimonials: Testimonial[];
+}
+
+// Helper function to get only active items sorted by order
+function getActiveItems<T extends { isActive: boolean; order: number }>(items: T[]): T[] {
+  return items
+    .filter((item) => item.isActive)
+    .sort((a, b) => a.order - b.order);
+}
+
+const defaultContent: SocialProofContent = {
+  stats: [
+    {
+      id: 'stat-1',
+      isActive: true,
+      order: 0,
+      icon: 'Users',
+      value: '1,000+',
+      label: 'Active Users',
+      description: 'Marketers trust OneClickTag',
+    },
+    {
+      id: 'stat-2',
+      isActive: true,
+      order: 1,
+      icon: 'Target',
+      value: '50,000+',
+      label: 'Trackings Created',
+      description: 'Automated conversions deployed',
+    },
+    {
+      id: 'stat-3',
+      isActive: true,
+      order: 2,
+      icon: 'Clock',
+      value: '10,000+',
+      label: 'Hours Saved',
+      description: 'Time freed for strategy',
+    },
+    {
+      id: 'stat-4',
+      isActive: true,
+      order: 3,
+      icon: 'TrendingUp',
+      value: '99.9%',
+      label: 'Uptime',
+      description: 'Reliable performance',
+    },
+  ],
+  trustTitle: 'Powered By Industry Leaders',
+  logos: [
+    { id: 'logo-1', isActive: true, order: 0, name: 'Google', width: 'w-24' },
+    { id: 'logo-2', isActive: true, order: 1, name: 'Analytics', width: 'w-28' },
+    { id: 'logo-3', isActive: true, order: 2, name: 'Ads', width: 'w-20' },
+    { id: 'logo-4', isActive: true, order: 3, name: 'Tag Manager', width: 'w-32' },
+    { id: 'logo-5', isActive: true, order: 4, name: 'Firebase', width: 'w-24' },
+  ],
+  testimonials: [
+    {
+      id: 'testimonial-1',
+      isActive: true,
+      order: 0,
+      quote: "OneClickTag cut our tracking setup time from hours to minutes. It's a game-changer for our agency.",
+      author: "Sarah Johnson",
+      role: "Marketing Director",
+      company: "Digital Growth Co.",
+    },
+    {
+      id: 'testimonial-2',
+      isActive: true,
+      order: 1,
+      quote: "The automation is incredible. We can now focus on strategy instead of tedious tag management.",
+      author: "Michael Chen",
+      role: "Performance Marketer",
+      company: "AdScale Agency",
+    },
+    {
+      id: 'testimonial-3',
+      isActive: true,
+      order: 2,
+      quote: "Finally, a tool that makes Google tracking accessible. Our entire team can use it without training.",
+      author: "Emily Rodriguez",
+      role: "Growth Lead",
+      company: "StartupBoost",
+    },
+  ],
+};
 
 export function LandingSocialProof() {
+  const [content, setContent] = useState<SocialProofContent>(defaultContent);
+  const [isActive, setIsActive] = useState(true); // default to true for default content
   const [ref, inView] = useInView({
     triggerOnce: true,
     threshold: 0.1,
   });
+
+  useEffect(() => {
+    async function fetchContent() {
+      try {
+        const data = await publicService.getLandingSection('social-proof');
+        if (data && data.isActive && data.content) {
+          setContent(data.content as SocialProofContent);
+          setIsActive(true);
+        } else if (data && !data.isActive) {
+          setIsActive(false);
+        }
+      } catch (error: any) {
+        // If section is inactive, backend returns 404 - hide the section
+        if (error?.response?.status === 404) {
+          console.log('Social Proof section is inactive or not found');
+          setIsActive(false);
+        } else {
+          console.error('Failed to fetch Social Proof content:', error);
+          // Keep default content and stay active for other errors
+        }
+      }
+    }
+    fetchContent();
+  }, []);
+
+  // Don't render if section is inactive
+  if (!isActive) {
+    return null;
+  }
 
   return (
     <section className="py-20 bg-white" ref={ref}>
@@ -53,11 +179,11 @@ export function LandingSocialProof() {
           transition={{ duration: 0.6 }}
           className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-20"
         >
-          {stats.map((stat, index) => {
-            const Icon = stat.icon;
+          {getActiveItems(content.stats).map((stat, index) => {
+            const Icon = iconMap[stat.icon as keyof typeof iconMap] || Users;
             return (
               <motion.div
-                key={index}
+                key={stat.id}
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={inView ? { opacity: 1, scale: 1 } : {}}
                 transition={{ duration: 0.6, delay: index * 0.1 }}
@@ -88,14 +214,14 @@ export function LandingSocialProof() {
           className="text-center"
         >
           <p className="text-sm text-gray-500 uppercase tracking-wide font-semibold mb-8">
-            Powered By Industry Leaders
+            {content.trustTitle}
           </p>
 
           {/* Logo Cloud */}
           <div className="flex flex-wrap justify-center items-center gap-12 opacity-60 grayscale hover:grayscale-0 transition-all duration-500">
-            {logos.map((logo, index) => (
+            {getActiveItems(content.logos).map((logo, index) => (
               <motion.div
-                key={index}
+                key={logo.id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={inView ? { opacity: 1, y: 0 } : {}}
                 transition={{ duration: 0.4, delay: 0.6 + index * 0.1 }}
@@ -116,28 +242,9 @@ export function LandingSocialProof() {
           transition={{ duration: 0.6, delay: 0.8 }}
           className="mt-20 grid grid-cols-1 md:grid-cols-3 gap-8"
         >
-          {[
-            {
-              quote: "OneClickTag cut our tracking setup time from hours to minutes. It's a game-changer for our agency.",
-              author: "Sarah Johnson",
-              role: "Marketing Director",
-              company: "Digital Growth Co.",
-            },
-            {
-              quote: "The automation is incredible. We can now focus on strategy instead of tedious tag management.",
-              author: "Michael Chen",
-              role: "Performance Marketer",
-              company: "AdScale Agency",
-            },
-            {
-              quote: "Finally, a tool that makes Google tracking accessible. Our entire team can use it without training.",
-              author: "Emily Rodriguez",
-              role: "Growth Lead",
-              company: "StartupBoost",
-            },
-          ].map((testimonial, index) => (
+          {getActiveItems(content.testimonials).map((testimonial, index) => (
             <motion.div
-              key={index}
+              key={testimonial.id}
               initial={{ opacity: 0, y: 20 }}
               animate={inView ? { opacity: 1, y: 0 } : {}}
               transition={{ duration: 0.6, delay: 1 + index * 0.1 }}

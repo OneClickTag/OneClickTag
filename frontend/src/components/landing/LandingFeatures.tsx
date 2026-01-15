@@ -15,6 +15,9 @@ const iconMap: Record<string, LucideIcon> = {
 };
 
 interface Feature {
+  id: string;
+  isActive: boolean;
+  order: number;
   icon: string;
   title: string;
   description: string;
@@ -54,9 +57,17 @@ const itemVariants = {
   },
 };
 
+// Helper function to get only active items sorted by order
+function getActiveItems<T extends { isActive: boolean; order: number }>(items: T[]): T[] {
+  return items
+    .filter((item) => item.isActive)
+    .sort((a, b) => a.order - b.order);
+}
+
 export function LandingFeatures() {
   const [content, setContent] = useState<FeaturesContent | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isActive, setIsActive] = useState(false);
 
   const [ref, inView] = useInView({
     triggerOnce: true,
@@ -70,61 +81,91 @@ export function LandingFeatures() {
     const loadContent = async () => {
       try {
         const section = await publicService.getLandingSection('features');
-        if (!cancelled && section.isActive && section.content) {
-          setContent(section.content as FeaturesContent);
-        }
-      } catch (error) {
         if (!cancelled) {
-          console.error('Failed to load features content:', error);
-          // Use default content on error
-          setContent({
-            title: 'Everything You Need',
-            titleHighlight: 'In One Platform',
-            subtitle: 'Stop juggling multiple tools. OneClickTag brings all your tracking needs together in one simple interface.',
-            features: [
-              {
-                icon: 'Tag',
-                title: 'Google Tag Manager',
-                description: 'Automatically create tags, triggers, and variables in your GTM container. No manual setup needed.',
-                color: 'from-blue-500 to-blue-600',
+          if (section.isActive && section.content) {
+            setContent(section.content as FeaturesContent);
+            setIsActive(true);
+          } else {
+            setIsActive(false);
+          }
+        }
+      } catch (error: any) {
+        if (!cancelled) {
+          // If section is inactive, backend returns 404 - hide the section
+          if (error?.response?.status === 404) {
+            console.log('Features section is inactive or not found');
+            setIsActive(false);
+          } else {
+            console.error('Failed to load features content:', error);
+            // Use default content on error for other errors
+            setContent({
+              title: 'Everything You Need',
+              titleHighlight: 'In One Platform',
+              subtitle: 'Stop juggling multiple tools. OneClickTag brings all your tracking needs together in one simple interface.',
+              features: [
+                {
+                  id: 'feature-1',
+                  isActive: true,
+                  order: 0,
+                  icon: 'Tag',
+                  title: 'Google Tag Manager',
+                  description: 'Automatically create tags, triggers, and variables in your GTM container. No manual setup needed.',
+                  color: 'from-blue-500 to-blue-600',
+                },
+                {
+                  id: 'feature-2',
+                  isActive: true,
+                  order: 1,
+                  icon: 'Target',
+                  title: 'Google Ads Integration',
+                  description: 'Sync conversion actions to Google Ads instantly. Track ROI and optimize campaigns effortlessly.',
+                  color: 'from-green-500 to-green-600',
+                },
+                {
+                  id: 'feature-3',
+                  isActive: true,
+                  order: 2,
+                  icon: 'BarChart3',
+                  title: 'GA4 Events',
+                  description: 'Create custom GA4 events with proper parameters. Get accurate analytics data from day one.',
+                  color: 'from-purple-500 to-purple-600',
+                },
+                {
+                  id: 'feature-4',
+                  isActive: true,
+                  order: 3,
+                  icon: 'Zap',
+                title: 'Lightning Fast',
+                description: 'What takes 30 minutes manually takes 2 minutes with OneClickTag. Save time, reduce errors.',
+                color: 'from-yellow-500 to-orange-600',
               },
               {
-                icon: 'Target',
-                title: 'Google Ads Integration',
-                description: 'Sync conversion actions to Google Ads instantly. Track ROI and optimize campaigns effortlessly.',
-                color: 'from-green-500 to-green-600',
+                id: 'feature-5',
+                isActive: true,
+                order: 4,
+                icon: 'Shield',
+                title: 'Secure & Reliable',
+                description: 'OAuth 2.0 authentication, encrypted data storage, and automatic token refresh. Your data is safe.',
+                color: 'from-red-500 to-pink-600',
               },
               {
-                icon: 'BarChart3',
-                title: 'GA4 Events',
-                description: 'Create custom GA4 events with proper parameters. Get accurate analytics data from day one.',
-                color: 'from-purple-500 to-purple-600',
+                id: 'feature-6',
+                isActive: true,
+                order: 5,
+                icon: 'Globe',
+                title: 'Multi-Customer',
+                description: 'Manage tracking for multiple clients from one dashboard. Perfect for agencies and consultants.',
+                color: 'from-indigo-500 to-indigo-600',
               },
-              {
-                icon: 'Zap',
-              title: 'Lightning Fast',
-              description: 'What takes 30 minutes manually takes 2 minutes with OneClickTag. Save time, reduce errors.',
-              color: 'from-yellow-500 to-orange-600',
+            ],
+            bottomCTA: {
+              text: 'Ready to simplify your tracking workflow?',
+              linkText: 'Get started for free',
+              linkUrl: '/register',
             },
-            {
-              icon: 'Shield',
-              title: 'Secure & Reliable',
-              description: 'OAuth 2.0 authentication, encrypted data storage, and automatic token refresh. Your data is safe.',
-              color: 'from-red-500 to-pink-600',
-            },
-            {
-              icon: 'Globe',
-              title: 'Multi-Customer',
-              description: 'Manage tracking for multiple clients from one dashboard. Perfect for agencies and consultants.',
-              color: 'from-indigo-500 to-indigo-600',
-            },
-          ],
-          bottomCTA: {
-            text: 'Ready to simplify your tracking workflow?',
-            linkText: 'Get started for free',
-            linkUrl: '/register',
-          },
-        });
+          });
+            setIsActive(true);
+          }
         }
       } finally {
         if (!cancelled) {
@@ -141,7 +182,7 @@ export function LandingFeatures() {
     };
   }, []);
 
-  if (loading || !content) {
+  if (loading) {
     return (
       <section className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
@@ -149,6 +190,11 @@ export function LandingFeatures() {
         </div>
       </section>
     );
+  }
+
+  // Don't render if section is inactive
+  if (!isActive || !content) {
+    return null;
   }
 
   return (
@@ -180,11 +226,11 @@ export function LandingFeatures() {
           animate={inView ? "visible" : "hidden"}
           className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
         >
-          {content.features.map((feature, index) => {
+          {getActiveItems(content.features).map((feature, index) => {
             const Icon = iconMap[feature.icon] || Zap;
             return (
               <motion.div
-                key={index}
+                key={feature.id}
                 variants={itemVariants}
                 className="group relative"
               >

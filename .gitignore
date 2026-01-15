@@ -56,3 +56,6 @@ pids
 # Temporary folders
 tmp/
 temp/*.env.production
+
+# Playwright MCP
+.playwright-mcp/
