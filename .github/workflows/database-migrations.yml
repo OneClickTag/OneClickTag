@@ -34,6 +34,7 @@ on:
           - rollback
           - reset
           - seed
+          - resolve
       dry_run:
         description: 'Perform dry run (preview only)'
         required: false
@@ -509,6 +510,74 @@ jobs:
           pnpm prisma db seed
 
           echo "✅ Database seeding completed"
+
+      - name: Resolve failed migration
+        if: inputs.dry_run != true && inputs.operation == 'resolve'
+        run: |
+          set -e
+          ENV="${{ inputs.environment || 'dev' }}"
+
+          echo "🔧 Resolving failed migration via ECS..."
+
+          # Get task definition
+          TASK_DEF=$(aws ecs describe-services \
+            --cluster ${ENV}-api-cluster \
+            --services ${ENV}-api-svc \
+            --region eu-central-1 \
+            --query 'services[0].taskDefinition' \
+            --output text)
+
+          # Get network configuration
+          SUBNETS=$(aws ecs describe-services \
+            --cluster ${ENV}-api-cluster \
+            --services ${ENV}-api-svc \
+            --region eu-central-1 \
+            --query 'services[0].networkConfiguration.awsvpcConfiguration.subnets' \
+            --output json | jq -c '.')
+
+          SECURITY_GROUPS=$(aws ecs describe-services \
+            --cluster ${ENV}-api-cluster \
+            --services ${ENV}-api-svc \
+            --region eu-central-1 \
+            --query 'services[0].networkConfiguration.awsvpcConfiguration.securityGroups' \
+            --output json | jq -c '.')
+
+          # Run resolve command - mark as applied
+          echo "Marking migration 20260115000000_add_landing_sections as applied..."
+          TASK_ARN=$(aws ecs run-task \
+            --cluster ${ENV}-api-cluster \
+            --task-definition $TASK_DEF \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=$SUBNETS,securityGroups=$SECURITY_GROUPS,assignPublicIp=ENABLED}" \
+            --overrides "{\"containerOverrides\":[{\"name\":\"${ENV}-api-container\",\"command\":[\"sh\",\"-c\",\"cd /app/backend && pnpm prisma migrate resolve --applied 20260115000000_add_landing_sections\"]}]}" \
+            --region eu-central-1 \
+            --query 'tasks[0].taskArn' \
+            --output text)
+
+          echo "📦 Resolve task started: $TASK_ARN"
+          echo "⏳ Waiting for task to complete..."
+
+          # Wait for task to complete
+          aws ecs wait tasks-stopped \
+            --cluster ${ENV}-api-cluster \
+            --tasks $TASK_ARN \
+            --region eu-central-1
+
+          # Check exit code
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster ${ENV}-api-cluster \
+            --tasks $TASK_ARN \
+            --region eu-central-1 \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "❌ Resolve failed with exit code $EXIT_CODE"
+            exit 1
+          fi
+
+          echo "✅ Migration resolved successfully"
+          echo "Now run the workflow again with 'migrate' operation"
 
       - name: Update database schema documentation
         if: inputs.dry_run != true && (inputs.operation == 'migrate' || inputs.operation == '')
