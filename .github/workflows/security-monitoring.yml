@@ -1,15 +1,19 @@
-name: Security Monitoring & Alerts
+name: Security Monitoring & Alerts (DISABLED)
+
+# Disabled - uncomment the 'on' section below to re-enable
+# on:
+#   schedule:
+#     # Run security monitoring every 6 hours
+#     - cron: '0 */6 * * *'
+#   push:
+#     branches: [main]
+#     paths:
+#       - '.github/workflows/**'
+#       - 'backend/**'
+#       - 'frontend/**'
+#   workflow_dispatch:
 
 on:
-  schedule:
-    # Run security monitoring every 6 hours
-    - cron: '0 */6 * * *'
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/**'
-      - 'backend/**'
-      - 'frontend/**'
   workflow_dispatch:
     inputs:
       scan_type:
