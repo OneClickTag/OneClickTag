@@ -40,6 +40,14 @@ on:
         required: false
         default: false
         type: boolean
+      resolve_as:
+        description: 'How to resolve the migration (only for resolve operation)'
+        required: false
+        default: 'rolled-back'
+        type: choice
+        options:
+          - rolled-back
+          - applied
 
 concurrency:
   group: database-migrations-${{ inputs.environment || github.ref }}
@@ -516,8 +524,10 @@ jobs:
         run: |
           set -e
           ENV="${{ inputs.environment || 'dev' }}"
+          RESOLVE_TYPE="${{ inputs.resolve_as || 'rolled-back' }}"
 
           echo "🔧 Resolving failed migration via ECS..."
+          echo "Resolution type: $RESOLVE_TYPE"
 
           # Get task definition
           TASK_DEF=$(aws ecs describe-services \
@@ -542,14 +552,14 @@ jobs:
             --query 'services[0].networkConfiguration.awsvpcConfiguration.securityGroups' \
             --output json | jq -c '.')
 
-          # Run resolve command - mark as applied
-          echo "Marking migration 20260115000000_add_landing_sections as applied..."
+          # Run resolve command
+          echo "Marking migration 20260115000000_add_landing_sections as $RESOLVE_TYPE..."
           TASK_ARN=$(aws ecs run-task \
             --cluster ${ENV}-api-cluster \
             --task-definition $TASK_DEF \
             --launch-type FARGATE \
             --network-configuration "awsvpcConfiguration={subnets=$SUBNETS,securityGroups=$SECURITY_GROUPS,assignPublicIp=ENABLED}" \
-            --overrides "{\"containerOverrides\":[{\"name\":\"${ENV}-api-container\",\"command\":[\"sh\",\"-c\",\"cd /app/backend && pnpm prisma migrate resolve --applied 20260115000000_add_landing_sections\"]}]}" \
+            --overrides "{\"containerOverrides\":[{\"name\":\"${ENV}-api-container\",\"command\":[\"sh\",\"-c\",\"cd /app/backend && pnpm prisma migrate resolve --${RESOLVE_TYPE} 20260115000000_add_landing_sections\"]}]}" \
             --region eu-central-1 \
             --query 'tasks[0].taskArn' \
             --output text)
@@ -576,8 +586,10 @@ jobs:
             exit 1
           fi
 
-          echo "✅ Migration resolved successfully"
-          echo "Now run the workflow again with 'migrate' operation"
+          echo "✅ Migration resolved as $RESOLVE_TYPE"
+          if [ "$RESOLVE_TYPE" = "rolled-back" ]; then
+            echo "⚠️  Migration marked as rolled back. Run 'migrate' operation to re-apply it."
+          fi
 
       - name: Update database schema documentation
         if: inputs.dry_run != true && (inputs.operation == 'migrate' || inputs.operation == '')
