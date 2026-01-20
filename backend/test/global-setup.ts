@@ -5,7 +5,7 @@
 import { execSync } from 'child_process';
 import { join } from 'path';
 
-export default async (): Promise<void> => {
+export default async function setup() {
   console.log('🚀 Setting up test environment...');
 
   try {
@@ -44,4 +44,4 @@ export default async (): Promise<void> => {
     console.error('❌ Failed to setup test environment:', error);
     process.exit(1);
   }
-};
+}

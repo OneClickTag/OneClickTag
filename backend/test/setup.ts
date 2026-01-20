@@ -30,7 +30,7 @@ jest.mock('ioredis');
 jest.setTimeout(30000);
 
 // Global test utilities
-global.sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+global.sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Suppress console logs in tests unless explicitly enabled
 if (!process.env.ENABLE_TEST_LOGS) {

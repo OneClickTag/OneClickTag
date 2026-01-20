@@ -2,7 +2,7 @@
  * Global teardown - runs once after all tests
  */
 
-export default async (): Promise<void> => {
+export default async function teardown() {
   console.log('🧹 Cleaning up test environment...');
 
   try {
@@ -30,4 +30,4 @@ export default async (): Promise<void> => {
   } catch (error) {
     console.error('❌ Failed to cleanup test environment:', error);
   }
-};
+}
