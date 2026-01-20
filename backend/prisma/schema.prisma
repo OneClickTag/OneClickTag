@@ -765,6 +765,7 @@ model UserCookieConsent {
   @@index([tenantId])
   @@index([userId])
   @@index([anonymousId])
+  @@index([consentExpiresAt])
   @@map("user_cookie_consents")
 }
 
@@ -820,6 +821,8 @@ model DataAccessRequest {
   @@index([userId])
   @@index([email])
   @@index([status])
+  @@index([tenantId, status])
+  @@index([dueDate])
   @@map("data_access_requests")
 }
 
@@ -859,6 +862,8 @@ model ApiAuditLog {
   @@index([customerId])
   @@index([apiService])
   @@index([createdAt])
+  @@index([tenantId, createdAt])
+  @@index([customerId, createdAt])
   @@map("api_audit_logs")
 }
 
@@ -898,6 +903,7 @@ model PrivacyPolicySection {
   updatedAt DateTime @updatedAt
 
   @@unique([tenantId, key])
+  @@unique([tenantId, order])
   @@index([tenantId])
   @@map("privacy_policy_sections")
 }
