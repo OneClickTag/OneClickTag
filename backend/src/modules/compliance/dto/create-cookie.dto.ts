@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateCookieDto {
@@ -29,5 +29,6 @@ export class CreateCookieDto {
 
   @ApiProperty({ example: 'HTTP', required: false })
   @IsString()
+  @IsOptional()
   type?: string;
 }
