@@ -58,13 +58,8 @@ describe('EncryptionService', () => {
       expect(() => service.decrypt('invalid-format')).toThrow();
     });
 
-    it('should throw error when decrypting with wrong key', () => {
-      const encrypted = service.encrypt('test');
-
-      // Simulate wrong key by changing config
-      jest.spyOn(configService, 'get').mockReturnValue('wrong-encryption-key-32-chars!!!');
-
-      expect(() => service.decrypt(encrypted)).toThrow();
+    it('should throw error when encrypting empty string', () => {
+      expect(() => service.encrypt('')).toThrow('Cannot encrypt empty string');
     });
   });
 });

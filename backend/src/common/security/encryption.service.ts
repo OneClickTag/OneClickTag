@@ -12,7 +12,12 @@ export class EncryptionService {
     const encryptionKey = this.configService.get<string>('ENCRYPTION_KEY');
 
     if (!encryptionKey) {
-      throw new Error('ENCRYPTION_KEY environment variable is required');
+      throw new Error('ENCRYPTION_KEY environment variable is required for encryption service. Please add it to your .env file.');
+    }
+
+    // Validate key length (minimum 32 characters for high entropy)
+    if (encryptionKey.length < 32) {
+      throw new Error('ENCRYPTION_KEY must be at least 32 characters');
     }
 
     // Ensure key is exactly 32 bytes (256 bits) for AES-256
@@ -26,6 +31,10 @@ export class EncryptionService {
    * Returns format: iv:authTag:encrypted
    */
   encrypt(plaintext: string): string {
+    if (!plaintext || plaintext.length === 0) {
+      throw new Error('Cannot encrypt empty string');
+    }
+
     try {
       // Generate random IV (Initialization Vector)
       const iv = crypto.randomBytes(16);
