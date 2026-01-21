@@ -13,13 +13,27 @@ export interface ConsentChoice {
 export interface BannerConfig {
   headingText: string;
   bodyText: string;
-  acceptButtonText: string;
-  rejectButtonText: string;
+  acceptButtonText: string; // Maps to acceptAllButtonText from DB
+  rejectButtonText: string; // Maps to rejectAllButtonText from DB
   customizeButtonText: string;
-  primaryColor: string;
-  secondaryColor: string;
+  primaryColor: string; // Maps to acceptButtonColor from DB
+  secondaryColor: string; // Maps to backgroundColor from DB
   textColor: string;
   position: 'bottom' | 'top' | 'center';
+  consentExpiryDays: number;
+}
+
+// Database response interface (matches backend schema)
+interface BannerConfigFromDB {
+  headingText: string;
+  bodyText: string;
+  acceptAllButtonText: string;
+  rejectAllButtonText: string;
+  customizeButtonText: string;
+  backgroundColor: string;
+  textColor: string;
+  acceptButtonColor: string;
+  position: string;
   consentExpiryDays: number;
 }
 
@@ -123,7 +137,21 @@ async function loadBannerConfig(tenantId: string): Promise<BannerConfig | null> 
       throw new Error('Failed to load banner config');
     }
 
-    return await response.json();
+    const dbConfig: BannerConfigFromDB = await response.json();
+
+    // Map database fields to component-friendly field names
+    return {
+      headingText: dbConfig.headingText,
+      bodyText: dbConfig.bodyText,
+      acceptButtonText: dbConfig.acceptAllButtonText,
+      rejectButtonText: dbConfig.rejectAllButtonText,
+      customizeButtonText: dbConfig.customizeButtonText,
+      primaryColor: dbConfig.acceptButtonColor,
+      secondaryColor: dbConfig.backgroundColor,
+      textColor: dbConfig.textColor,
+      position: dbConfig.position as 'bottom' | 'top' | 'center',
+      consentExpiryDays: dbConfig.consentExpiryDays,
+    };
   } catch (error) {
     console.error('Error loading banner config:', error);
     return null;

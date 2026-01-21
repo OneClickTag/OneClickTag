@@ -111,14 +111,22 @@ export interface ConsentBanner {
   id: string;
   headingText: string;
   bodyText: string;
-  acceptButtonText: string;
-  declineButtonText: string;
+  acceptAllButtonText: string;
+  rejectAllButtonText: string;
   customizeButtonText: string;
-  primaryColor: string;
-  secondaryColor: string;
+  savePreferencesText: string;
+  backgroundColor: string;
   textColor: string;
-  position: 'bottom' | 'top' | 'center';
+  acceptButtonColor: string;
+  rejectButtonColor: string;
+  customizeButtonColor: string;
+  position: string;
   consentExpiryDays: number;
+  showOnEveryPage: boolean;
+  blockCookiesUntilConsent: boolean;
+  privacyPolicyUrl: string;
+  cookiePolicyUrl: string;
+  isActive: boolean;
   tenantId: string;
   createdAt: string;
   updatedAt: string;
@@ -127,14 +135,22 @@ export interface ConsentBanner {
 export interface UpdateConsentBannerData {
   headingText?: string;
   bodyText?: string;
-  acceptButtonText?: string;
-  declineButtonText?: string;
+  acceptAllButtonText?: string;
+  rejectAllButtonText?: string;
   customizeButtonText?: string;
-  primaryColor?: string;
-  secondaryColor?: string;
+  savePreferencesText?: string;
+  backgroundColor?: string;
   textColor?: string;
-  position?: 'bottom' | 'top' | 'center';
+  acceptButtonColor?: string;
+  rejectButtonColor?: string;
+  customizeButtonColor?: string;
+  position?: string;
   consentExpiryDays?: number;
+  showOnEveryPage?: boolean;
+  blockCookiesUntilConsent?: boolean;
+  privacyPolicyUrl?: string;
+  cookiePolicyUrl?: string;
+  isActive?: boolean;
 }
 
 // Data Request Types

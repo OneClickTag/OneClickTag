@@ -28,8 +28,8 @@ export function CookieBannerPage() {
   const [formData, setFormData] = useState<UpdateConsentBannerData>({
     headingText: '',
     bodyText: '',
-    acceptButtonText: '',
-    declineButtonText: '',
+    acceptAllButtonText: '',
+    rejectAllButtonText: '',
     customizeButtonText: '',
     primaryColor: '#3B82F6',
     secondaryColor: '#6B7280',
@@ -47,8 +47,8 @@ export function CookieBannerPage() {
       setFormData({
         headingText: data.headingText,
         bodyText: data.bodyText,
-        acceptButtonText: data.acceptButtonText,
-        declineButtonText: data.declineButtonText,
+        acceptAllButtonText: data.acceptAllButtonText,
+        rejectAllButtonText: data.rejectAllButtonText,
         customizeButtonText: data.customizeButtonText,
         primaryColor: data.primaryColor,
         secondaryColor: data.secondaryColor,
@@ -179,7 +179,7 @@ export function CookieBannerPage() {
                     className="px-4 py-2 rounded-md font-medium text-white"
                     style={{ backgroundColor: formData.primaryColor }}
                   >
-                    {formData.acceptButtonText}
+                    {formData.acceptAllButtonText}
                   </button>
                   <button
                     className="px-4 py-2 rounded-md font-medium"
@@ -188,7 +188,7 @@ export function CookieBannerPage() {
                       color: '#ffffff',
                     }}
                   >
-                    {formData.declineButtonText}
+                    {formData.rejectAllButtonText}
                   </button>
                   <button className="px-4 py-2 rounded-md font-medium underline" style={{ color: formData.textColor }}>
                     {formData.customizeButtonText}
@@ -229,21 +229,21 @@ export function CookieBannerPage() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <Label htmlFor="acceptButtonText">Accept Button Text *</Label>
+                <Label htmlFor="acceptAllButtonText">Accept Button Text *</Label>
                 <Input
-                  id="acceptButtonText"
-                  value={formData.acceptButtonText}
-                  onChange={(e) => updateFormData('acceptButtonText', e.target.value)}
+                  id="acceptAllButtonText"
+                  value={formData.acceptAllButtonText}
+                  onChange={(e) => updateFormData('acceptAllButtonText', e.target.value)}
                   placeholder="Accept All"
                   className="w-full"
                 />
               </div>
               <div>
-                <Label htmlFor="declineButtonText">Decline Button Text *</Label>
+                <Label htmlFor="rejectAllButtonText">Decline Button Text *</Label>
                 <Input
-                  id="declineButtonText"
-                  value={formData.declineButtonText}
-                  onChange={(e) => updateFormData('declineButtonText', e.target.value)}
+                  id="rejectAllButtonText"
+                  value={formData.rejectAllButtonText}
+                  onChange={(e) => updateFormData('rejectAllButtonText', e.target.value)}
                   placeholder="Decline"
                   className="w-full"
                 />
