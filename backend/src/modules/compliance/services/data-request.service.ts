@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 import { CreateDataRequestDto } from '../dto/create-data-request.dto';
 import { UpdateDataRequestDto } from '../dto/update-data-request.dto';
-import { RequestStatus, Prisma } from '@prisma/client';
+import { RequestStatus, DataRequestType, Prisma } from '@prisma/client';
 
 @Injectable()
 export class DataRequestService {
@@ -18,14 +18,18 @@ export class DataRequestService {
       skip?: number;
       take?: number;
       status?: RequestStatus;
+      requestType?: DataRequestType;
+      userId?: string;
       email?: string;
     },
   ) {
-    const { skip = 0, take = 50, status, email } = options || {};
+    const { skip = 0, take = 50, status, requestType, userId, email } = options || {};
 
     const where = {
       tenantId,
       ...(status && { status }),
+      ...(requestType && { requestType }),
+      ...(userId && { userId }),
       ...(email && { email: { contains: email, mode: 'insensitive' as const } }),
     };
 

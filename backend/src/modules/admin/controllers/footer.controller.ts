@@ -12,9 +12,9 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../../../common/guards/roles.guard';
-import { AdminOnly } from '../../../common/decorators/admin-only.decorator';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../../auth/guards/roles.guard';
+import { AdminOnly } from '../../auth/decorators/roles.decorator';
 import { FooterService } from '../services/footer.service';
 import { CreateFooterContentDto, UpdateFooterContentDto } from '../dto/footer.dto';
 

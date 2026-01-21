@@ -63,6 +63,8 @@ export class FooterService {
     const footer = await this.prisma.footerContent.create({
       data: {
         ...createFooterContentDto,
+        socialLinks: createFooterContentDto.socialLinks as any,
+        sections: createFooterContentDto.sections as any,
         updatedBy: userId,
       },
     });
@@ -92,6 +94,8 @@ export class FooterService {
       where: { id },
       data: {
         ...updateFooterContentDto,
+        socialLinks: updateFooterContentDto.socialLinks as any,
+        sections: updateFooterContentDto.sections as any,
         updatedBy: userId,
       },
     });

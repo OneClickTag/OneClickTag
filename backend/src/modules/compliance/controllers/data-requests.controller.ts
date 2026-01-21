@@ -26,7 +26,7 @@ import { AuthenticatedUser } from '../../auth/strategies/jwt.strategy';
 import { DataRequestService } from '../services/data-request.service';
 import { CreateDataRequestDto } from '../dto/create-data-request.dto';
 import { UpdateDataRequestDto } from '../dto/update-data-request.dto';
-import { RequestStatus } from '@prisma/client';
+import { RequestStatus, DataRequestType } from '@prisma/client';
 
 @ApiTags('Compliance - Data Requests')
 @Controller('compliance/data-requests')
@@ -62,7 +62,7 @@ export class DataRequestsController {
     name: 'requestType',
     required: false,
     description: 'Filter by request type',
-    enum: RequestType,
+    enum: DataRequestType,
   })
   @ApiQuery({
     name: 'userId',
@@ -78,7 +78,7 @@ export class DataRequestsController {
     @Query('page', new ParseIntPipe({ optional: true })) page?: number,
     @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
     @Query('status') status?: RequestStatus,
-    @Query('requestType') requestType?: RequestType,
+    @Query('requestType') requestType?: DataRequestType,
     @Query('userId') userId?: string,
   ) {
     const skip = page && limit ? (page - 1) * limit : undefined;
