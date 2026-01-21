@@ -12,14 +12,28 @@ import {
   Layout,
   Settings,
   Mail,
-  BarChart3
+  BarChart3,
+  Shield,
+  ChevronDown,
+  ChevronRight,
+  Cookie,
+  Database,
+  FileCheck,
+  Eye
 } from 'lucide-react';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
 }
 
-const navigation = [
+interface NavigationItem {
+  name: string;
+  href?: string;
+  icon: any;
+  items?: { name: string; href: string; icon: any }[];
+}
+
+const navigation: NavigationItem[] = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { name: 'Users', href: '/admin/users', icon: Users },
   { name: 'Leads', href: '/admin/leads', icon: BarChart3 },
@@ -29,12 +43,34 @@ const navigation = [
   { name: 'Site Settings', href: '/admin/site-settings', icon: Settings },
   { name: 'Contact Page', href: '/admin/contact-page', icon: Mail },
   { name: 'Footer', href: '/admin/footer', icon: FileText },
+  {
+    name: 'Compliance',
+    icon: Shield,
+    items: [
+      { name: 'Settings', href: '/admin/compliance/settings', icon: Settings },
+      { name: 'Cookie Categories', href: '/admin/compliance/cookie-categories', icon: Cookie },
+      { name: 'Cookies', href: '/admin/compliance/cookies', icon: Cookie },
+      { name: 'Cookie Banner', href: '/admin/compliance/cookie-banner', icon: FileCheck },
+      { name: 'Data Requests', href: '/admin/compliance/data-requests', icon: Database },
+      { name: 'Audit Logs', href: '/admin/compliance/audit-logs', icon: Eye },
+    ],
+  },
 ];
 
 export function AdminLayout({ children }: AdminLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
+    Compliance: true, // Expanded by default
+  });
   const location = useLocation();
   const navigate = useNavigate();
+
+  const toggleGroup = (groupName: string) => {
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [groupName]: !prev[groupName],
+    }));
+  };
 
   const handleLogout = () => {
     // Clear auth and redirect
@@ -86,11 +122,68 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
             {navigation.map((item) => {
               const Icon = item.icon;
+
+              // Group with sub-items
+              if (item.items) {
+                const isExpanded = expandedGroups[item.name];
+                const isGroupActive = item.items.some(
+                  (subItem) => location.pathname === subItem.href
+                );
+
+                return (
+                  <div key={item.name}>
+                    <button
+                      onClick={() => toggleGroup(item.name)}
+                      className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${
+                        isGroupActive
+                          ? 'bg-gray-800 text-white'
+                          : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <Icon className="w-5 h-5" />
+                        <span className="font-medium">{item.name}</span>
+                      </div>
+                      {isExpanded ? (
+                        <ChevronDown className="w-4 h-4" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4" />
+                      )}
+                    </button>
+
+                    {isExpanded && (
+                      <div className="mt-1 ml-4 space-y-1">
+                        {item.items.map((subItem) => {
+                          const SubIcon = subItem.icon;
+                          const isActive = location.pathname === subItem.href;
+                          return (
+                            <Link
+                              key={subItem.name}
+                              to={subItem.href}
+                              className={`flex items-center space-x-3 px-4 py-2 rounded-lg transition-colors text-sm ${
+                                isActive
+                                  ? 'bg-blue-600 text-white'
+                                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                              }`}
+                              onClick={() => setSidebarOpen(false)}
+                            >
+                              <SubIcon className="w-4 h-4" />
+                              <span className="font-medium">{subItem.name}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              // Regular navigation item
               const isActive = location.pathname === item.href;
               return (
                 <Link
                   key={item.name}
-                  to={item.href}
+                  to={item.href!}
                   className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
                     isActive
                       ? 'bg-blue-600 text-white'
@@ -139,7 +232,21 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
           <div className="flex-1">
             <h1 className="text-xl font-semibold text-gray-900">
-              {navigation.find(item => item.href === location.pathname)?.name || 'Admin'}
+              {(() => {
+                // Check regular items first
+                const regularItem = navigation.find(item => item.href === location.pathname);
+                if (regularItem) return regularItem.name;
+
+                // Check sub-items in groups
+                for (const item of navigation) {
+                  if (item.items) {
+                    const subItem = item.items.find(sub => sub.href === location.pathname);
+                    if (subItem) return `${item.name} - ${subItem.name}`;
+                  }
+                }
+
+                return 'Admin';
+              })()}
             </h1>
           </div>
 
