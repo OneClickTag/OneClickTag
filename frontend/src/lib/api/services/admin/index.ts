@@ -6,3 +6,4 @@ export * from './adminSiteSettingsService';
 export * from './adminContactService';
 export * from './adminLeadsService';
 export * from './adminQuestionnaireService';
+export * from './adminComplianceService';

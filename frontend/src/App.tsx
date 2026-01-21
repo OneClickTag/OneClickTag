@@ -40,6 +40,14 @@ const AdminQuestionnairePage = lazy(() => import('./pages/admin/AdminQuestionnai
 const AdminRoute = lazy(() => import('./components/AdminRoute').then(m => ({ default: m.AdminRoute })))
 const EarlyAccessGuard = lazy(() => import('./components/EarlyAccessGuard').then(m => ({ default: m.EarlyAccessGuard })))
 
+// Lazy load compliance pages
+const ComplianceSettingsPage = lazy(() => import('./pages/compliance').then(m => ({ default: m.ComplianceSettingsPage })))
+const CookieCategoriesPage = lazy(() => import('./pages/compliance').then(m => ({ default: m.CookieCategoriesPage })))
+const CookiesPage = lazy(() => import('./pages/compliance').then(m => ({ default: m.CookiesPage })))
+const CookieBannerPage = lazy(() => import('./pages/compliance').then(m => ({ default: m.CookieBannerPage })))
+const DataRequestsPage = lazy(() => import('./pages/compliance').then(m => ({ default: m.DataRequestsPage })))
+const ApiAuditLogsPage = lazy(() => import('./pages/compliance').then(m => ({ default: m.ApiAuditLogsPage })))
+
 // Loading fallback component
 const PageLoader = () => (
   <div className="flex items-center justify-center min-h-screen">
@@ -95,6 +103,14 @@ function App() {
           <Route path="/admin/leads/:id" element={<AdminRoute><AdminLeadDetailPage /></AdminRoute>} />
           <Route path="/admin/leads/analytics" element={<AdminRoute><AdminLeadsAnalyticsPage /></AdminRoute>} />
           <Route path="/admin/questionnaire" element={<AdminRoute><AdminQuestionnairePage /></AdminRoute>} />
+
+          {/* Compliance Routes - Protected */}
+          <Route path="/admin/compliance/settings" element={<AdminRoute><ComplianceSettingsPage /></AdminRoute>} />
+          <Route path="/admin/compliance/cookie-categories" element={<AdminRoute><CookieCategoriesPage /></AdminRoute>} />
+          <Route path="/admin/compliance/cookies" element={<AdminRoute><CookiesPage /></AdminRoute>} />
+          <Route path="/admin/compliance/cookie-banner" element={<AdminRoute><CookieBannerPage /></AdminRoute>} />
+          <Route path="/admin/compliance/data-requests" element={<AdminRoute><DataRequestsPage /></AdminRoute>} />
+          <Route path="/admin/compliance/audit-logs" element={<AdminRoute><ApiAuditLogsPage /></AdminRoute>} />
         </Routes>
       </Suspense>
     </div>

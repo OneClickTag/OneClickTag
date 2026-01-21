@@ -149,6 +149,31 @@ export const apiEndpoints = {
       reorder: '/v1/admin/questionnaire/questions/reorder',
       responses: (id: string) => `/v1/admin/questionnaire/questions/${id}/responses`,
     },
+    compliance: {
+      settings: '/v1/compliance/settings',
+      cookieCategories: {
+        list: '/v1/compliance/cookie-categories',
+        create: '/v1/compliance/cookie-categories',
+        update: (id: string) => `/v1/compliance/cookie-categories/${id}`,
+        delete: (id: string) => `/v1/compliance/cookie-categories/${id}`,
+      },
+      cookies: {
+        list: '/v1/compliance/cookies',
+        create: '/v1/compliance/cookies',
+        update: (id: string) => `/v1/compliance/cookies/${id}`,
+        delete: (id: string) => `/v1/compliance/cookies/${id}`,
+        bulkDelete: '/v1/compliance/cookies/bulk-delete',
+      },
+      consentBanner: '/v1/compliance/consent/banner',
+      dataRequests: {
+        list: '/v1/compliance/data-requests',
+        create: '/v1/compliance/data-requests',
+        update: (id: string) => `/v1/compliance/data-requests/${id}`,
+        delete: (id: string) => `/v1/compliance/data-requests/${id}`,
+        export: (userId: string) => `/v1/compliance/data-requests/export/${userId}`,
+      },
+      auditLogs: '/v1/compliance/audit-logs',
+    },
   },
 
   // Public endpoints
