@@ -41,8 +41,8 @@ export default defineConfig({
   },
 
   /* Global setup and teardown */
-  globalSetup: require.resolve('./e2e/setup/global-setup.ts'),
-  globalTeardown: require.resolve('./e2e/setup/global-teardown.ts'),
+  globalSetup: './e2e/setup/global-setup.ts',
+  globalTeardown: './e2e/setup/global-teardown.ts',
 
   /* Configure projects for major browsers */
   projects: [
@@ -125,20 +125,21 @@ export default defineConfig({
   ],
 
   /* Run your local dev server before starting the tests */
-  webServer: [
-    {
-      command: 'npm run dev',
-      url: 'http://localhost:3000',
-      reuseExistingServer: !process.env.CI,
-      timeout: 120 * 1000,
-    },
-    {
-      command: 'cd ../backend && npm run dev',
-      url: 'http://localhost:3001/health',
-      reuseExistingServer: !process.env.CI,
-      timeout: 120 * 1000,
-    }
-  ],
+  // webServer config commented out - dev servers already running in other terminals
+  // webServer: [
+  //   {
+  //     command: 'npm run dev',
+  //     url: 'http://localhost:3000',
+  //     reuseExistingServer: !process.env.CI,
+  //     timeout: 120 * 1000,
+  //   },
+  //   {
+  //     command: 'cd ../backend && npm run dev',
+  //     url: 'http://localhost:3001/api',
+  //     reuseExistingServer: !process.env.CI,
+  //     timeout: 120 * 1000,
+  //   }
+  // ],
 
   /* Test timeout */
   timeout: 30 * 1000,

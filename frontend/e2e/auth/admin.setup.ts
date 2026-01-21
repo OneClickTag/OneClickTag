@@ -6,10 +6,10 @@ setup('authenticate as admin user', async ({ page }) => {
   console.log('🔐 Setting up authentication for admin user...');
 
   // Navigate to login page
-  await page.goto('/auth/login');
+  await page.goto('/login');
 
   // Fill login form with admin credentials
-  await page.fill('input[type="email"]', 'admin@oneclicktag.dev');
+  await page.fill('input[type="email"]', 'admin@oneclicktag.com');
   await page.fill('input[type="password"]', 'Admin123!');
 
   // Submit login form
