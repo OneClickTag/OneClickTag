@@ -514,6 +514,21 @@ model ContactPageContent {
   @@map("contact_page_content")
 }
 
+model FooterContent {
+  id               String   @id @default(cuid())
+  brandName        String?
+  brandDescription String?  @db.Text
+  socialLinks      Json? // Array of {platform, url, icon}
+  sections         Json? // Array of {title, links: [{label, url}]}
+  copyrightText    String?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  updatedBy        String?
+
+  @@map("footer_content")
+}
+
 // Early Access / Lead Generation Models
 
 model Lead {

@@ -238,3 +238,4 @@ export class DataRequestsController {
     await this.dataRequestService.delete(id, user.tenantId);
   }
 }
+
