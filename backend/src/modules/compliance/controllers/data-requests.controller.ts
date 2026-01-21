@@ -41,15 +41,15 @@ export class DataRequestsController {
     description: 'Retrieves all GDPR data access requests for the current tenant with pagination and filtering.',
   })
   @ApiQuery({
-    name: 'skip',
+    name: 'page',
     required: false,
-    description: 'Number of records to skip',
+    description: 'Page number',
     type: Number,
   })
   @ApiQuery({
-    name: 'take',
+    name: 'limit',
     required: false,
-    description: 'Number of records to return',
+    description: 'Number of records per page',
     type: Number,
   })
   @ApiQuery({
@@ -59,9 +59,15 @@ export class DataRequestsController {
     enum: RequestStatus,
   })
   @ApiQuery({
-    name: 'email',
+    name: 'requestType',
     required: false,
-    description: 'Filter by email address',
+    description: 'Filter by request type',
+    enum: RequestType,
+  })
+  @ApiQuery({
+    name: 'userId',
+    required: false,
+    description: 'Filter by user ID',
   })
   @ApiResponse({
     status: 200,
@@ -69,16 +75,20 @@ export class DataRequestsController {
   })
   async findAll(
     @CurrentUser() user: AuthenticatedUser,
-    @Query('skip', new ParseIntPipe({ optional: true })) skip?: number,
-    @Query('take', new ParseIntPipe({ optional: true })) take?: number,
+    @Query('page', new ParseIntPipe({ optional: true })) page?: number,
+    @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
     @Query('status') status?: RequestStatus,
-    @Query('email') email?: string,
+    @Query('requestType') requestType?: RequestType,
+    @Query('userId') userId?: string,
   ) {
+    const skip = page && limit ? (page - 1) * limit : undefined;
+    const take = limit;
     return this.dataRequestService.findAll(user.tenantId, {
       skip,
       take,
       status,
-      email,
+      requestType,
+      userId,
     });
   }
 

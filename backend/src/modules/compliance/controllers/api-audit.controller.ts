@@ -32,15 +32,15 @@ export class ApiAuditController {
     description: 'Retrieves all API audit logs for the current tenant with pagination and filtering.',
   })
   @ApiQuery({
-    name: 'skip',
+    name: 'page',
     required: false,
-    description: 'Number of records to skip',
+    description: 'Page number',
     type: Number,
   })
   @ApiQuery({
-    name: 'take',
+    name: 'limit',
     required: false,
-    description: 'Number of records to return',
+    description: 'Number of records per page',
     type: Number,
   })
   @ApiQuery({
@@ -49,30 +49,19 @@ export class ApiAuditController {
     description: 'Filter by user ID',
   })
   @ApiQuery({
-    name: 'customerId',
+    name: 'service',
     required: false,
-    description: 'Filter by customer ID',
+    description: 'Filter by service name',
   })
   @ApiQuery({
-    name: 'apiService',
-    required: false,
-    description: 'Filter by API service (e.g., GOOGLE_ADS, GTM)',
-  })
-  @ApiQuery({
-    name: 'httpMethod',
+    name: 'method',
     required: false,
     description: 'Filter by HTTP method (GET, POST, PUT, DELETE)',
   })
   @ApiQuery({
-    name: 'minStatus',
+    name: 'statusCode',
     required: false,
-    description: 'Minimum response status code (e.g., 400 for errors)',
-    type: Number,
-  })
-  @ApiQuery({
-    name: 'maxStatus',
-    required: false,
-    description: 'Maximum response status code (e.g., 499 for client errors)',
+    description: 'Filter by exact status code',
     type: Number,
   })
   @ApiQuery({
@@ -102,26 +91,25 @@ export class ApiAuditController {
   })
   async findAll(
     @CurrentUser() user: AuthenticatedUser,
-    @Query('skip', new ParseIntPipe({ optional: true })) skip?: number,
-    @Query('take', new ParseIntPipe({ optional: true })) take?: number,
+    @Query('page', new ParseIntPipe({ optional: true })) page?: number,
+    @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
     @Query('userId') userId?: string,
-    @Query('customerId') customerId?: string,
-    @Query('apiService') apiService?: string,
-    @Query('httpMethod') httpMethod?: string,
-    @Query('minStatus', new ParseIntPipe({ optional: true })) minStatus?: number,
-    @Query('maxStatus', new ParseIntPipe({ optional: true })) maxStatus?: number,
+    @Query('service') service?: string,
+    @Query('method') httpMethod?: string,
+    @Query('statusCode', new ParseIntPipe({ optional: true })) statusCode?: number,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
+    const skip = page && limit ? (page - 1) * limit : undefined;
+    const take = limit;
     return this.apiAuditService.findAll(user.tenantId, {
       skip,
       take,
       userId,
-      customerId,
-      apiService,
+      apiService: service,
       httpMethod,
-      minStatus,
-      maxStatus,
+      minStatus: statusCode,
+      maxStatus: statusCode,
       startDate: startDate ? new Date(startDate) : undefined,
       endDate: endDate ? new Date(endDate) : undefined,
     });
