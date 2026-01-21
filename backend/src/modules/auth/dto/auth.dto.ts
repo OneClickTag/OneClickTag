@@ -1,5 +1,6 @@
 import { IsString, IsEmail, IsOptional, IsUrl, IsEnum } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { UserRole } from '@prisma/client';
 
 export class FirebaseAuthDto {
   @ApiProperty({ description: 'Firebase ID token' })
@@ -64,12 +65,16 @@ export class LoginResponseDto {
   @ApiProperty({ description: 'JWT refresh token' })
   refreshToken: string;
 
+  @ApiProperty({ description: 'Token expiration time in seconds' })
+  expiresIn: number;
+
   @ApiProperty({ description: 'User information' })
   user: {
     id: string;
     email: string;
     name: string;
     tenantId?: string;
+    role: UserRole;
   };
 
   @ApiPropertyOptional({ description: 'Tenant information if applicable' })
