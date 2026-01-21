@@ -25,7 +25,7 @@ export interface BannerConfig {
 
 const CONSENT_STORAGE_KEY = 'oneclicktag_consent';
 const ANONYMOUS_ID_KEY = 'oneclicktag_anonymous_id';
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 /**
  * Get or create an anonymous ID for tracking consent
@@ -99,7 +99,7 @@ function saveConsentToStorage(tenantId: string, consent: ConsentChoice): void {
  */
 async function recordConsentToBackend(consent: ConsentChoice): Promise<void> {
   try {
-    await fetch(`${API_BASE_URL}/api/public/consent/record`, {
+    await fetch(`${API_BASE_URL}/public/consent/record`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -117,7 +117,7 @@ async function recordConsentToBackend(consent: ConsentChoice): Promise<void> {
  */
 async function loadBannerConfig(tenantId: string): Promise<BannerConfig | null> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/public/consent/banner?tenantId=${tenantId}`);
+    const response = await fetch(`${API_BASE_URL}/public/consent/banner?tenantId=${tenantId}`);
 
     if (!response.ok) {
       throw new Error('Failed to load banner config');

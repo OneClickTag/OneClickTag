@@ -30,7 +30,7 @@ export function CookieBannerPage() {
     bodyText: '',
     acceptButtonText: '',
     declineButtonText: '',
-    managePreferencesText: '',
+    customizeButtonText: '',
     primaryColor: '#3B82F6',
     secondaryColor: '#6B7280',
     textColor: '#1F2937',
@@ -49,7 +49,7 @@ export function CookieBannerPage() {
         bodyText: data.bodyText,
         acceptButtonText: data.acceptButtonText,
         declineButtonText: data.declineButtonText,
-        managePreferencesText: data.managePreferencesText,
+        customizeButtonText: data.customizeButtonText,
         primaryColor: data.primaryColor,
         secondaryColor: data.secondaryColor,
         textColor: data.textColor,
@@ -191,7 +191,7 @@ export function CookieBannerPage() {
                     {formData.declineButtonText}
                   </button>
                   <button className="px-4 py-2 rounded-md font-medium underline" style={{ color: formData.textColor }}>
-                    {formData.managePreferencesText}
+                    {formData.customizeButtonText}
                   </button>
                 </div>
               </div>
@@ -249,11 +249,11 @@ export function CookieBannerPage() {
                 />
               </div>
               <div>
-                <Label htmlFor="managePreferencesText">Manage Preferences Text *</Label>
+                <Label htmlFor="customizeButtonText">Manage Preferences Text *</Label>
                 <Input
-                  id="managePreferencesText"
-                  value={formData.managePreferencesText}
-                  onChange={(e) => updateFormData('managePreferencesText', e.target.value)}
+                  id="customizeButtonText"
+                  value={formData.customizeButtonText}
+                  onChange={(e) => updateFormData('customizeButtonText', e.target.value)}
                   placeholder="Manage Preferences"
                   className="w-full"
                 />

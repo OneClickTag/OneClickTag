@@ -21,6 +21,33 @@ import { RecordConsentDto } from '../dto/record-consent.dto';
 export class CookieConsentPublicController {
   constructor(private readonly cookieConsentService: CookieConsentService) {}
 
+  @Get('banner')
+  @ApiOperation({
+    summary: 'Get cookie banner configuration (public endpoint)',
+    description: 'Retrieves cookie consent banner configuration for display to end users. This is a public endpoint used by the cookie banner script.',
+  })
+  @ApiQuery({
+    name: 'tenantId',
+    required: true,
+    description: 'Tenant ID (embedded in cookie banner script)',
+    type: String,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Cookie banner configuration retrieved successfully',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'No banner configuration found for this tenant',
+  })
+  async getBannerConfig(@Query('tenantId') tenantId: string) {
+    if (!tenantId) {
+      throw new BadRequestException('Tenant ID is required');
+    }
+
+    return this.cookieConsentService.findBanner(tenantId);
+  }
+
   @Post('record')
   @ApiOperation({
     summary: 'Record user cookie consent (public endpoint)',

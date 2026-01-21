@@ -113,7 +113,7 @@ export interface ConsentBanner {
   bodyText: string;
   acceptButtonText: string;
   declineButtonText: string;
-  managePreferencesText: string;
+  customizeButtonText: string;
   primaryColor: string;
   secondaryColor: string;
   textColor: string;
@@ -129,7 +129,7 @@ export interface UpdateConsentBannerData {
   bodyText?: string;
   acceptButtonText?: string;
   declineButtonText?: string;
-  managePreferencesText?: string;
+  customizeButtonText?: string;
   primaryColor?: string;
   secondaryColor?: string;
   textColor?: string;

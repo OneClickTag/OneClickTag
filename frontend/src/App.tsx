@@ -4,6 +4,7 @@ import { ScrollToTop } from './components/ScrollToTop'
 import { LandingPage } from './pages/LandingPage'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
+import { CookieConsentBanner } from './components/consent/CookieConsentBanner'
 
 // Lazy load heavy pages to reduce initial bundle size
 const ContentPage = lazy(() => import('./pages/ContentPage').then(m => ({ default: m.ContentPage })))
@@ -113,6 +114,9 @@ function App() {
           <Route path="/admin/compliance/audit-logs" element={<AdminRoute><ApiAuditLogsPage /></AdminRoute>} />
         </Routes>
       </Suspense>
+
+      {/* Cookie Consent Banner - Shows to all visitors */}
+      <CookieConsentBanner tenantId="default" />
     </div>
   )
 }
