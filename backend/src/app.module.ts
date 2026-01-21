@@ -12,6 +12,7 @@ import { MonitoringModule } from './common/monitoring/monitoring.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { PublicModule } from './modules/public/public.module';
 import { LeadsModule } from './modules/leads/leads.module';
+import { ComplianceModule } from './modules/compliance/compliance.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { LeadsModule } from './modules/leads/leads.module';
     JobsModule,
     RealtimeModule,
     UsersModule,
+    ComplianceModule,
   ],
 })
 export class AppModule {}
