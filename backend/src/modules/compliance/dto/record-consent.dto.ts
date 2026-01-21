@@ -1,7 +1,16 @@
-import { IsBoolean, IsString, IsOptional } from 'class-validator';
+import { IsBoolean, IsString, IsOptional, IsNotEmpty } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class RecordConsentDto {
+  @ApiProperty({
+    example: 'cuid1234567890',
+    description: 'Tenant ID (embedded in cookie banner script on tenant\'s website)',
+    required: true,
+  })
+  @IsString()
+  @IsNotEmpty()
+  tenantId: string;
+
   @ApiProperty({ example: 'anonymous-uuid', required: false })
   @IsString()
   @IsOptional()

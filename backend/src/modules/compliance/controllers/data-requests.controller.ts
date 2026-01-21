@@ -10,6 +10,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  ParseIntPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -68,8 +69,8 @@ export class DataRequestsController {
   })
   async findAll(
     @CurrentUser() user: AuthenticatedUser,
-    @Query('skip') skip?: number,
-    @Query('take') take?: number,
+    @Query('skip', new ParseIntPipe({ optional: true })) skip?: number,
+    @Query('take', new ParseIntPipe({ optional: true })) take?: number,
     @Query('status') status?: RequestStatus,
     @Query('email') email?: string,
   ) {
@@ -79,6 +80,45 @@ export class DataRequestsController {
       status,
       email,
     });
+  }
+
+  @Get('export/:userId')
+  @ApiOperation({
+    summary: 'Export user data (GDPR Article 20)',
+    description: 'Exports all data associated with a user in compliance with GDPR right to data portability.',
+  })
+  @ApiParam({
+    name: 'userId',
+    description: 'User ID to export data for',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'User data exported successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        exportedAt: { type: 'string', format: 'date-time' },
+        userData: {
+          type: 'object',
+          properties: {
+            profile: { type: 'object' },
+            cookieConsents: { type: 'array' },
+            dataAccessRequests: { type: 'array' },
+            apiActivityLogs: { type: 'array' },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'User not found',
+  })
+  async exportUserData(
+    @Param('userId') userId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.dataRequestService.exportUserData(userId, user.tenantId);
   }
 
   @Get(':id')
@@ -186,44 +226,5 @@ export class DataRequestsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     await this.dataRequestService.delete(id, user.tenantId);
-  }
-
-  @Get('export/:userId')
-  @ApiOperation({
-    summary: 'Export user data (GDPR Article 20)',
-    description: 'Exports all data associated with a user in compliance with GDPR right to data portability.',
-  })
-  @ApiParam({
-    name: 'userId',
-    description: 'User ID to export data for',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'User data exported successfully',
-    schema: {
-      type: 'object',
-      properties: {
-        exportedAt: { type: 'string', format: 'date-time' },
-        userData: {
-          type: 'object',
-          properties: {
-            profile: { type: 'object' },
-            cookieConsents: { type: 'array' },
-            dataAccessRequests: { type: 'array' },
-            apiActivityLogs: { type: 'array' },
-          },
-        },
-      },
-    },
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'User not found',
-  })
-  async exportUserData(
-    @Param('userId') userId: string,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
-    return this.dataRequestService.exportUserData(userId, user.tenantId);
   }
 }

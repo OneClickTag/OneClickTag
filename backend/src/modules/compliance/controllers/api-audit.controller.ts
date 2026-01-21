@@ -4,6 +4,7 @@ import {
   Param,
   Query,
   UseGuards,
+  ParseIntPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -101,14 +102,14 @@ export class ApiAuditController {
   })
   async findAll(
     @CurrentUser() user: AuthenticatedUser,
-    @Query('skip') skip?: number,
-    @Query('take') take?: number,
+    @Query('skip', new ParseIntPipe({ optional: true })) skip?: number,
+    @Query('take', new ParseIntPipe({ optional: true })) take?: number,
     @Query('userId') userId?: string,
     @Query('customerId') customerId?: string,
     @Query('apiService') apiService?: string,
     @Query('httpMethod') httpMethod?: string,
-    @Query('minStatus') minStatus?: number,
-    @Query('maxStatus') maxStatus?: number,
+    @Query('minStatus', new ParseIntPipe({ optional: true })) minStatus?: number,
+    @Query('maxStatus', new ParseIntPipe({ optional: true })) maxStatus?: number,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
