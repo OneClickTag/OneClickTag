@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Plus, Trash2, Save, RefreshCw } from 'lucide-react';
+import { adminFooterService, FooterContent } from '@/lib/api/services/admin/adminFooterService';
 
 interface SocialLink {
   platform: string;
@@ -63,40 +64,67 @@ const defaultConfig: FooterConfig = {
 };
 
 export function AdminFooterPage() {
+  const [content, setContent] = useState<FooterContent | null>(null);
   const [config, setConfig] = useState<FooterConfig>(defaultConfig);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  const fetchContent = async () => {
+    try {
+      setLoading(true);
+      setMessage(null);
+      const data = await adminFooterService.getActive();
+      setContent(data);
+
+      // Map backend data to config format
+      setConfig({
+        id: data.id,
+        brandName: data.brandName || '',
+        brandDescription: data.brandDescription || '',
+        socialLinks: data.socialLinks || [],
+        sections: data.sections || [],
+        copyrightText: data.copyrightText || '',
+      });
+    } catch (error: any) {
+      console.error('Failed to fetch footer content:', error);
+      setMessage({ type: 'error', text: 'Failed to load footer content' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSave = async () => {
+    if (!content?.id) {
+      setMessage({ type: 'error', text: 'No footer content found to update' });
+      return;
+    }
+
     setSaving(true);
     setMessage(null);
     try {
-      // Save to localStorage for now (backend integration can be added later)
-      localStorage.setItem('footer_config', JSON.stringify(config));
+      await adminFooterService.update(content.id, {
+        brandName: config.brandName,
+        brandDescription: config.brandDescription,
+        socialLinks: config.socialLinks,
+        sections: config.sections,
+        copyrightText: config.copyrightText,
+      });
       setMessage({ type: 'success', text: 'Footer configuration saved successfully!' });
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to save footer configuration.' });
+      fetchContent();
+    } catch (error: any) {
+      console.error('Failed to save footer content:', error);
+      setMessage({
+        type: 'error',
+        text: error?.response?.data?.message || 'Failed to save footer configuration.'
+      });
     } finally {
       setSaving(false);
     }
   };
 
   useEffect(() => {
-    const fetchConfig = async () => {
-      setLoading(true);
-      try {
-        const saved = localStorage.getItem('footer_config');
-        if (saved) {
-          setConfig(JSON.parse(saved));
-        }
-      } catch (error) {
-        console.error('Failed to load footer config:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchConfig();
+    fetchContent();
   }, []);
 
   const addSocialLink = () => {

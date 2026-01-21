@@ -6,12 +6,14 @@ import { PlansController } from './controllers/plans.controller';
 import { LandingPageController } from './controllers/landing-page.controller';
 import { SiteSettingsController } from './controllers/site-settings.controller';
 import { ContactPageController } from './controllers/contact-page.controller';
+import { FooterController } from './controllers/footer.controller';
 import { AdminUsersService } from './services/admin-users.service';
 import { ContentPagesService } from './services/content-pages.service';
 import { PlansService } from './services/plans.service';
 import { LandingPageService } from './services/landing-page.service';
 import { SiteSettingsService } from './services/site-settings.service';
 import { ContactPageService } from './services/contact-page.service';
+import { FooterService } from './services/footer.service';
 
 @Module({
   controllers: [
@@ -21,6 +23,7 @@ import { ContactPageService } from './services/contact-page.service';
     LandingPageController,
     SiteSettingsController,
     ContactPageController,
+    FooterController,
   ],
   providers: [
     AdminUsersService,
@@ -29,6 +32,7 @@ import { ContactPageService } from './services/contact-page.service';
     LandingPageService,
     SiteSettingsService,
     ContactPageService,
+    FooterService,
     PrismaService,
   ],
   exports: [
@@ -37,6 +41,7 @@ import { ContactPageService } from './services/contact-page.service';
     LandingPageService,
     SiteSettingsService,
     ContactPageService,
+    FooterService,
   ],
 })
 export class AdminModule {}

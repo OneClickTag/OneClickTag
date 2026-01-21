@@ -232,6 +232,16 @@ export const apiEndpoints = {
       delete: (id: string) => `/v1/admin/contact-page/${id}`,
       toggleActive: (id: string) => `/v1/admin/contact-page/${id}/toggle-active`,
     },
+    // Footer
+    footer: {
+      list: '/v1/admin/footer',
+      get: (id: string) => `/v1/admin/footer/${id}`,
+      active: '/v1/admin/footer/active',
+      create: '/v1/admin/footer',
+      update: (id: string) => `/v1/admin/footer/${id}`,
+      delete: (id: string) => `/v1/admin/footer/${id}`,
+      toggleActive: (id: string) => `/v1/admin/footer/${id}/toggle-active`,
+    },
   },
 } as const;
 
