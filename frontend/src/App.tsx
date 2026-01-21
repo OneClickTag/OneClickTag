@@ -116,7 +116,8 @@ function App() {
       </Suspense>
 
       {/* Cookie Consent Banner - Shows to all visitors */}
-      <CookieConsentBanner tenantId="default" />
+      {/* TODO: Get tenantId from auth context or environment */}
+      <CookieConsentBanner tenantId="cmhz31nx20000hl6ugujxj4lf" />
     </div>
   )
 }
