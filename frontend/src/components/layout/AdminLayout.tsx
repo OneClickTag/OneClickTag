@@ -35,14 +35,32 @@ interface NavigationItem {
 
 const navigation: NavigationItem[] = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
-  { name: 'Users', href: '/admin/users', icon: Users },
-  { name: 'Leads', href: '/admin/leads', icon: BarChart3 },
-  { name: 'Content Pages', href: '/admin/content', icon: FileText },
-  { name: 'Plans', href: '/admin/plans', icon: CreditCard },
-  { name: 'Landing Page', href: '/admin/landing', icon: Layout },
-  { name: 'Site Settings', href: '/admin/site-settings', icon: Settings },
-  { name: 'Contact Page', href: '/admin/contact-page', icon: Mail },
-  { name: 'Footer', href: '/admin/footer', icon: FileText },
+  {
+    name: 'User Management',
+    icon: Users,
+    items: [
+      { name: 'Users', href: '/admin/users', icon: Users },
+      { name: 'Leads', href: '/admin/leads', icon: BarChart3 },
+    ],
+  },
+  {
+    name: 'Content',
+    icon: FileText,
+    items: [
+      { name: 'Pages', href: '/admin/content', icon: FileText },
+      { name: 'Landing Page', href: '/admin/landing', icon: Layout },
+      { name: 'Contact Page', href: '/admin/contact-page', icon: Mail },
+      { name: 'Footer', href: '/admin/footer', icon: FileText },
+    ],
+  },
+  {
+    name: 'Settings',
+    icon: Settings,
+    items: [
+      { name: 'Site Settings', href: '/admin/site-settings', icon: Settings },
+      { name: 'Plans', href: '/admin/plans', icon: CreditCard },
+    ],
+  },
   {
     name: 'Compliance',
     icon: Shield,
@@ -60,7 +78,10 @@ const navigation: NavigationItem[] = [
 export function AdminLayout({ children }: AdminLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
-    Compliance: true, // Expanded by default
+    'User Management': false,
+    'Content': true,
+    'Settings': false,
+    'Compliance': true,
   });
   const location = useLocation();
   const navigate = useNavigate();
