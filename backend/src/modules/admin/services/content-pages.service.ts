@@ -78,7 +78,7 @@ export class ContentPagesService {
         where: { slug: updateContentPageDto.slug },
       });
 
-      if (existing) {
+      if (existing && existing.id !== id) {
         throw new BadRequestException(`Content page with slug "${updateContentPageDto.slug}" already exists`);
       }
     }
