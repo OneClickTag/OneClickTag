@@ -28,9 +28,10 @@ export function CookiesPage() {
   const fetchCategories = async () => {
     try {
       const data = await adminComplianceService.getCookieCategories();
-      setCategories(data);
+      setCategories(Array.isArray(data) ? data : []);
     } catch (error: any) {
       console.error('Failed to fetch cookie categories:', error);
+      setCategories([]);
     }
   };
 
@@ -43,11 +44,12 @@ export function CookiesPage() {
         categoryId: filterCategory || undefined,
         search: searchTerm || undefined,
       });
-      setCookies(response.data);
-      setTotalPages(response.meta.totalPages);
+      setCookies(Array.isArray(response.data) ? response.data : []);
+      setTotalPages(response.meta?.totalPages || 1);
     } catch (error: any) {
       console.error('Failed to fetch cookies:', error);
       setMessage({ type: 'error', text: 'Failed to load cookies' });
+      setCookies([]);
     } finally {
       setLoading(false);
     }

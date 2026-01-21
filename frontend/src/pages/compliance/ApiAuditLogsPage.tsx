@@ -29,10 +29,11 @@ export function ApiAuditLogsPage() {
         startDate: startDate || undefined,
         endDate: endDate || undefined,
       });
-      setLogs(response.data);
-      setTotalPages(response.meta.totalPages);
+      setLogs(Array.isArray(response.data) ? response.data : []);
+      setTotalPages(response.meta?.totalPages || 1);
     } catch (error: any) {
       console.error('Failed to fetch audit logs:', error);
+      setLogs([]);
     } finally {
       setLoading(false);
     }

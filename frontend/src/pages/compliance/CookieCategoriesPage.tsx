@@ -23,10 +23,11 @@ export function CookieCategoriesPage() {
     try {
       setLoading(true);
       const data = await adminComplianceService.getCookieCategories();
-      setCategories(data);
+      setCategories(Array.isArray(data) ? data : []);
     } catch (error: any) {
       console.error('Failed to fetch cookie categories:', error);
       setMessage({ type: 'error', text: 'Failed to load cookie categories' });
+      setCategories([]);
     } finally {
       setLoading(false);
     }
