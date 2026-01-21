@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../../prisma/prisma.service';
+import { PrismaService } from '../../../common/prisma/prisma.service';
 import { CreateComplianceSettingsDto } from '../dto/create-compliance-settings.dto';
 import { UpdateComplianceSettingsDto } from '../dto/update-compliance-settings.dto';
 
@@ -26,16 +26,41 @@ export class ComplianceSettingsService {
     dto: CreateComplianceSettingsDto | UpdateComplianceSettingsDto,
     userId: string,
   ) {
-    return this.prisma.complianceSettings.upsert({
-      where: { tenantId },
-      create: {
+    const existing = await this.findByTenant(tenantId);
+
+    if (existing) {
+      return this.prisma.complianceSettings.update({
+        where: { tenantId },
+        data: {
+          companyName: dto.companyName,
+          companyAddress: dto.companyAddress,
+          companyPhone: dto.companyPhone,
+          companyEmail: dto.companyEmail,
+          dpoName: dto.dpoName,
+          dpoEmail: dto.dpoEmail,
+          dpoPhone: dto.dpoPhone,
+          ccpaTollFreeNumber: dto.ccpaTollFreeNumber,
+          apiContactEmail: dto.apiContactEmail,
+          privacyContactEmail: dto.privacyContactEmail,
+          updatedBy: userId,
+        },
+      });
+    }
+
+    return this.prisma.complianceSettings.create({
+      data: {
         tenantId,
-        ...dto,
+        companyName: dto.companyName,
+        companyAddress: dto.companyAddress,
+        companyPhone: dto.companyPhone,
+        companyEmail: dto.companyEmail,
+        dpoName: dto.dpoName,
+        dpoEmail: dto.dpoEmail,
+        dpoPhone: dto.dpoPhone,
+        ccpaTollFreeNumber: dto.ccpaTollFreeNumber,
+        apiContactEmail: dto.apiContactEmail,
+        privacyContactEmail: dto.privacyContactEmail,
         createdBy: userId,
-        updatedBy: userId,
-      },
-      update: {
-        ...dto,
         updatedBy: userId,
       },
     });

@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../../prisma/prisma.service';
+import { PrismaService } from '../../../common/prisma/prisma.service';
 import { CreateCookieCategoryDto } from '../dto/create-cookie-category.dto';
 import { UpdateCookieCategoryDto } from '../dto/update-cookie-category.dto';
 import { CreateCookieDto } from '../dto/create-cookie.dto';
