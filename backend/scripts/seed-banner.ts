@@ -14,7 +14,7 @@ async function main() {
       data: {
         id: 'default-tenant',
         name: 'Default Organization',
-        plan: 'FREE',
+        domain: 'default.oneclicktag.com',
         isActive: true,
       },
     });
