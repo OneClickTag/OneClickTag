@@ -73,22 +73,18 @@ export class UpdateContactPageContentDto {
 
   @ApiPropertyOptional({ description: 'Social links JSON array' })
   @IsOptional()
-  @IsObject()
   socialLinks?: any;
 
   @ApiPropertyOptional({ description: 'FAQs JSON array' })
   @IsOptional()
-  @IsObject()
   faqs?: any;
 
   @ApiPropertyOptional({ description: 'Form settings JSON object' })
   @IsOptional()
-  @IsObject()
   formSettings?: any;
 
   @ApiPropertyOptional({ description: 'Custom content JSON object' })
   @IsOptional()
-  @IsObject()
   customContent?: any;
 
   @ApiPropertyOptional()
