@@ -1,5 +1,5 @@
 {
-  "buildCommand": "cd .. && pnpm --filter=@oneclicktag/backend run db:generate && pnpm turbo build --filter=@oneclicktag/backend",
+  "buildCommand": "cd .. && pnpm turbo build --filter=@oneclicktag/shared && cd backend && npx prisma generate && cd .. && pnpm turbo build --filter=@oneclicktag/backend",
   "installCommand": "cd .. && pnpm install",
   "framework": null
 }
