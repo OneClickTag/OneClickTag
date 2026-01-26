@@ -2,17 +2,11 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
-import { ExpressAdapter } from '@nestjs/platform-express';
-import * as express from 'express';
 
-// Create and configure the Express app
-async function createApp(expressInstance?: express.Express) {
-  const expressApp = expressInstance || express();
-  const app = await NestFactory.create(
-    AppModule,
-    new ExpressAdapter(expressApp),
-  );
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
 
+  // Validation
   app.useGlobalPipes(
     new ValidationPipe({
       transform: true,
@@ -21,11 +15,10 @@ async function createApp(expressInstance?: express.Express) {
     }),
   );
 
-  // CORS Configuration with support for multiple origins
+  // CORS Configuration
   const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
-  const allowedOrigins = corsOrigin.split(',').map(origin => origin.trim());
-
-  console.log('🌐 CORS enabled for origins:', allowedOrigins);
+  const allowedOrigins = corsOrigin.split(',').map((origin) => origin.trim());
+  console.log('CORS enabled for origins:', allowedOrigins);
 
   app.enableCors({
     origin: allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins,
@@ -42,9 +35,10 @@ async function createApp(expressInstance?: express.Express) {
     ],
   });
 
-  // Set global API prefix
+  // Global API prefix
   app.setGlobalPrefix('api');
 
+  // Swagger
   const config = new DocumentBuilder()
     .setTitle('OneClickTag API')
     .setDescription('OneClickTag SaaS Application API')
@@ -52,31 +46,12 @@ async function createApp(expressInstance?: express.Express) {
     .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document);
+  SwaggerModule.setup('api/docs', app, document);
 
-  await app.init();
-  return expressApp;
-}
-
-// Bootstrap function for local development
-async function bootstrap() {
-  const expressApp = await createApp();
+  // Start server
   const port = process.env.PORT || 3000;
-  expressApp.listen(port, () => {
-    console.log(`Application is running on: http://localhost:${port}`);
-  });
+  await app.listen(port);
+  console.log(`Application is running on: http://localhost:${port}`);
 }
 
-// Export for Vercel serverless
-let cachedApp: express.Express;
-export default async (req: express.Request, res: express.Response) => {
-  if (!cachedApp) {
-    cachedApp = await createApp();
-  }
-  return cachedApp(req, res);
-};
-
-// Run bootstrap only when not in serverless environment
-if (require.main === module) {
-  bootstrap();
-}
+bootstrap();
