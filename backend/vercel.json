@@ -1,15 +1,4 @@
 {
   "buildCommand": "pnpm prisma generate --schema=./prisma/schema.prisma && pnpm run build",
-  "outputDirectory": "dist",
-  "functions": {
-    "dist/main.js": {
-      "maxDuration": 30
-    }
-  },
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/dist/main.js"
-    }
-  ]
+  "outputDirectory": "dist"
 }

@@ -2,16 +2,9 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
-import { NestExpressApplication } from '@nestjs/platform-express';
 
-let app: NestExpressApplication;
-
-async function bootstrap(): Promise<NestExpressApplication> {
-  if (app) {
-    return app;
-  }
-
-  app = await NestFactory.create<NestExpressApplication>(AppModule);
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -52,25 +45,10 @@ async function bootstrap(): Promise<NestExpressApplication> {
     .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  SwaggerModule.setup('api', app, document);
 
-  await app.init();
-
-  return app;
+  const port = process.env.PORT || 3000;
+  await app.listen(port);
+  console.log(`Application is running on: http://localhost:${port}`);
 }
-
-// For local development
-if (process.env.NODE_ENV !== 'production') {
-  bootstrap().then(async (app) => {
-    const port = process.env.PORT || 3000;
-    await app.listen(port);
-    console.log(`Application is running on: http://localhost:${port}`);
-  });
-}
-
-// Export for Vercel serverless
-export default async function handler(req: any, res: any) {
-  const app = await bootstrap();
-  const instance = app.getHttpAdapter().getInstance();
-  return instance(req, res);
-}
+bootstrap();
