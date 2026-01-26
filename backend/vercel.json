@@ -1,16 +1,17 @@
 {
   "version": 2,
   "buildCommand": "pnpm prisma generate --schema=./prisma/schema.prisma && pnpm run build",
-  "builds": [
-    {
-      "src": "dist/main.js",
-      "use": "@vercel/node"
+  "outputDirectory": ".",
+  "functions": {
+    "dist/main.js": {
+      "memory": 1024,
+      "maxDuration": 30
     }
-  ],
-  "routes": [
+  },
+  "rewrites": [
     {
-      "src": "/(.*)",
-      "dest": "dist/main.js"
+      "source": "/(.*)",
+      "destination": "/dist/main.js"
     }
   ]
 }
