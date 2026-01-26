@@ -2,9 +2,16 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { ExpressAdapter } from '@nestjs/platform-express';
+import * as express from 'express';
 
-async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+// Create and configure the Express app
+async function createApp(expressInstance?: express.Express) {
+  const expressApp = expressInstance || express();
+  const app = await NestFactory.create(
+    AppModule,
+    new ExpressAdapter(expressApp),
+  );
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -47,8 +54,29 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
 
-  const port = process.env.PORT || 3000;
-  await app.listen(port);
-  console.log(`Application is running on: http://localhost:${port}`);
+  await app.init();
+  return expressApp;
 }
-bootstrap();
+
+// Bootstrap function for local development
+async function bootstrap() {
+  const expressApp = await createApp();
+  const port = process.env.PORT || 3000;
+  expressApp.listen(port, () => {
+    console.log(`Application is running on: http://localhost:${port}`);
+  });
+}
+
+// Export for Vercel serverless
+let cachedApp: express.Express;
+export default async (req: express.Request, res: express.Response) => {
+  if (!cachedApp) {
+    cachedApp = await createApp();
+  }
+  return cachedApp(req, res);
+};
+
+// Run bootstrap only when not in serverless environment
+if (require.main === module) {
+  bootstrap();
+}
