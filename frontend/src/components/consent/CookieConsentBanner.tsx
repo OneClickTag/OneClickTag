@@ -1,4 +1,3 @@
-import React from 'react';
 import { useCookieConsent } from './useCookieConsent';
 
 export interface CookieConsentBannerProps {

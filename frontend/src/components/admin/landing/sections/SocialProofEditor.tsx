@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Plus, Save, Eye, EyeOff } from 'lucide-react';
 import { useSortableItems } from '@/pages/admin/hooks/useSortableItems';

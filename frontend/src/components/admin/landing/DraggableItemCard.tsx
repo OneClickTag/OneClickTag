@@ -23,7 +23,7 @@ interface DraggableItemCardProps<T extends BaseItem> {
 
 export function DraggableItemCard<T extends BaseItem>({
   item,
-  index,
+  index: _index,
   onToggle,
   disabled = false,
   children,

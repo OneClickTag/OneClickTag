@@ -168,7 +168,7 @@ export function ThankYouPage() {
             {/* Featured LinkedIn Repost Button */}
             <div className="mb-4">
               <Button
-                size="xl"
+                size="lg"
                 onClick={() => handleShare('linkedin')}
                 className="w-full sm:w-auto text-lg px-8 py-6 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl transition-all"
               >

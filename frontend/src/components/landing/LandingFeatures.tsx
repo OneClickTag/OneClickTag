@@ -226,7 +226,7 @@ export function LandingFeatures() {
           animate={inView ? "visible" : "hidden"}
           className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
         >
-          {getActiveItems(content.features).map((feature, index) => {
+          {getActiveItems(content.features).map((feature, _index) => {
             const Icon = iconMap[feature.icon] || Zap;
             return (
               <motion.div

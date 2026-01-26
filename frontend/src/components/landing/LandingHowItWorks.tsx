@@ -208,7 +208,7 @@ export function LandingHowItWorks() {
           transition={{ duration: 0.6, delay: 1 }}
           className="mt-20 grid grid-cols-2 md:grid-cols-4 gap-8"
         >
-          {getActiveItems(content.stats).map((stat, index) => (
+          {getActiveItems(content.stats).map((stat, _index) => (
             <div key={stat.id} className="text-center">
               <div className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
                 {stat.value}

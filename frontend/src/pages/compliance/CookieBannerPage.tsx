@@ -14,11 +14,11 @@ export function CookieBannerPage() {
   const [formData, setFormData] = useState<UpdateConsentBannerData>({
     headingText: '',
     bodyText: '',
-    acceptButtonText: '',
-    declineButtonText: '',
-    managePreferencesText: '',
-    primaryColor: '#3B82F6',
-    secondaryColor: '#6B7280',
+    acceptAllButtonText: '',
+    rejectAllButtonText: '',
+    customizeButtonText: '',
+    acceptButtonColor: '#3B82F6',
+    rejectButtonColor: '#6B7280',
     textColor: '#1F2937',
     position: 'bottom',
     consentExpiryDays: 365,
@@ -33,11 +33,11 @@ export function CookieBannerPage() {
       setFormData({
         headingText: data.headingText || '',
         bodyText: data.bodyText || '',
-        acceptButtonText: data.acceptButtonText || '',
-        declineButtonText: data.declineButtonText || '',
-        managePreferencesText: data.managePreferencesText || '',
-        primaryColor: data.primaryColor || '#3B82F6',
-        secondaryColor: data.secondaryColor || '#6B7280',
+        acceptAllButtonText: data.acceptAllButtonText || '',
+        rejectAllButtonText: data.rejectAllButtonText || '',
+        customizeButtonText: data.customizeButtonText || '',
+        acceptButtonColor: data.acceptButtonColor || '#3B82F6',
+        rejectButtonColor: data.rejectButtonColor || '#6B7280',
         textColor: data.textColor || '#1F2937',
         position: data.position || 'bottom',
         consentExpiryDays: data.consentExpiryDays || 365,
@@ -167,8 +167,8 @@ export function CookieBannerPage() {
                   </label>
                   <input
                     type="text"
-                    value={formData.acceptButtonText}
-                    onChange={(e) => updateFormData('acceptButtonText', e.target.value)}
+                    value={formData.acceptAllButtonText}
+                    onChange={(e) => updateFormData('acceptAllButtonText', e.target.value)}
                     placeholder="Accept All"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
@@ -179,8 +179,8 @@ export function CookieBannerPage() {
                   </label>
                   <input
                     type="text"
-                    value={formData.declineButtonText}
-                    onChange={(e) => updateFormData('declineButtonText', e.target.value)}
+                    value={formData.rejectAllButtonText}
+                    onChange={(e) => updateFormData('rejectAllButtonText', e.target.value)}
                     placeholder="Decline"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
@@ -191,8 +191,8 @@ export function CookieBannerPage() {
                   </label>
                   <input
                     type="text"
-                    value={formData.managePreferencesText}
-                    onChange={(e) => updateFormData('managePreferencesText', e.target.value)}
+                    value={formData.customizeButtonText}
+                    onChange={(e) => updateFormData('customizeButtonText', e.target.value)}
                     placeholder="Manage Preferences"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
@@ -210,14 +210,14 @@ export function CookieBannerPage() {
                 <div className="flex items-center space-x-3">
                   <input
                     type="color"
-                    value={formData.primaryColor}
-                    onChange={(e) => updateFormData('primaryColor', e.target.value)}
+                    value={formData.acceptButtonColor}
+                    onChange={(e) => updateFormData('acceptButtonColor', e.target.value)}
                     className="w-12 h-10 border border-gray-300 rounded cursor-pointer"
                   />
                   <input
                     type="text"
-                    value={formData.primaryColor}
-                    onChange={(e) => updateFormData('primaryColor', e.target.value)}
+                    value={formData.acceptButtonColor}
+                    onChange={(e) => updateFormData('acceptButtonColor', e.target.value)}
                     className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -227,14 +227,14 @@ export function CookieBannerPage() {
                 <div className="flex items-center space-x-3">
                   <input
                     type="color"
-                    value={formData.secondaryColor}
-                    onChange={(e) => updateFormData('secondaryColor', e.target.value)}
+                    value={formData.rejectButtonColor}
+                    onChange={(e) => updateFormData('rejectButtonColor', e.target.value)}
                     className="w-12 h-10 border border-gray-300 rounded cursor-pointer"
                   />
                   <input
                     type="text"
-                    value={formData.secondaryColor}
-                    onChange={(e) => updateFormData('secondaryColor', e.target.value)}
+                    value={formData.rejectButtonColor}
+                    onChange={(e) => updateFormData('rejectButtonColor', e.target.value)}
                     className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -323,9 +323,9 @@ export function CookieBannerPage() {
                   className="p-6 shadow-lg"
                   style={{
                     backgroundColor: 'white',
-                    borderTop: formData.position === 'bottom' ? `4px solid ${formData.primaryColor}` : 'none',
-                    borderBottom: formData.position === 'top' ? `4px solid ${formData.primaryColor}` : 'none',
-                    border: formData.position === 'center' ? `2px solid ${formData.primaryColor}` : undefined,
+                    borderTop: formData.position === 'bottom' ? `4px solid ${formData.acceptButtonColor}` : 'none',
+                    borderBottom: formData.position === 'top' ? `4px solid ${formData.acceptButtonColor}` : 'none',
+                    border: formData.position === 'center' ? `2px solid ${formData.acceptButtonColor}` : undefined,
                     borderRadius: formData.position === 'center' ? '8px' : '0',
                   }}
                 >
@@ -344,24 +344,24 @@ export function CookieBannerPage() {
                   <div className="flex flex-wrap gap-2">
                     <button
                       className="px-4 py-2 rounded-md text-white text-sm font-medium"
-                      style={{ backgroundColor: formData.primaryColor }}
+                      style={{ backgroundColor: formData.acceptButtonColor }}
                     >
-                      {formData.acceptButtonText || 'Accept All'}
+                      {formData.acceptAllButtonText || 'Accept All'}
                     </button>
                     <button
                       className="px-4 py-2 rounded-md border text-sm font-medium"
                       style={{
-                        borderColor: formData.secondaryColor,
-                        color: formData.secondaryColor,
+                        borderColor: formData.rejectButtonColor,
+                        color: formData.rejectButtonColor,
                       }}
                     >
-                      {formData.declineButtonText || 'Decline'}
+                      {formData.rejectAllButtonText || 'Decline'}
                     </button>
                     <button
                       className="px-4 py-2 text-sm font-medium underline"
-                      style={{ color: formData.secondaryColor }}
+                      style={{ color: formData.rejectButtonColor }}
                     >
-                      {formData.managePreferencesText || 'Manage Preferences'}
+                      {formData.customizeButtonText || 'Manage Preferences'}
                     </button>
                   </div>
                 </div>

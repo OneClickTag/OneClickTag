@@ -5,9 +5,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Save, RefreshCw, Eye, EyeOff, Layout, Plus, Trash2, Sparkles, Zap, Tag, Target, BarChart3, Shield, Globe } from 'lucide-react';
 import { adminLandingService, LandingSection } from '@/lib/api/services/admin';
 import { ensureItemFields } from './utils/ensureItemFields';
-import { useSortableItems } from './hooks/useSortableItems';
-import { SortableItemList } from '@/components/admin/landing/SortableItemList';
-import { DraggableItemCard } from '@/components/admin/landing/DraggableItemCard';
+// These imports are used by child components
+// import { useSortableItems } from './hooks/useSortableItems';
+// import { SortableItemList } from '@/components/admin/landing/SortableItemList';
+// import { DraggableItemCard } from '@/components/admin/landing/DraggableItemCard';
 import { SocialProofEditor } from '@/components/admin/landing/sections/SocialProofEditor';
 import { HowItWorksEditor } from '@/components/admin/landing/sections/HowItWorksEditor';
 import { FeaturesEditor } from '@/components/admin/landing/sections/FeaturesEditor';
@@ -346,43 +347,6 @@ export function AdminLandingPage() {
     });
   };
 
-  // Features Section Helpers
-  const updateFeaturesField = (field: keyof FeaturesContent, value: any) => {
-    if (!featuresData) return;
-    setFeaturesData({ ...featuresData, [field]: value });
-  };
-
-  const updateBottomCTA = (field: string, value: string) => {
-    if (!featuresData) return;
-    setFeaturesData({
-      ...featuresData,
-      bottomCTA: { ...featuresData.bottomCTA, [field]: value }
-    });
-  };
-
-  const addFeature = () => {
-    if (!featuresData) return;
-    setFeaturesData({
-      ...featuresData,
-      features: [...featuresData.features, { icon: 'Tag', title: '', description: '', color: 'from-blue-500 to-blue-600' }]
-    });
-  };
-
-  const updateFeature = (index: number, field: keyof Feature, value: string) => {
-    if (!featuresData) return;
-    const newFeatures = [...featuresData.features];
-    newFeatures[index] = { ...newFeatures[index], [field]: value };
-    setFeaturesData({ ...featuresData, features: newFeatures });
-  };
-
-  const removeFeature = (index: number) => {
-    if (!featuresData) return;
-    setFeaturesData({
-      ...featuresData,
-      features: featuresData.features.filter((_, i) => i !== index)
-    });
-  };
-
   // CTA Section Helpers
   const updateCTAField = (field: keyof CTAContent, value: any) => {
     if (!ctaData) return;
@@ -433,15 +397,6 @@ export function AdminLandingPage() {
     { value: 'BarChart3', label: 'Bar Chart', icon: BarChart3 },
     { value: 'Shield', label: 'Shield', icon: Shield },
     { value: 'Globe', label: 'Globe', icon: Globe },
-  ];
-
-  const colorOptions = [
-    { value: 'from-blue-500 to-blue-600', label: 'Blue' },
-    { value: 'from-green-500 to-green-600', label: 'Green' },
-    { value: 'from-purple-500 to-purple-600', label: 'Purple' },
-    { value: 'from-yellow-500 to-orange-600', label: 'Yellow-Orange' },
-    { value: 'from-red-500 to-pink-600', label: 'Red-Pink' },
-    { value: 'from-indigo-500 to-indigo-600', label: 'Indigo' },
   ];
 
   if (loading) {

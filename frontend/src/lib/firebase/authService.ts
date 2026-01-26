@@ -153,7 +153,7 @@ export class FirebaseAuthService {
       } else {
         throw new Error('No access token received from backend');
       }
-    } catch (error) {
+    } catch (error: any) {
       const errorMessage = error?.response?.data?.message ||
                           error?.message ||
                           'Backend authentication failed';

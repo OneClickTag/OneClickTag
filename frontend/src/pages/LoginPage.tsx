@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { useFirebaseAuth } from '@/lib/firebase/hooks/useFirebaseAuth'
@@ -34,7 +34,7 @@ export function LoginPage() {
       setTimeout(() => {
         window.location.href = redirectUrl;
       }, 500);
-    } catch (error) {
+    } catch (error: any) {
       console.error('[Login] Sign in failed:', {
         error,
         message: error?.message,
