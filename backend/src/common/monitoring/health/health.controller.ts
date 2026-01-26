@@ -2,7 +2,6 @@ import { Controller, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import {
   HealthCheckService,
-  HttpHealthIndicator,
   HealthCheck,
   HealthCheckResult,
 } from '@nestjs/terminus';
@@ -13,7 +12,6 @@ import { HealthService } from './health.service';
 export class HealthController {
   constructor(
     private health: HealthCheckService,
-    private http: HttpHealthIndicator,
     private healthService: HealthService,
   ) {}
 
@@ -26,12 +24,9 @@ export class HealthController {
     return this.health.check([
       // Database connectivity
       () => this.healthService.checkDatabase('database'),
-      
+
       // Redis connectivity (if using Redis for jobs)
       () => this.healthService.checkRedis('redis'),
-      
-      // External API dependencies
-      () => this.http.pingCheck('google-api', 'https://www.googleapis.com'),
     ]);
   }
 
