@@ -10,8 +10,8 @@
   ],
   "packageManager": "pnpm@8.15.1",
   "scripts": {
-    "dev": "pnpm run --parallel dev",
-    "build": "pnpm run --recursive build",
+    "dev": "turbo dev",
+    "build": "turbo build",
     "lint": "pnpm run --recursive lint",
     "test": "pnpm run --recursive test",
     "clean": "pnpm run --recursive clean",
@@ -46,6 +46,7 @@
     "@aws-sdk/client-secrets-manager": "^3.705.0"
   },
   "devDependencies": {
+    "turbo": "^2.0.0",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
     "eslint": "^8.56.0",
