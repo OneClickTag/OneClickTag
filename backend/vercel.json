@@ -3,7 +3,6 @@
   "outputDirectory": "dist",
   "functions": {
     "dist/main.js": {
-      "runtime": "@vercel/node@3",
       "maxDuration": 30
     }
   },
