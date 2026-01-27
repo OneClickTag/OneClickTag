@@ -1,4 +1,5 @@
 const path = require('path');
+const nodeExternals = require('webpack-node-externals');
 
 module.exports = function (options) {
   return {
@@ -10,26 +11,15 @@ module.exports = function (options) {
       path: path.resolve(__dirname, 'dist'),
       libraryTarget: 'commonjs2',
     },
-    // Don't externalize - bundle everything for serverless
-    externals: [],
+    // Externalize node_modules but let Vercel's file tracing include them
+    externals: [
+      nodeExternals({
+        // Allow these to be bundled (don't externalize)
+        allowlist: [/^@nestjs/, /^class-validator/, /^class-transformer/],
+      }),
+    ],
     optimization: {
       minimize: false,
-    },
-    resolve: {
-      ...options.resolve,
-      alias: {
-        ...options.resolve?.alias,
-        // Mock optional @nestjs/terminus peer dependencies that we don't use
-        // We use Prisma, not these ORMs
-        '@mikro-orm/core': false,
-        '@mikro-orm/nestjs': false,
-        '@nestjs/mongoose': false,
-        '@nestjs/sequelize': false,
-        '@nestjs/typeorm': false,
-        mongoose: false,
-        sequelize: false,
-        typeorm: false,
-      },
     },
   };
 };
