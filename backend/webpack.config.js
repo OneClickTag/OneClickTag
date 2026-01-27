@@ -1,5 +1,4 @@
 const path = require('path');
-const webpack = require('webpack');
 
 module.exports = function (options) {
   return {
@@ -16,32 +15,21 @@ module.exports = function (options) {
     optimization: {
       minimize: false,
     },
-    plugins: [
-      ...(options.plugins || []),
-      // Ignore optional peer dependencies from @nestjs/terminus
-      // These are database adapters we don't use (we use Prisma)
-      new webpack.IgnorePlugin({
-        checkResource(resource, context) {
-          // Database adapters and ORMs we don't use
-          const ignoredFromTerminus = [
-            '@mikro-orm/core',
-            '@mikro-orm/nestjs',
-            '@nestjs/mongoose',
-            '@nestjs/sequelize',
-            '@nestjs/typeorm',
-            'mongoose',
-            'sequelize',
-            'typeorm',
-          ];
-          if (
-            ignoredFromTerminus.includes(resource) &&
-            context.includes('@nestjs/terminus')
-          ) {
-            return true;
-          }
-          return false;
-        },
-      }),
-    ],
+    resolve: {
+      ...options.resolve,
+      alias: {
+        ...options.resolve?.alias,
+        // Mock optional @nestjs/terminus peer dependencies that we don't use
+        // We use Prisma, not these ORMs
+        '@mikro-orm/core': false,
+        '@mikro-orm/nestjs': false,
+        '@nestjs/mongoose': false,
+        '@nestjs/sequelize': false,
+        '@nestjs/typeorm': false,
+        mongoose: false,
+        sequelize: false,
+        typeorm: false,
+      },
+    },
   };
 };
