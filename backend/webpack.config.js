@@ -10,7 +10,6 @@ module.exports = function (options) {
       filename: 'main.js',
       path: path.resolve(__dirname, 'dist'),
       libraryTarget: 'commonjs2',
-      libraryExport: 'default', // Export the default export for Vercel
     },
     externals: [
       nodeExternals({
