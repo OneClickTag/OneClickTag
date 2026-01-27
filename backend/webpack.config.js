@@ -1,5 +1,4 @@
 const path = require('path');
-const nodeExternals = require('webpack-node-externals');
 
 module.exports = function (options) {
   return {
@@ -11,11 +10,8 @@ module.exports = function (options) {
       path: path.resolve(__dirname, 'dist'),
       libraryTarget: 'commonjs2',
     },
-    externals: [
-      nodeExternals({
-        allowlist: [],
-      }),
-    ],
+    // Don't externalize - bundle everything for serverless
+    externals: [],
     optimization: {
       minimize: false,
     },
