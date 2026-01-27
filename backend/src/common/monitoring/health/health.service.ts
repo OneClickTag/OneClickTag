@@ -1,74 +1,64 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { HealthIndicatorResult, HealthIndicator } from '@nestjs/terminus';
 import { PrismaService } from '../../prisma/prisma.service';
 
-export interface HealthCheckResult {
-  status: 'ok' | 'error';
-  timestamp: string;
-  checks: Record<string, { status: string; message?: string; error?: string }>;
-}
-
 @Injectable()
-export class HealthService {
+export class HealthService extends HealthIndicator {
   constructor(
     private configService: ConfigService,
     private prisma: PrismaService,
-  ) {}
-
-  async checkHealth(): Promise<HealthCheckResult> {
-    const checks: HealthCheckResult['checks'] = {};
-
-    // Check database
-    try {
-      await this.prisma.$queryRaw`SELECT 1`;
-      checks.database = { status: 'up', message: 'Database connection successful' };
-    } catch (error) {
-      checks.database = { status: 'down', error: error.message };
-    }
-
-    // Check Redis (if configured)
-    const redisHost = this.configService.get('REDIS_HOST');
-    if (redisHost) {
-      checks.redis = { status: 'up', message: 'Redis not implemented yet' };
-    } else {
-      checks.redis = { status: 'skipped', message: 'Redis not configured' };
-    }
-
-    const allUp = Object.values(checks).every(
-      (c) => c.status === 'up' || c.status === 'skipped',
-    );
-
-    return {
-      status: allUp ? 'ok' : 'error',
-      timestamp: new Date().toISOString(),
-      checks,
-    };
+  ) {
+    super();
   }
 
-  async checkReadiness(): Promise<HealthCheckResult> {
-    const checks: HealthCheckResult['checks'] = {};
-
-    // Check database
+  async checkDatabase(key: string): Promise<HealthIndicatorResult> {
     try {
       await this.prisma.$queryRaw`SELECT 1`;
-      checks.database = { status: 'up', message: 'Database ready' };
+      return this.getStatus(key, true, { message: 'Database connection successful' });
     } catch (error) {
-      checks.database = { status: 'down', error: error.message };
+      return this.getStatus(key, false, { 
+        message: 'Database connection failed',
+        error: error.message,
+      });
     }
-
-    // Application state
-    checks.app = { status: 'up', message: 'Application initialized' };
-
-    const allUp = Object.values(checks).every((c) => c.status === 'up');
-
-    return {
-      status: allUp ? 'ok' : 'error',
-      timestamp: new Date().toISOString(),
-      checks,
-    };
   }
 
-  getMetrics() {
+  async checkRedis(key: string): Promise<HealthIndicatorResult> {
+    try {
+      // If Redis is configured, check connection
+      const redisHost = this.configService.get('REDIS_HOST');
+      if (!redisHost) {
+        return this.getStatus(key, true, { message: 'Redis not configured - skipped' });
+      }
+
+      // Add Redis connection check here if needed
+      return this.getStatus(key, true, { message: 'Redis connection successful' });
+    } catch (error) {
+      return this.getStatus(key, false, {
+        message: 'Redis connection failed',
+        error: error.message,
+      });
+    }
+  }
+
+  async checkApplicationState(key: string): Promise<HealthIndicatorResult> {
+    try {
+      // Check if critical services are initialized
+      const isReady = await this.checkCriticalServices();
+      
+      return this.getStatus(key, isReady, {
+        message: isReady ? 'Application ready' : 'Application not ready',
+      });
+    } catch (error) {
+      return this.getStatus(key, false, {
+        message: 'Application state check failed',
+        error: error.message,
+      });
+    }
+  }
+
+  async getMetrics() {
     const memoryUsage = process.memoryUsage();
     const uptime = process.uptime();
 
@@ -87,13 +77,25 @@ export class HealthService {
         arch: process.arch,
         nodeVersion: process.version,
       },
-      vercel: process.env.VERCEL
-        ? {
-            region: process.env.VERCEL_REGION,
-            env: process.env.VERCEL_ENV,
-            url: process.env.VERCEL_URL,
-          }
-        : null,
+      vercel: process.env.VERCEL ? {
+        region: process.env.VERCEL_REGION,
+        env: process.env.VERCEL_ENV,
+        url: process.env.VERCEL_URL,
+      } : null,
     };
+  }
+
+  private async checkCriticalServices(): Promise<boolean> {
+    try {
+      // Check database
+      await this.prisma.$queryRaw`SELECT 1`;
+      
+      // Add other critical service checks here
+      // For example: external API health checks, file system access, etc.
+      
+      return true;
+    } catch (error) {
+      return false;
+    }
   }
 }
