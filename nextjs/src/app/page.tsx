@@ -1,6 +1,5 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -279,21 +278,13 @@ export default function LandingPage() {
     retry: 1,
   });
 
-  // Animation state for hero (triggers AFTER loading completes)
-  const [heroVisible, setHeroVisible] = useState(false);
-  useEffect(() => {
-    if (!isLoading) {
-      // Small delay to ensure DOM is ready, then trigger animation
-      const timer = setTimeout(() => setHeroVisible(true), 50);
-      return () => clearTimeout(timer);
-    }
-  }, [isLoading]);
-
-  // Scroll-triggered animations for sections
-  const [featuresRef, featuresInView] = useInView<HTMLElement>({ threshold: 0.1 });
-  const [howItWorksRef, howItWorksInView] = useInView<HTMLElement>({ threshold: 0.1 });
-  const [testimonialsRef, testimonialsInView] = useInView<HTMLElement>({ threshold: 0.1 });
-  const [ctaRef, ctaInView] = useInView<HTMLElement>({ threshold: 0.2 });
+  // All sections use viewport-triggered animations
+  // Higher threshold = animation triggers when more of element is visible
+  const [heroRef, heroInView] = useInView<HTMLElement>({ threshold: 0.3 });
+  const [featuresRef, featuresInView] = useInView<HTMLElement>({ threshold: 0.25 });
+  const [howItWorksRef, howItWorksInView] = useInView<HTMLElement>({ threshold: 0.25 });
+  const [testimonialsRef, testimonialsInView] = useInView<HTMLElement>({ threshold: 0.25 });
+  const [ctaRef, ctaInView] = useInView<HTMLElement>({ threshold: 0.3 });
 
   // Get content with fallbacks
   const heroBase = content?.hero || defaultHero;
@@ -336,13 +327,13 @@ export default function LandingPage() {
       <Navbar />
 
       {/* Hero Section */}
-      <section className="relative py-20 bg-gradient-to-br from-blue-50 via-white to-purple-50 overflow-hidden">
+      <section ref={heroRef} className="relative py-20 bg-gradient-to-br from-blue-50 via-white to-purple-50 overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
             {/* Badge with animation */}
             <div
               className={`inline-flex items-center space-x-2 bg-blue-100 text-blue-800 px-4 py-2 rounded-full text-sm font-medium mb-6 transform transition-all duration-700 ${
-                heroVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+                heroInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
               }`}
             >
               <BadgeIcon className="w-4 h-4" />
@@ -351,7 +342,7 @@ export default function LandingPage() {
             {/* Headline with staggered animation */}
             <h1
               className={`text-5xl md:text-6xl font-bold text-gray-900 mb-6 leading-tight transform transition-all duration-700 delay-100 ${
-                heroVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+                heroInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
               }`}
             >
               {hero.headline || defaultHero.headline}
@@ -363,7 +354,7 @@ export default function LandingPage() {
             {/* Subtitle with staggered animation */}
             <p
               className={`text-xl text-gray-600 max-w-3xl mx-auto mb-6 transform transition-all duration-700 delay-200 ${
-                heroVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+                heroInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
               }`}
             >
               {hero.subtitle || defaultHero.subtitle}
@@ -372,7 +363,7 @@ export default function LandingPage() {
             {(hero.benefits || defaultHero.benefits) && (
               <div
                 className={`flex flex-wrap justify-center gap-4 mb-8 transform transition-all duration-700 delay-300 ${
-                  heroVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+                  heroInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
                 }`}
               >
                 {(hero.benefits || defaultHero.benefits || []).map((benefit, idx) => (
@@ -386,7 +377,7 @@ export default function LandingPage() {
             {/* Buttons with staggered animation */}
             <div
               className={`flex flex-col sm:flex-row gap-4 justify-center transform transition-all duration-700 delay-[400ms] ${
-                heroVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+                heroInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
               }`}
             >
               <Link href={hero.primaryCTA?.url || '/early-access'}>
@@ -410,7 +401,7 @@ export default function LandingPage() {
             {hero.trustIndicators && (
               <p
                 className={`text-sm text-gray-500 mt-4 transform transition-all duration-700 delay-500 ${
-                  heroVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+                  heroInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
                 }`}
               >
                 {hero.trustIndicators}

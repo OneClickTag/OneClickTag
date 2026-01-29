@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, RefObject, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 
 interface UseInViewOptions {
   threshold?: number;
@@ -10,43 +10,50 @@ interface UseInViewOptions {
 
 export function useInView<T extends HTMLElement = HTMLElement>(
   options: UseInViewOptions = {}
-): [RefObject<T | null>, boolean] {
+): [(node: T | null) => void, boolean] {
   const { threshold = 0.1, rootMargin = '0px', triggerOnce = true } = options;
-  const ref = useRef<T | null>(null);
   const [isInView, setIsInView] = useState(false);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const elementRef = useRef<T | null>(null);
 
-  useEffect(() => {
-    const element = ref.current;
-    if (!element) {
-      // Fallback: if no element, show content after a short delay
-      const fallbackTimer = setTimeout(() => setIsInView(true), 100);
-      return () => clearTimeout(fallbackTimer);
-    }
+  const ref = useCallback(
+    (node: T | null) => {
+      // Cleanup previous observer
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+        observerRef.current = null;
+      }
 
-    // Check if IntersectionObserver is available
-    if (typeof IntersectionObserver === 'undefined') {
-      setIsInView(true);
-      return;
-    }
+      // Store element reference
+      elementRef.current = node;
 
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsInView(true);
-          if (triggerOnce) {
-            observer.unobserve(element);
+      if (!node) return;
+
+      // Fallback for browsers without IntersectionObserver
+      if (typeof IntersectionObserver === 'undefined') {
+        setIsInView(true);
+        return;
+      }
+
+      // Create new observer
+      observerRef.current = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting) {
+            setIsInView(true);
+            if (triggerOnce && observerRef.current) {
+              observerRef.current.unobserve(node);
+            }
+          } else if (!triggerOnce) {
+            setIsInView(false);
           }
-        } else if (!triggerOnce) {
-          setIsInView(false);
-        }
-      },
-      { threshold, rootMargin }
-    );
+        },
+        { threshold, rootMargin }
+      );
 
-    observer.observe(element);
-
-    return () => observer.disconnect();
-  }, [threshold, rootMargin, triggerOnce]);
+      observerRef.current.observe(node);
+    },
+    [threshold, rootMargin, triggerOnce]
+  );
 
   return [ref, isInView];
 }
