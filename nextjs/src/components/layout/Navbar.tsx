@@ -5,19 +5,29 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Logo } from '@/components/Logo';
+import { useAuth } from '@/components/providers/auth-provider';
 import { Menu, X } from 'lucide-react';
 
 const EARLY_ACCESS_MODE = process.env.NEXT_PUBLIC_EARLY_ACCESS_MODE === 'true';
+const ALLOWED_ROLES = ['ADMIN', 'SUPER_ADMIN'];
 
-const navLinks = [
+const allNavLinks = [
   { href: '/about', label: 'About' },
-  { href: '/plans', label: 'Pricing' },
+  { href: '/plans', label: 'Pricing', hideInEarlyAccess: true },
   { href: '/contact', label: 'Contact' },
 ];
 
 export function Navbar() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { user } = useAuth();
+
+  const isAdmin = user && ALLOWED_ROLES.includes(user.role);
+
+  // Filter out links that should be hidden in early access mode (unless admin)
+  const navLinks = (EARLY_ACCESS_MODE && !isAdmin)
+    ? allNavLinks.filter(link => !link.hideInEarlyAccess)
+    : allNavLinks;
 
   return (
     <nav className="bg-white border-b border-gray-200">
@@ -43,11 +53,13 @@ export function Navbar() {
                 {link.label}
               </Link>
             ))}
-            <Link href="/login">
-              <Button variant="outline">Sign In</Button>
-            </Link>
-            <Link href={EARLY_ACCESS_MODE ? '/early-access' : '/register'}>
-              <Button>{EARLY_ACCESS_MODE ? 'Join Waitlist' : 'Get Started'}</Button>
+            {(!EARLY_ACCESS_MODE || isAdmin) && (
+              <Link href="/login">
+                <Button variant="outline">Sign In</Button>
+              </Link>
+            )}
+            <Link href={(EARLY_ACCESS_MODE && !isAdmin) ? '/early-access' : '/register'}>
+              <Button>{(EARLY_ACCESS_MODE && !isAdmin) ? 'Join Waitlist' : 'Get Started'}</Button>
             </Link>
           </div>
 
@@ -83,13 +95,15 @@ export function Navbar() {
               </Link>
             ))}
             <div className="flex flex-col space-y-2 pt-4 border-t border-gray-200">
-              <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
-                <Button variant="outline" className="w-full">
-                  Sign In
-                </Button>
-              </Link>
-              <Link href={EARLY_ACCESS_MODE ? '/early-access' : '/register'} onClick={() => setMobileMenuOpen(false)}>
-                <Button className="w-full">{EARLY_ACCESS_MODE ? 'Join Waitlist' : 'Get Started'}</Button>
+              {(!EARLY_ACCESS_MODE || isAdmin) && (
+                <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
+                  <Button variant="outline" className="w-full">
+                    Sign In
+                  </Button>
+                </Link>
+              )}
+              <Link href={(EARLY_ACCESS_MODE && !isAdmin) ? '/early-access' : '/register'} onClick={() => setMobileMenuOpen(false)}>
+                <Button className="w-full">{(EARLY_ACCESS_MODE && !isAdmin) ? 'Join Waitlist' : 'Get Started'}</Button>
               </Link>
             </div>
           </div>

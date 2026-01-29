@@ -2,12 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Footer } from '@/components/layout/Footer';
 import { Navbar } from '@/components/layout/Navbar';
+import { useAuth } from '@/components/providers/auth-provider';
 import { Check, Star, Loader2 } from 'lucide-react';
 
 const EARLY_ACCESS_MODE = process.env.NEXT_PUBLIC_EARLY_ACCESS_MODE === 'true';
+const ALLOWED_ROLES = ['ADMIN', 'SUPER_ADMIN'];
 
 interface Plan {
   id: string;
@@ -22,8 +25,19 @@ interface Plan {
 }
 
 export default function PlansPage() {
+  const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const isAdmin = user && ALLOWED_ROLES.includes(user.role);
+
+  // Redirect to early-access page when in early access mode (unless admin)
+  useEffect(() => {
+    if (EARLY_ACCESS_MODE && !authLoading && !isAdmin) {
+      router.replace('/early-access');
+    }
+  }, [router, authLoading, isAdmin]);
 
   useEffect(() => {
     const fetchPlans = async () => {
@@ -150,6 +164,18 @@ export default function PlansPage() {
           a: 'Yes, you can cancel your subscription at any time. Your access will continue until the end of your billing period.',
         },
       ];
+
+  // Show loading while checking auth or redirecting in early access mode (non-admins)
+  if (EARLY_ACCESS_MODE && (authLoading || !isAdmin)) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-16 h-16 text-blue-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">{authLoading ? 'Loading...' : 'Redirecting...'}</p>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
