@@ -547,6 +547,12 @@ model Lead {
   responses QuestionnaireResponse[]
   pageViews LeadPageView[]
 
+  // GDPR Compliance
+  acceptedTerms    Boolean   @default(false) // User accepted terms of service
+  acceptedTermsAt  DateTime? // When terms were accepted
+  marketingConsent Boolean   @default(false) // User consented to marketing communications
+  marketingConsentAt DateTime? // When marketing consent was given
+
   // Status
   questionnaireCompleted Boolean   @default(false)
   completedAt            DateTime?
@@ -559,6 +565,7 @@ model Lead {
   @@index([email])
   @@index([createdAt])
   @@index([questionnaireCompleted])
+  @@index([acceptedTerms])
   @@map("leads")
 }
 

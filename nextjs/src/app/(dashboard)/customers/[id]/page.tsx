@@ -57,7 +57,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
     return (
       <div className="text-center py-12">
         <h1 className="text-2xl font-bold text-gray-900">Customer not found</h1>
-        <p className="text-gray-600 mt-2">The customer you're looking for doesn't exist.</p>
+        <p className="text-gray-600 mt-2">The customer you&apos;re looking for doesn&apos;t exist.</p>
       </div>
     );
   }

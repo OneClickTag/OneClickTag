@@ -7,6 +7,10 @@ const createLeadSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100, 'Name must be 100 characters or less'),
   email: z.string().email('Invalid email address'),
   purpose: z.string().min(1, 'Purpose is required').max(1000, 'Purpose must be 1000 characters or less'),
+  acceptedTerms: z.boolean().refine((val) => val === true, {
+    message: 'You must accept the terms of service',
+  }),
+  marketingConsent: z.boolean().optional().default(false),
   ipAddress: z.string().optional(),
   userAgent: z.string().optional(),
   source: z.string().optional(),
@@ -49,12 +53,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create the lead
+    // Create the lead with GDPR compliance fields
+    const now = new Date();
     const lead = await prisma.lead.create({
       data: {
         name: data.name,
         email: data.email,
         purpose: data.purpose,
+        acceptedTerms: data.acceptedTerms,
+        acceptedTermsAt: data.acceptedTerms ? now : null,
+        marketingConsent: data.marketingConsent || false,
+        marketingConsentAt: data.marketingConsent ? now : null,
         ipAddress: data.ipAddress,
         userAgent: data.userAgent,
         source: data.source,

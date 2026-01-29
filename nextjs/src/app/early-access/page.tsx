@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Sparkles, Loader2 } from 'lucide-react';
+import Link from 'next/link';
 
 export default function EarlyAccessPage() {
   const router = useRouter();
@@ -15,6 +16,8 @@ export default function EarlyAccessPage() {
     name: '',
     email: '',
     purpose: '',
+    acceptedTerms: false,
+    marketingConsent: false,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -42,7 +45,11 @@ export default function EarlyAccessPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          ...formData,
+          name: formData.name,
+          email: formData.email,
+          purpose: formData.purpose,
+          acceptedTerms: formData.acceptedTerms,
+          marketingConsent: formData.marketingConsent,
           source: 'early-access',
           utmSource,
           utmMedium,
@@ -156,6 +163,50 @@ export default function EarlyAccessPage() {
                 rows={4}
                 disabled={loading}
               />
+            </div>
+
+            {/* Terms & Conditions Checkbox */}
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  id="acceptedTerms"
+                  name="acceptedTerms"
+                  checked={formData.acceptedTerms}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, acceptedTerms: e.target.checked }))}
+                  className="mt-1 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  required
+                  disabled={loading}
+                />
+                <label htmlFor="acceptedTerms" className="text-sm text-gray-600">
+                  I agree to the{' '}
+                  <Link href="/terms" className="text-blue-600 hover:underline" target="_blank">
+                    Terms of Service
+                  </Link>{' '}
+                  and{' '}
+                  <Link href="/privacy" className="text-blue-600 hover:underline" target="_blank">
+                    Privacy Policy
+                  </Link>
+                  <span className="text-red-500">*</span>
+                </label>
+              </div>
+
+              {/* Marketing Consent Checkbox */}
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  id="marketingConsent"
+                  name="marketingConsent"
+                  checked={formData.marketingConsent}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, marketingConsent: e.target.checked }))}
+                  className="mt-1 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  disabled={loading}
+                />
+                <label htmlFor="marketingConsent" className="text-sm text-gray-600">
+                  I agree to receive marketing communications and product updates from OneClickTag.
+                  You can unsubscribe at any time.
+                </label>
+              </div>
             </div>
 
             {error && (
