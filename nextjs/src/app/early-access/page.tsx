@@ -94,48 +94,42 @@ export default function EarlyAccessPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-2 md:p-4">
       {/* Animated Background Elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 left-10 w-72 h-72 bg-blue-400 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse" />
-        <div className="absolute bottom-20 right-10 w-72 h-72 bg-purple-400 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse" />
+        <div className="absolute top-10 left-10 w-48 h-48 bg-blue-400 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse" />
+        <div className="absolute bottom-10 right-10 w-48 h-48 bg-purple-400 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse" />
       </div>
 
       {/* Content */}
       <div className="relative z-10 w-full max-w-2xl">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-12">
+        <div className="bg-white rounded-2xl shadow-2xl p-6 md:p-8">
           {/* Restricted Access Banner */}
           {isRestricted && (
-            <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg mb-6">
-              <Lock className="w-5 h-5 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">Dashboard Access Restricted</p>
-                <p className="text-sm mt-1">
-                  We&apos;re currently in early access mode. The dashboard is only available to approved users.
-                  Join the waitlist below to be notified when we open access to everyone.
-                </p>
-              </div>
+            <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2 rounded-lg mb-4">
+              <Lock className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <p className="text-sm">
+                Dashboard access is restricted. Join the waitlist to be notified when we launch.
+              </p>
             </div>
           )}
 
           {/* Badge */}
-          <div className="inline-flex items-center space-x-2 bg-blue-100 text-blue-700 px-4 py-2 rounded-full text-sm font-medium mb-6">
+          <div className="inline-flex items-center space-x-2 bg-blue-100 text-blue-700 px-3 py-1.5 rounded-full text-sm font-medium mb-4">
             <Sparkles className="w-4 h-4" />
             <span>Get Early Access</span>
           </div>
 
           {/* Heading */}
-          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+          <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">
             Join the Waitlist
           </h1>
-          <p className="text-xl text-gray-600 mb-8">
+          <p className="text-lg text-gray-600 mb-5">
             Be among the first to experience OneClickTag when we launch.
-            We&apos;re currently in final development and will notify you as soon
-            as we&apos;re ready.
           </p>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <Label htmlFor="name">Full Name</Label>
               <Input
@@ -146,7 +140,7 @@ export default function EarlyAccessPage() {
                 value={formData.name}
                 onChange={handleChange}
                 placeholder="John Doe"
-                className="mt-2 bg-white text-gray-900"
+                className="mt-1 bg-white text-gray-900"
                 disabled={loading}
               />
             </div>
@@ -161,7 +155,7 @@ export default function EarlyAccessPage() {
                 value={formData.email}
                 onChange={handleChange}
                 placeholder="john@example.com"
-                className="mt-2 bg-white text-gray-900"
+                className="mt-1 bg-white text-gray-900"
                 disabled={loading}
               />
             </div>
@@ -174,27 +168,27 @@ export default function EarlyAccessPage() {
                 required
                 value={formData.purpose}
                 onChange={handleChange}
-                placeholder="I manage conversion tracking for multiple e-commerce clients and need an easier way to set up tags..."
-                className="mt-2 w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none bg-white text-gray-900"
-                rows={4}
+                placeholder="I manage conversion tracking for multiple e-commerce clients..."
+                className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none bg-white text-gray-900 text-sm"
+                rows={2}
                 disabled={loading}
               />
             </div>
 
             {/* Terms & Conditions Checkbox */}
-            <div className="space-y-4">
-              <div className="flex items-start gap-3">
+            <div className="space-y-2">
+              <div className="flex items-start gap-2">
                 <input
                   type="checkbox"
                   id="acceptedTerms"
                   name="acceptedTerms"
                   checked={formData.acceptedTerms}
                   onChange={(e) => setFormData((prev) => ({ ...prev, acceptedTerms: e.target.checked }))}
-                  className="mt-1 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 bg-white accent-blue-600"
                   required
                   disabled={loading}
                 />
-                <label htmlFor="acceptedTerms" className="text-sm text-gray-600">
+                <label htmlFor="acceptedTerms" className="text-xs text-gray-600">
                   I agree to the{' '}
                   <Link href="/terms" className="text-blue-600 hover:underline" target="_blank">
                     Terms of Service
@@ -208,38 +202,37 @@ export default function EarlyAccessPage() {
               </div>
 
               {/* Marketing Consent Checkbox */}
-              <div className="flex items-start gap-3">
+              <div className="flex items-start gap-2">
                 <input
                   type="checkbox"
                   id="marketingConsent"
                   name="marketingConsent"
                   checked={formData.marketingConsent}
                   onChange={(e) => setFormData((prev) => ({ ...prev, marketingConsent: e.target.checked }))}
-                  className="mt-1 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 bg-white accent-blue-600"
                   disabled={loading}
                 />
-                <label htmlFor="marketingConsent" className="text-sm text-gray-600">
-                  I agree to receive marketing communications and product updates from OneClickTag.
-                  You can unsubscribe at any time.
+                <label htmlFor="marketingConsent" className="text-xs text-gray-600">
+                  I agree to receive marketing communications from OneClickTag.
                 </label>
               </div>
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+              <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
                 {error}
               </div>
             )}
 
             <Button
               type="submit"
-              size="lg"
-              className="w-full text-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 py-6"
+              size="default"
+              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
               disabled={loading}
             >
               {loading ? (
                 <>
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   Submitting...
                 </>
               ) : (
@@ -249,8 +242,8 @@ export default function EarlyAccessPage() {
           </form>
 
           {/* Trust Indicators */}
-          <div className="mt-8 pt-8 border-t border-gray-200 text-center">
-            <p className="text-sm text-gray-500">
+          <div className="mt-4 pt-4 border-t border-gray-200 text-center">
+            <p className="text-xs text-gray-500">
               We respect your privacy. No spam, ever.
             </p>
           </div>
