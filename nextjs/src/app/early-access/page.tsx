@@ -1,15 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Sparkles, Loader2 } from 'lucide-react';
+import { Sparkles, Loader2, Lock } from 'lucide-react';
 import Link from 'next/link';
 
 export default function EarlyAccessPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isRestricted = searchParams.get('restricted') === 'true';
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -102,6 +104,20 @@ export default function EarlyAccessPage() {
       {/* Content */}
       <div className="relative z-10 w-full max-w-2xl">
         <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-12">
+          {/* Restricted Access Banner */}
+          {isRestricted && (
+            <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg mb-6">
+              <Lock className="w-5 h-5 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-medium">Dashboard Access Restricted</p>
+                <p className="text-sm mt-1">
+                  We&apos;re currently in early access mode. The dashboard is only available to approved users.
+                  Join the waitlist below to be notified when we open access to everyone.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Badge */}
           <div className="inline-flex items-center space-x-2 bg-blue-100 text-blue-700 px-4 py-2 rounded-full text-sm font-medium mb-6">
             <Sparkles className="w-4 h-4" />
