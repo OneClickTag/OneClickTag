@@ -469,18 +469,20 @@ export default function ContactPage() {
         );
 
       case 'custom-text':
-        if (!block.content.text && !block.content.heading) return null;
+        const heading = block.content.heading as string | undefined;
+        const text = block.content.text as string | undefined;
+        if (!text && !heading) return null;
         return (
           <section key={block.id} className="py-16">
             <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-              {block.content.heading && (
+              {heading && (
                 <h2 className="text-3xl font-bold text-gray-900 mb-6 text-center">
-                  {block.content.heading as string}
+                  {heading}
                 </h2>
               )}
-              {block.content.text && (
+              {text && (
                 <div className="prose prose-lg max-w-none text-gray-600">
-                  <p className="whitespace-pre-line">{block.content.text as string}</p>
+                  <p className="whitespace-pre-line">{text}</p>
                 </div>
               )}
             </div>
