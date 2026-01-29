@@ -279,12 +279,15 @@ export default function LandingPage() {
     retry: 1,
   });
 
-  // Animation state for hero (triggers on mount)
+  // Animation state for hero (triggers AFTER loading completes)
   const [heroVisible, setHeroVisible] = useState(false);
   useEffect(() => {
-    const timer = setTimeout(() => setHeroVisible(true), 100);
-    return () => clearTimeout(timer);
-  }, []);
+    if (!isLoading) {
+      // Small delay to ensure DOM is ready, then trigger animation
+      const timer = setTimeout(() => setHeroVisible(true), 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading]);
 
   // Scroll-triggered animations for sections
   const [featuresRef, featuresInView] = useInView<HTMLElement>({ threshold: 0.1 });

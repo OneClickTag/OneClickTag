@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, RefObject } from 'react';
+import { useState, useEffect, useRef, RefObject, useCallback } from 'react';
 
 interface UseInViewOptions {
   threshold?: number;
@@ -10,14 +10,24 @@ interface UseInViewOptions {
 
 export function useInView<T extends HTMLElement = HTMLElement>(
   options: UseInViewOptions = {}
-): [RefObject<T>, boolean] {
+): [RefObject<T | null>, boolean] {
   const { threshold = 0.1, rootMargin = '0px', triggerOnce = true } = options;
-  const ref = useRef<T>(null);
+  const ref = useRef<T | null>(null);
   const [isInView, setIsInView] = useState(false);
 
   useEffect(() => {
     const element = ref.current;
-    if (!element) return;
+    if (!element) {
+      // Fallback: if no element, show content after a short delay
+      const fallbackTimer = setTimeout(() => setIsInView(true), 100);
+      return () => clearTimeout(fallbackTimer);
+    }
+
+    // Check if IntersectionObserver is available
+    if (typeof IntersectionObserver === 'undefined') {
+      setIsInView(true);
+      return;
+    }
 
     const observer = new IntersectionObserver(
       ([entry]) => {
