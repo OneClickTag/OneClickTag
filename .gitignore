@@ -72,3 +72,6 @@ temp/*.env.production
 
 # Playwright MCP
 .playwright-mcp/
+
+# Git worktrees
+.worktrees/

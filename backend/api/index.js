@@ -1,12 +1,12 @@
-import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
-import { ExpressAdapter, NestExpressApplication } from '@nestjs/platform-express';
-import express, { Express } from 'express';
-import { AppModule } from '../src/app.module';
+const { NestFactory } = require('@nestjs/core');
+const { ValidationPipe } = require('@nestjs/common');
+const { ExpressAdapter } = require('@nestjs/platform-express');
+const express = require('express');
+const { AppModule } = require('../dist/app.module');
 
-let cachedApp: Express | null = null;
+let cachedApp = null;
 
-async function createApp(): Promise<Express> {
+async function createApp() {
   if (cachedApp) {
     return cachedApp;
   }
@@ -14,11 +14,9 @@ async function createApp(): Promise<Express> {
   const expressApp = express();
   const adapter = new ExpressAdapter(expressApp);
 
-  const app = await NestFactory.create<NestExpressApplication>(
-    AppModule,
-    adapter,
-    { logger: ['error', 'warn', 'log'] },
-  );
+  const app = await NestFactory.create(AppModule, adapter, {
+    logger: ['error', 'warn', 'log'],
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -56,7 +54,7 @@ async function createApp(): Promise<Express> {
   return expressApp;
 }
 
-export default async function handler(req: any, res: any) {
+module.exports = async function handler(req, res) {
   const app = await createApp();
   app(req, res);
-}
+};
