@@ -163,12 +163,12 @@ export default function PlansPage() {
 
       {/* Pricing Cards */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-md lg:max-w-none mx-auto">
           {plans.map((plan, index) => (
             <div
               key={plan.id}
               className={`relative ${
-                plan.isFeatured ? 'md:scale-105 md:z-10' : ''
+                plan.isFeatured ? 'lg:scale-105 lg:z-10' : ''
               }`}
             >
               {/* Featured Badge */}
