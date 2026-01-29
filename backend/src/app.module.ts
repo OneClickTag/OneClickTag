@@ -28,7 +28,7 @@ import { ComplianceModule } from './modules/compliance/compliance.module';
     LeadsModule,
     CustomerModule,
     GoogleIntegrationModule,
-    JobsModule,
+    JobsModule.forRoot(),
     RealtimeModule,
     UsersModule,
     ComplianceModule,
