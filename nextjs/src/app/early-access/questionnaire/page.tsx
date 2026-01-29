@@ -175,7 +175,7 @@ function QuestionnaireContent() {
             value={value || ''}
             onChange={(e) => handleAnswer(e.target.value)}
             placeholder={currentQuestion.placeholder || 'Your answer...'}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none text-lg min-h-[150px]"
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none text-lg min-h-[150px] bg-white text-gray-900"
           />
         );
 
