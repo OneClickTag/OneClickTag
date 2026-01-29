@@ -146,7 +146,7 @@ export default function EarlyAccessPage() {
                 value={formData.name}
                 onChange={handleChange}
                 placeholder="John Doe"
-                className="mt-2"
+                className="mt-2 bg-white text-gray-900"
                 disabled={loading}
               />
             </div>
@@ -161,7 +161,7 @@ export default function EarlyAccessPage() {
                 value={formData.email}
                 onChange={handleChange}
                 placeholder="john@example.com"
-                className="mt-2"
+                className="mt-2 bg-white text-gray-900"
                 disabled={loading}
               />
             </div>
@@ -175,7 +175,7 @@ export default function EarlyAccessPage() {
                 value={formData.purpose}
                 onChange={handleChange}
                 placeholder="I manage conversion tracking for multiple e-commerce clients and need an easier way to set up tags..."
-                className="mt-2 w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
+                className="mt-2 w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none bg-white text-gray-900"
                 rows={4}
                 disabled={loading}
               />
