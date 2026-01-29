@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { X, Cookie, ChevronDown, ChevronUp } from 'lucide-react';
@@ -17,6 +17,8 @@ const CONSENT_EXPIRY_DAYS = 365;
 
 export function CookieBanner() {
   const [showBanner, setShowBanner] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
   const [showCustomize, setShowCustomize] = useState(false);
   const [preferences, setPreferences] = useState<CookiePreferences>({
     necessary: true, // Always required
@@ -42,7 +44,13 @@ export function CookieBanner() {
       }
     }
     // Small delay to prevent flash on page load
-    const timer = setTimeout(() => setShowBanner(true), 500);
+    const timer = setTimeout(() => {
+      setShowBanner(true);
+      // Trigger slide-up animation after mount
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => setIsVisible(true));
+      });
+    }, 500);
     return () => clearTimeout(timer);
   }, []);
 
@@ -50,7 +58,14 @@ export function CookieBanner() {
     const withTimestamp = { ...prefs, timestamp: Date.now() };
     localStorage.setItem(COOKIE_CONSENT_KEY, JSON.stringify(withTimestamp));
     setPreferences(withTimestamp);
-    setShowBanner(false);
+
+    // Animate out before hiding
+    setIsClosing(true);
+    setIsVisible(false);
+    setTimeout(() => {
+      setShowBanner(false);
+      setIsClosing(false);
+    }, 300);
 
     // Trigger analytics/marketing scripts based on consent
     if (typeof window !== 'undefined') {
@@ -83,7 +98,11 @@ export function CookieBanner() {
   if (!showBanner) return null;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 p-4 bg-white border-t border-gray-200 shadow-lg">
+    <div
+      className={`fixed bottom-0 left-0 right-0 z-50 p-4 bg-white border-t border-gray-200 shadow-lg transform transition-all duration-300 ease-out ${
+        isVisible ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'
+      }`}
+    >
       <div className="max-w-7xl mx-auto">
         <div className="flex items-start gap-4">
           <div className="hidden sm:flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full flex-shrink-0">
@@ -122,8 +141,12 @@ export function CookieBanner() {
               Customize preferences
             </button>
 
-            {showCustomize && (
-              <div className="bg-gray-50 rounded-lg p-4 mb-4 space-y-3">
+            <div
+              className={`overflow-hidden transition-all duration-300 ease-out ${
+                showCustomize ? 'max-h-64 opacity-100 mb-4' : 'max-h-0 opacity-0'
+              }`}
+            >
+              <div className="bg-gray-50 rounded-lg p-4 space-y-3">
                 {/* Necessary Cookies */}
                 <div className="flex items-center justify-between">
                   <div>
@@ -166,7 +189,7 @@ export function CookieBanner() {
                   />
                 </div>
               </div>
-            )}
+            </div>
 
             {/* Buttons */}
             <div className="flex flex-wrap gap-3">

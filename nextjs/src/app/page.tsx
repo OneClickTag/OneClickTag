@@ -1,10 +1,12 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Footer } from '@/components/layout/Footer';
 import { Navbar } from '@/components/layout/Navbar';
+import { useInView } from '@/hooks/use-in-view';
 
 const EARLY_ACCESS_MODE = process.env.NEXT_PUBLIC_EARLY_ACCESS_MODE === 'true';
 
@@ -212,7 +214,7 @@ const defaultHero: HeroContent = {
     url: EARLY_ACCESS_MODE ? '/early-access' : '/register',
     text: EARLY_ACCESS_MODE ? 'Join Waitlist' : 'Start Free Trial'
   },
-  secondaryCTA: { url: '/plans', text: 'View Pricing' },
+  secondaryCTA: EARLY_ACCESS_MODE ? undefined : { url: '/plans', text: 'View Pricing' },
   trustIndicators: EARLY_ACCESS_MODE
     ? 'Be the first to know when we launch • Limited spots available'
     : 'No credit card required • Cancel anytime • 14-day free trial',
@@ -257,7 +259,7 @@ const defaultCta: CtaContent = {
     url: EARLY_ACCESS_MODE ? '/early-access' : '/register',
     text: EARLY_ACCESS_MODE ? 'Join Waitlist' : 'Start Free Trial'
   },
-  secondaryCTA: { url: '/plans', text: 'View Pricing' },
+  secondaryCTA: EARLY_ACCESS_MODE ? undefined : { url: '/plans', text: 'View Pricing' },
 };
 
 // Fetch function for landing page content
@@ -277,12 +279,41 @@ export default function LandingPage() {
     retry: 1,
   });
 
+  // Animation state for hero (triggers on mount)
+  const [heroVisible, setHeroVisible] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setHeroVisible(true), 100);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Scroll-triggered animations for sections
+  const [featuresRef, featuresInView] = useInView<HTMLElement>({ threshold: 0.1 });
+  const [howItWorksRef, howItWorksInView] = useInView<HTMLElement>({ threshold: 0.1 });
+  const [testimonialsRef, testimonialsInView] = useInView<HTMLElement>({ threshold: 0.1 });
+  const [ctaRef, ctaInView] = useInView<HTMLElement>({ threshold: 0.2 });
+
   // Get content with fallbacks
-  const hero = content?.hero || defaultHero;
+  const heroBase = content?.hero || defaultHero;
   const featuresData = content?.features || defaultFeatures;
   const howItWorksData = content?.['how-it-works'] || defaultHowItWorks;
   const socialProofData = content?.['social-proof'] || defaultSocialProof;
-  const ctaData = content?.cta || defaultCta;
+  const ctaBase = content?.cta || defaultCta;
+
+  // Override CTAs when in early access mode
+  const hero = EARLY_ACCESS_MODE ? {
+    ...heroBase,
+    primaryCTA: { url: '/early-access', text: 'Join Waitlist' },
+    secondaryCTA: undefined,
+    trustIndicators: 'Be the first to know when we launch • Limited spots available',
+  } : heroBase;
+
+  const ctaData = EARLY_ACCESS_MODE ? {
+    ...ctaBase,
+    subtitle: 'Join the waitlist to be among the first to experience OneClickTag when we launch.',
+    primaryCTA: { url: '/early-access', text: 'Join Waitlist' },
+    secondaryCTA: undefined,
+    features: ['Early access pricing', 'Be first to know', 'Limited spots'],
+  } : ctaBase;
 
   // Show loading state
   if (isLoading) {
@@ -305,23 +336,42 @@ export default function LandingPage() {
       <section className="relative py-20 bg-gradient-to-br from-blue-50 via-white to-purple-50 overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
-            <div className="inline-flex items-center space-x-2 bg-blue-100 text-blue-800 px-4 py-2 rounded-full text-sm font-medium mb-6">
+            {/* Badge with animation */}
+            <div
+              className={`inline-flex items-center space-x-2 bg-blue-100 text-blue-800 px-4 py-2 rounded-full text-sm font-medium mb-6 transform transition-all duration-700 ${
+                heroVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+              }`}
+            >
               <BadgeIcon className="w-4 h-4" />
               <span>{hero.badge?.text || defaultHero.badge?.text}</span>
             </div>
-            <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6 leading-tight">
+            {/* Headline with staggered animation */}
+            <h1
+              className={`text-5xl md:text-6xl font-bold text-gray-900 mb-6 leading-tight transform transition-all duration-700 delay-100 ${
+                heroVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+              }`}
+            >
               {hero.headline || defaultHero.headline}
               <br />
               <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                 {hero.headlineHighlight || defaultHero.headlineHighlight}
               </span>
             </h1>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-6">
+            {/* Subtitle with staggered animation */}
+            <p
+              className={`text-xl text-gray-600 max-w-3xl mx-auto mb-6 transform transition-all duration-700 delay-200 ${
+                heroVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+              }`}
+            >
               {hero.subtitle || defaultHero.subtitle}
             </p>
-            {/* Benefits */}
+            {/* Benefits with staggered animation */}
             {(hero.benefits || defaultHero.benefits) && (
-              <div className="flex flex-wrap justify-center gap-4 mb-8">
+              <div
+                className={`flex flex-wrap justify-center gap-4 mb-8 transform transition-all duration-700 delay-300 ${
+                  heroVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+                }`}
+              >
                 {(hero.benefits || defaultHero.benefits || []).map((benefit, idx) => (
                   <span key={idx} className="inline-flex items-center text-sm text-gray-600">
                     <CheckCircle2 className="w-4 h-4 text-green-500 mr-1" />
@@ -330,33 +380,51 @@ export default function LandingPage() {
                 ))}
               </div>
             )}
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href={hero.primaryCTA?.url || defaultHero.primaryCTA?.url || '/register'}>
+            {/* Buttons with staggered animation */}
+            <div
+              className={`flex flex-col sm:flex-row gap-4 justify-center transform transition-all duration-700 delay-[400ms] ${
+                heroVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+              }`}
+            >
+              <Link href={hero.primaryCTA?.url || '/early-access'}>
                 <Button
                   size="lg"
                   className="text-lg px-8 py-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
                 >
-                  {hero.primaryCTA?.text || defaultHero.primaryCTA?.text}
+                  {hero.primaryCTA?.text || 'Join Waitlist'}
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
               </Link>
-              <Link href={hero.secondaryCTA?.url || defaultHero.secondaryCTA?.url || '/plans'}>
-                <Button variant="outline" size="lg" className="text-lg px-8 py-6">
-                  {hero.secondaryCTA?.text || defaultHero.secondaryCTA?.text}
-                </Button>
-              </Link>
+              {hero.secondaryCTA && (
+                <Link href={hero.secondaryCTA.url || '/plans'}>
+                  <Button variant="outline" size="lg" className="text-lg px-8 py-6">
+                    {hero.secondaryCTA.text || 'View Pricing'}
+                  </Button>
+                </Link>
+              )}
             </div>
+            {/* Trust indicators with animation */}
             {hero.trustIndicators && (
-              <p className="text-sm text-gray-500 mt-4">{hero.trustIndicators}</p>
+              <p
+                className={`text-sm text-gray-500 mt-4 transform transition-all duration-700 delay-500 ${
+                  heroVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+                }`}
+              >
+                {hero.trustIndicators}
+              </p>
             )}
           </div>
         </div>
       </section>
 
       {/* Features Section */}
-      <section className="py-16 sm:py-20 bg-white">
+      <section ref={featuresRef} className="py-16 sm:py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12 sm:mb-16">
+          <div
+            className={`text-center mb-12 sm:mb-16 transform transition-all duration-700 ${
+              featuresInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+            }`}
+          >
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
               {featuresData.title || defaultFeatures.title}{' '}
               <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
@@ -389,7 +457,12 @@ export default function LandingPage() {
                   return (
                     <div
                       key={feature.id || index}
-                      className="bg-white rounded-xl p-8 shadow-sm border border-gray-200 hover:shadow-lg hover:border-blue-300 transition-all duration-300"
+                      className={`bg-white rounded-xl p-8 shadow-sm border border-gray-200 hover:shadow-lg hover:border-blue-300 transition-all duration-300 transform ${
+                        featuresInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+                      }`}
+                      style={{
+                        transitionDelay: featuresInView ? `${150 + index * 100}ms` : '0ms',
+                      }}
                     >
                       <div
                         className="w-12 h-12 rounded-lg flex items-center justify-center mb-4"
@@ -412,9 +485,9 @@ export default function LandingPage() {
           {featuresData.bottomCTA && (
             <div className="text-center mt-12">
               <p className="text-gray-600 mb-4">{featuresData.bottomCTA.text}</p>
-              <Link href={featuresData.bottomCTA.linkUrl || '/register'}>
+              <Link href={EARLY_ACCESS_MODE ? '/early-access' : (featuresData.bottomCTA.linkUrl || '/register')}>
                 <Button variant="outline">
-                  {featuresData.bottomCTA.linkText || 'Get started'}
+                  {EARLY_ACCESS_MODE ? 'Join Waitlist' : (featuresData.bottomCTA.linkText || 'Get started')}
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </Link>
@@ -424,9 +497,13 @@ export default function LandingPage() {
       </section>
 
       {/* How It Works Section */}
-      <section className="py-16 sm:py-20 bg-gray-50">
+      <section ref={howItWorksRef} className="py-16 sm:py-20 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12 sm:mb-16">
+          <div
+            className={`text-center mb-12 sm:mb-16 transform transition-all duration-700 ${
+              howItWorksInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+            }`}
+          >
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
               {howItWorksData.title || defaultHowItWorks.title}
             </h2>
@@ -450,7 +527,15 @@ export default function LandingPage() {
                 {steps.map((item, index) => {
                   const Icon = iconMap[item.icon || 'Zap'] || Zap;
                   return (
-                    <div key={item.id || index} className="text-center">
+                    <div
+                      key={item.id || index}
+                      className={`text-center transform transition-all duration-500 ${
+                        howItWorksInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+                      }`}
+                      style={{
+                        transitionDelay: howItWorksInView ? `${150 + index * 150}ms` : '0ms',
+                      }}
+                    >
                       <div className="w-16 h-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-6">
                         <Icon className="w-8 h-8 text-white" />
                       </div>
@@ -484,9 +569,13 @@ export default function LandingPage() {
       </section>
 
       {/* Testimonials Section */}
-      <section className="py-16 sm:py-20 bg-white">
+      <section ref={testimonialsRef} className="py-16 sm:py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12 sm:mb-16">
+          <div
+            className={`text-center mb-12 sm:mb-16 transform transition-all duration-700 ${
+              testimonialsInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+            }`}
+          >
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
               {socialProofData.trustTitle || defaultSocialProof.trustTitle}
             </h2>
@@ -507,7 +596,12 @@ export default function LandingPage() {
                 {testimonials.map((testimonial, index) => (
                   <div
                     key={testimonial.id || index}
-                    className="bg-white rounded-xl p-8 shadow-sm border border-gray-200"
+                    className={`bg-white rounded-xl p-8 shadow-sm border border-gray-200 transform transition-all duration-500 ${
+                      testimonialsInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+                    }`}
+                    style={{
+                      transitionDelay: testimonialsInView ? `${100 + index * 100}ms` : '0ms',
+                    }}
                   >
                     <div className="flex mb-4">
                       {[...Array(5)].map((_, i) => (
@@ -532,19 +626,35 @@ export default function LandingPage() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-16 sm:py-20 bg-gradient-to-r from-blue-600 to-purple-600">
+      <section ref={ctaRef} className="py-16 sm:py-20 bg-gradient-to-r from-blue-600 to-purple-600">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl sm:text-4xl font-bold text-white mb-2">
+          <h2
+            className={`text-3xl sm:text-4xl font-bold text-white mb-2 transform transition-all duration-700 ${
+              ctaInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+            }`}
+          >
             {ctaData.headline || defaultCta.headline}
           </h2>
-          <h2 className="text-3xl sm:text-4xl font-bold text-white mb-6">
+          <h2
+            className={`text-3xl sm:text-4xl font-bold text-white mb-6 transform transition-all duration-700 delay-100 ${
+              ctaInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+            }`}
+          >
             {ctaData.headlineSecondLine || defaultCta.headlineSecondLine}
           </h2>
-          <p className="text-lg sm:text-xl text-blue-100 mb-8 leading-relaxed">
+          <p
+            className={`text-lg sm:text-xl text-blue-100 mb-8 leading-relaxed transform transition-all duration-700 delay-200 ${
+              ctaInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+            }`}
+          >
             {ctaData.subtitle || defaultCta.subtitle}
           </p>
           {ctaData.features && ctaData.features.length > 0 && (
-            <div className="flex flex-wrap justify-center gap-4 mb-8">
+            <div
+              className={`flex flex-wrap justify-center gap-4 mb-8 transform transition-all duration-700 delay-300 ${
+                ctaInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+              }`}
+            >
               {ctaData.features.map((feature, idx) => (
                 <span key={idx} className="inline-flex items-center text-sm text-blue-100">
                   <CheckCircle2 className="w-4 h-4 text-white mr-1" />
@@ -553,27 +663,39 @@ export default function LandingPage() {
               ))}
             </div>
           )}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href={ctaData.primaryCTA?.url || defaultCta.primaryCTA?.url || '/register'}>
+          <div
+            className={`flex flex-col sm:flex-row gap-4 justify-center transform transition-all duration-700 delay-[400ms] ${
+              ctaInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+            }`}
+          >
+            <Link href={ctaData.primaryCTA?.url || '/early-access'}>
               <Button
                 size="lg"
                 className="text-lg px-8 py-6 bg-white text-blue-600 hover:bg-gray-100"
               >
-                {ctaData.primaryCTA?.text || defaultCta.primaryCTA?.text}
+                {ctaData.primaryCTA?.text || 'Join Waitlist'}
               </Button>
             </Link>
-            <Link href={ctaData.secondaryCTA?.url || defaultCta.secondaryCTA?.url || '/plans'}>
-              <Button
-                size="lg"
-                variant="outline"
-                className="text-lg px-8 py-6 bg-transparent text-white border-white hover:bg-white hover:text-blue-600"
-              >
-                {ctaData.secondaryCTA?.text || defaultCta.secondaryCTA?.text}
-              </Button>
-            </Link>
+            {ctaData.secondaryCTA && (
+              <Link href={ctaData.secondaryCTA.url || '/plans'}>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="text-lg px-8 py-6 bg-transparent text-white border-white hover:bg-white hover:text-blue-600"
+                >
+                  {ctaData.secondaryCTA.text || 'View Pricing'}
+                </Button>
+              </Link>
+            )}
           </div>
           {ctaData.trustBadge && (
-            <p className="text-sm text-blue-100 mt-6">{ctaData.trustBadge}</p>
+            <p
+              className={`text-sm text-blue-100 mt-6 transform transition-all duration-700 delay-500 ${
+                ctaInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+              }`}
+            >
+              {ctaData.trustBadge}
+            </p>
           )}
         </div>
       </section>
