@@ -5,7 +5,7 @@ import { PrismaService } from '../../../common/prisma/prisma.service';
 import { FirebaseAuthService } from './firebase-auth.service';
 import { FirebaseAuthDto, CreateTenantDto, LoginResponseDto } from '../dto';
 import { AuthenticatedUser } from '../strategies/jwt.strategy';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class AuthService {
