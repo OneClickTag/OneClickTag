@@ -16,6 +16,7 @@ import {
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { Logo } from "@/components/Logo"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -64,13 +65,8 @@ export function MainLayout({ children }: MainLayoutProps) {
               </Button>
 
               {/* Logo */}
-              <Link href="/dashboard" className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                  <span className="text-primary-foreground font-bold text-sm">OT</span>
-                </div>
-                <span className="hidden sm:block text-xl font-bold text-gray-900">
-                  OneClickTag
-                </span>
+              <Link href="/dashboard" className="flex items-center">
+                <Logo width={160} height={30} />
               </Link>
             </div>
 
@@ -128,12 +124,7 @@ export function MainLayout({ children }: MainLayoutProps) {
         <div className="lg:hidden fixed inset-0 z-50 bg-black bg-opacity-50" onClick={() => setIsMobileMenuOpen(false)}>
           <div className="fixed inset-y-0 left-0 w-64 bg-white shadow-lg" onClick={(e) => e.stopPropagation()}>
             <div className="p-4 border-b">
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                  <span className="text-primary-foreground font-bold text-sm">OT</span>
-                </div>
-                <span className="text-xl font-bold text-gray-900">OneClickTag</span>
-              </div>
+              <Logo width={160} height={30} />
             </div>
             <nav className="p-4 space-y-2">
               {navigation.map((item) => {

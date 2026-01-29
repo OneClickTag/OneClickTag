@@ -14,6 +14,8 @@ import {
   Sparkles,
 } from 'lucide-react';
 
+const EARLY_ACCESS_MODE = process.env.NEXT_PUBLIC_EARLY_ACCESS_MODE === 'true';
+
 export default function AboutPage() {
   const [isVisible, setIsVisible] = useState(false);
 
@@ -222,19 +224,20 @@ export default function AboutPage() {
       <section className="py-20 bg-gradient-to-r from-blue-600 to-purple-600">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-4xl font-bold text-white mb-6">
-            Ready to Get Started?
+            {EARLY_ACCESS_MODE ? 'Be Among the First' : 'Ready to Get Started?'}
           </h2>
           <p className="text-xl text-blue-100 mb-8 leading-relaxed">
-            Join thousands of businesses already tracking their conversions with
-            OneClickTag
+            {EARLY_ACCESS_MODE
+              ? 'Join our waitlist to get early access when we launch'
+              : 'Join thousands of businesses already tracking their conversions with OneClickTag'}
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/register">
+            <Link href={EARLY_ACCESS_MODE ? '/early-access' : '/register'}>
               <Button
                 size="lg"
                 className="text-lg px-8 py-6 bg-white text-blue-600 hover:bg-gray-100"
               >
-                Start Free Trial
+                {EARLY_ACCESS_MODE ? 'Join Waitlist' : 'Start Free Trial'}
               </Button>
             </Link>
             <Link href="/contact">

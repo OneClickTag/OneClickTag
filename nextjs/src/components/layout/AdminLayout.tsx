@@ -3,6 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
+import { Logo } from "@/components/Logo"
 import {
   LayoutDashboard,
   Users,
@@ -146,11 +147,8 @@ export function AdminLayout({ children }: AdminLayoutProps) {
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="flex items-center justify-between h-16 px-6 border-b border-gray-800">
-            <Link href="/" className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">O</span>
-              </div>
-              <span className="text-white font-bold text-xl">OneClickTag</span>
+            <Link href="/">
+              <Logo width={160} height={30} variant="light" />
             </Link>
             <button
               onClick={() => setSidebarOpen(false)}

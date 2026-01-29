@@ -7,6 +7,8 @@ import { Footer } from '@/components/layout/Footer';
 import { Navbar } from '@/components/layout/Navbar';
 import { Check, Star, Loader2 } from 'lucide-react';
 
+const EARLY_ACCESS_MODE = process.env.NEXT_PUBLIC_EARLY_ACCESS_MODE === 'true';
+
 interface Plan {
   id: string;
   name: string;
@@ -59,7 +61,7 @@ export default function PlansPage() {
               'GTM Integration',
             ],
             isFeatured: false,
-            ctaText: 'Get Started',
+            ctaText: EARLY_ACCESS_MODE ? 'Join Waitlist' : 'Get Started',
           },
           {
             id: '2',
@@ -75,7 +77,7 @@ export default function PlansPage() {
               'Analytics Dashboard',
             ],
             isFeatured: true,
-            ctaText: 'Start Free Trial',
+            ctaText: EARLY_ACCESS_MODE ? 'Join Waitlist' : 'Start Free Trial',
           },
           {
             id: '3',
@@ -103,28 +105,51 @@ export default function PlansPage() {
     fetchPlans();
   }, []);
 
-  const faqs = [
-    {
-      q: 'Can I change plans later?',
-      a: 'Yes! You can upgrade or downgrade your plan at any time. Changes take effect immediately, and we will prorate the difference.',
-    },
-    {
-      q: 'What payment methods do you accept?',
-      a: 'We accept all major credit cards (Visa, Mastercard, American Express) and PayPal.',
-    },
-    {
-      q: 'Is there a free trial?',
-      a: 'Yes! All plans come with a 14-day free trial. No credit card required to start.',
-    },
-    {
-      q: 'What happens after the trial ends?',
-      a: 'After your trial, you will be charged for your selected plan. You can cancel anytime before the trial ends to avoid charges.',
-    },
-    {
-      q: 'Can I cancel my subscription?',
-      a: 'Yes, you can cancel your subscription at any time. Your access will continue until the end of your billing period.',
-    },
-  ];
+  const faqs = EARLY_ACCESS_MODE
+    ? [
+        {
+          q: 'When will OneClickTag be available?',
+          a: 'We are currently in early access mode and will launch soon. Join the waitlist to be notified when we go live.',
+        },
+        {
+          q: 'How do I get early access?',
+          a: 'Join our waitlist and we will notify you as soon as early access becomes available. Early adopters will get special pricing.',
+        },
+        {
+          q: 'Will pricing change after launch?',
+          a: 'Early access members will be grandfathered into special pricing. Join the waitlist to lock in the best rates.',
+        },
+        {
+          q: 'Can I change plans later?',
+          a: 'Yes! Once we launch, you can upgrade or downgrade your plan at any time.',
+        },
+        {
+          q: 'What payment methods will you accept?',
+          a: 'We will accept all major credit cards (Visa, Mastercard, American Express) and PayPal.',
+        },
+      ]
+    : [
+        {
+          q: 'Can I change plans later?',
+          a: 'Yes! You can upgrade or downgrade your plan at any time. Changes take effect immediately, and we will prorate the difference.',
+        },
+        {
+          q: 'What payment methods do you accept?',
+          a: 'We accept all major credit cards (Visa, Mastercard, American Express) and PayPal.',
+        },
+        {
+          q: 'Is there a free trial?',
+          a: 'Yes! All plans come with a 14-day free trial. No credit card required to start.',
+        },
+        {
+          q: 'What happens after the trial ends?',
+          a: 'After your trial, you will be charged for your selected plan. You can cancel anytime before the trial ends to avoid charges.',
+        },
+        {
+          q: 'Can I cancel my subscription?',
+          a: 'Yes, you can cancel your subscription at any time. Your access will continue until the end of your billing period.',
+        },
+      ];
 
   if (loading) {
     return (
@@ -152,12 +177,14 @@ export default function PlansPage() {
           </span>
         </h1>
         <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-8">
-          Choose the plan that fits your needs. All plans include a 14-day free
-          trial.
+          {EARLY_ACCESS_MODE
+            ? 'Preview our pricing plans. Join the waitlist to lock in early adopter rates.'
+            : 'Choose the plan that fits your needs. All plans include a 14-day free trial.'}
         </p>
         <p className="text-sm text-gray-500">
-          No credit card required - Cancel anytime - Upgrade or downgrade as
-          needed
+          {EARLY_ACCESS_MODE
+            ? 'Early access pricing - Limited spots available - Special rates for first users'
+            : 'No credit card required - Cancel anytime - Upgrade or downgrade as needed'}
         </p>
       </div>
 
@@ -209,7 +236,7 @@ export default function PlansPage() {
                 </div>
 
                 {/* CTA Button */}
-                <Link href={plan.ctaUrl || '/register'} className="w-full mb-6">
+                <Link href={plan.ctaUrl || (EARLY_ACCESS_MODE ? '/early-access' : '/register')} className="w-full mb-6">
                   <Button
                     className={`w-full ${
                       plan.isFeatured

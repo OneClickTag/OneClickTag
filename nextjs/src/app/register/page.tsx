@@ -7,7 +7,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/components/providers/auth-provider';
-import { Chrome, Loader2 } from 'lucide-react';
+import { Logo } from '@/components/Logo';
+import { Chrome, Loader2, Info } from 'lucide-react';
+
+const EARLY_ACCESS_MODE = process.env.NEXT_PUBLIC_EARLY_ACCESS_MODE === 'true';
 
 export default function RegisterPage() {
   const [name, setName] = useState('');
@@ -65,12 +68,30 @@ export default function RegisterPage() {
     <div className="flex flex-col items-center justify-center min-h-screen p-8 bg-gradient-to-br from-gray-50 to-gray-100">
       <div className="w-full max-w-md space-y-8">
         <div className="text-center">
-          <Link href="/" className="text-3xl font-bold text-gray-900">
-            OneClickTag
+          <Link href="/" className="inline-block">
+            <Logo width={200} height={38} />
           </Link>
           <h1 className="text-2xl font-bold mt-6">Create Account</h1>
-          <p className="text-muted-foreground mt-2">Get started with OneClickTag</p>
+          <p className="text-muted-foreground mt-2">
+            {EARLY_ACCESS_MODE ? 'Create your account for early access' : 'Get started today'}
+          </p>
         </div>
+
+        {EARLY_ACCESS_MODE && (
+          <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg">
+            <Info className="w-5 h-5 mt-0.5 flex-shrink-0" />
+            <div className="text-sm">
+              <p className="font-medium">Early Access Mode</p>
+              <p className="mt-1">
+                Dashboard access is currently limited. Create an account to be notified when we launch.
+                Want to join the waitlist instead?{' '}
+                <Link href="/early-access" className="underline font-medium">
+                  Click here
+                </Link>
+              </p>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="bg-destructive/15 text-destructive text-sm p-3 rounded-md">

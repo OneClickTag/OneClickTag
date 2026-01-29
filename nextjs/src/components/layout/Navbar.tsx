@@ -4,7 +4,10 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { Logo } from '@/components/Logo';
 import { Menu, X } from 'lucide-react';
+
+const EARLY_ACCESS_MODE = process.env.NEXT_PUBLIC_EARLY_ACCESS_MODE === 'true';
 
 const navLinks = [
   { href: '/about', label: 'About' },
@@ -21,8 +24,8 @@ export function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         <div className="flex justify-between items-center">
           {/* Logo */}
-          <Link href="/" className="text-2xl font-bold text-gray-900">
-            OneClickTag
+          <Link href="/">
+            <Logo width={160} height={30} />
           </Link>
 
           {/* Desktop Navigation */}
@@ -43,8 +46,8 @@ export function Navbar() {
             <Link href="/login">
               <Button variant="outline">Sign In</Button>
             </Link>
-            <Link href="/register">
-              <Button>Get Started</Button>
+            <Link href={EARLY_ACCESS_MODE ? '/early-access' : '/register'}>
+              <Button>{EARLY_ACCESS_MODE ? 'Join Waitlist' : 'Get Started'}</Button>
             </Link>
           </div>
 
@@ -85,8 +88,8 @@ export function Navbar() {
                   Sign In
                 </Button>
               </Link>
-              <Link href="/register" onClick={() => setMobileMenuOpen(false)}>
-                <Button className="w-full">Get Started</Button>
+              <Link href={EARLY_ACCESS_MODE ? '/early-access' : '/register'} onClick={() => setMobileMenuOpen(false)}>
+                <Button className="w-full">{EARLY_ACCESS_MODE ? 'Join Waitlist' : 'Get Started'}</Button>
               </Link>
             </div>
           </div>

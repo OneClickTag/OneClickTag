@@ -5,6 +5,9 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Footer } from '@/components/layout/Footer';
 import { Navbar } from '@/components/layout/Navbar';
+
+const EARLY_ACCESS_MODE = process.env.NEXT_PUBLIC_EARLY_ACCESS_MODE === 'true';
+
 import {
   Zap,
   Target,
@@ -26,6 +29,34 @@ import {
   LucideIcon,
 } from 'lucide-react';
 
+// Gradient color mapping - converts Tailwind class names to CSS gradients
+// This is needed because dynamic Tailwind classes get purged at build time
+const gradientMap: Record<string, string> = {
+  'from-blue-500 to-blue-600': 'linear-gradient(to right, #3b82f6, #2563eb)',
+  'from-blue-500 to-purple-500': 'linear-gradient(to right, #3b82f6, #a855f7)',
+  'from-green-500 to-green-600': 'linear-gradient(to right, #22c55e, #16a34a)',
+  'from-purple-500 to-purple-600': 'linear-gradient(to right, #a855f7, #9333ea)',
+  'from-yellow-500 to-orange-600': 'linear-gradient(to right, #eab308, #ea580c)',
+  'from-red-500 to-pink-600': 'linear-gradient(to right, #ef4444, #db2777)',
+  'from-indigo-500 to-indigo-600': 'linear-gradient(to right, #6366f1, #4f46e5)',
+  'from-cyan-500 to-cyan-600': 'linear-gradient(to right, #06b6d4, #0891b2)',
+  'from-teal-500 to-teal-600': 'linear-gradient(to right, #14b8a6, #0d9488)',
+  'from-orange-500 to-orange-600': 'linear-gradient(to right, #f97316, #ea580c)',
+};
+
+// Helper to get gradient style from Tailwind class or return default
+const getGradientStyle = (colorClass?: string): React.CSSProperties => {
+  if (!colorClass) {
+    return { background: 'linear-gradient(to right, #3b82f6, #a855f7)' };
+  }
+  const gradient = gradientMap[colorClass];
+  if (gradient) {
+    return { background: gradient };
+  }
+  // Fallback for unknown gradients
+  return { background: 'linear-gradient(to right, #3b82f6, #a855f7)' };
+};
+
 // Icon mapping for dynamic icons from database
 const iconMap: Record<string, LucideIcon> = {
   Zap,
@@ -43,6 +74,26 @@ const iconMap: Record<string, LucideIcon> = {
   Clock,
   TrendingUp,
   Star,
+  // Additional common icons
+  zap: Zap,
+  target: Target,
+  'bar-chart-3': BarChart3,
+  barchart3: BarChart3,
+  sparkles: Sparkles,
+  tag: Tag,
+  shield: Shield,
+  globe: Globe,
+  'mouse-pointer-click': MousePointerClick,
+  mousepointerclick: MousePointerClick,
+  link2: Link2,
+  rocket: Rocket,
+  'check-circle-2': CheckCircle2,
+  checkcircle2: CheckCircle2,
+  users: Users,
+  clock: Clock,
+  'trending-up': TrendingUp,
+  trendingup: TrendingUp,
+  star: Star,
 };
 
 // Type definitions matching actual database structure
@@ -157,9 +208,14 @@ const defaultHero: HeroContent = {
   headlineHighlight: 'In One Click',
   subtitle: 'Stop wasting hours on manual tag setup. OneClickTag automatically creates GTM tags, Google Ads conversions, and GA4 events in seconds.',
   benefits: ['No coding required', 'GTM + Google Ads + GA4', 'Setup in 2 minutes'],
-  primaryCTA: { url: '/register', text: 'Start Free Trial' },
+  primaryCTA: {
+    url: EARLY_ACCESS_MODE ? '/early-access' : '/register',
+    text: EARLY_ACCESS_MODE ? 'Join Waitlist' : 'Start Free Trial'
+  },
   secondaryCTA: { url: '/plans', text: 'View Pricing' },
-  trustIndicators: 'No credit card required • Cancel anytime • 14-day free trial',
+  trustIndicators: EARLY_ACCESS_MODE
+    ? 'Be the first to know when we launch • Limited spots available'
+    : 'No credit card required • Cancel anytime • 14-day free trial',
 };
 
 const defaultFeatures: FeaturesContent = {
@@ -194,8 +250,13 @@ const defaultSocialProof: SocialProofContent = {
 const defaultCta: CtaContent = {
   headline: 'Ready to Transform Your',
   headlineSecondLine: 'Tracking Workflow?',
-  subtitle: 'Join 1,000+ marketers who are saving hours every week with automated tracking setup.',
-  primaryCTA: { url: '/register', text: 'Start Free Trial' },
+  subtitle: EARLY_ACCESS_MODE
+    ? 'Join the waitlist to be among the first to experience OneClickTag when we launch.'
+    : 'Join 1,000+ marketers who are saving hours every week with automated tracking setup.',
+  primaryCTA: {
+    url: EARLY_ACCESS_MODE ? '/early-access' : '/register',
+    text: EARLY_ACCESS_MODE ? 'Join Waitlist' : 'Start Free Trial'
+  },
   secondaryCTA: { url: '/plans', text: 'View Pricing' },
 };
 
@@ -306,29 +367,48 @@ export default function LandingPage() {
               {featuresData.subtitle || defaultFeatures.subtitle}
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {(featuresData.features || defaultFeatures.features || [])
-              .filter((f) => f.isActive !== false)
-              .map((feature, index) => {
-                const Icon = iconMap[feature.icon || 'Zap'] || Zap;
-                return (
-                  <div
-                    key={feature.id || index}
-                    className="bg-white rounded-xl p-8 shadow-sm border border-gray-200 hover:shadow-lg hover:border-blue-300 transition-all duration-300"
-                  >
-                    <div className={`w-12 h-12 bg-gradient-to-r ${feature.color || 'from-blue-500 to-purple-500'} rounded-lg flex items-center justify-center mb-4`}>
-                      <Icon className="w-6 h-6 text-white" />
+          {(() => {
+            const features = (featuresData.features || defaultFeatures.features || []).filter((f) => f.isActive !== false);
+            const count = features.length;
+            // Dynamic grid based on feature count
+            const gridClass = count === 1
+              ? 'grid grid-cols-1 max-w-md mx-auto gap-8'
+              : count === 2
+              ? 'grid grid-cols-1 md:grid-cols-2 max-w-3xl mx-auto gap-8'
+              : count === 4
+              ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8'
+              : count === 5
+              ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8'
+              : count === 6
+              ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8'
+              : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8';
+            return (
+              <div className={gridClass}>
+                {features.map((feature, index) => {
+                  const Icon = iconMap[feature.icon || 'Zap'] || Zap;
+                  return (
+                    <div
+                      key={feature.id || index}
+                      className="bg-white rounded-xl p-8 shadow-sm border border-gray-200 hover:shadow-lg hover:border-blue-300 transition-all duration-300"
+                    >
+                      <div
+                        className="w-12 h-12 rounded-lg flex items-center justify-center mb-4"
+                        style={getGradientStyle(feature.color)}
+                      >
+                        <Icon className="w-6 h-6 text-white" />
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-900 mb-2">
+                        {feature.title}
+                      </h3>
+                      <p className="text-gray-600 leading-relaxed">
+                        {feature.description}
+                      </p>
                     </div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-2">
-                      {feature.title}
-                    </h3>
-                    <p className="text-gray-600 leading-relaxed">
-                      {feature.description}
-                    </p>
-                  </div>
-                );
-              })}
-          </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
           {featuresData.bottomCTA && (
             <div className="text-center mt-12">
               <p className="text-gray-600 mb-4">{featuresData.bottomCTA.text}</p>
@@ -354,27 +434,39 @@ export default function LandingPage() {
               {howItWorksData.subtitle || defaultHowItWorks.subtitle}
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {(howItWorksData.steps || defaultHowItWorks.steps || [])
-              .filter((s) => s.isActive !== false)
-              .map((item, index) => {
-                const Icon = iconMap[item.icon || 'Zap'] || Zap;
-                return (
-                  <div key={item.id || index} className="text-center">
-                    <div className="w-16 h-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                      <Icon className="w-8 h-8 text-white" />
+          {(() => {
+            const steps = (howItWorksData.steps || defaultHowItWorks.steps || []).filter((s) => s.isActive !== false);
+            const count = steps.length;
+            // Dynamic grid: 1 col on mobile, 2 on md, then adapt to count on lg
+            const gridClass = count === 1
+              ? 'grid grid-cols-1 max-w-md mx-auto gap-8'
+              : count === 2
+              ? 'grid grid-cols-1 md:grid-cols-2 max-w-2xl mx-auto gap-8'
+              : count === 3
+              ? 'grid grid-cols-1 md:grid-cols-3 max-w-4xl mx-auto gap-8'
+              : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8';
+            return (
+              <div className={gridClass}>
+                {steps.map((item, index) => {
+                  const Icon = iconMap[item.icon || 'Zap'] || Zap;
+                  return (
+                    <div key={item.id || index} className="text-center">
+                      <div className="w-16 h-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <Icon className="w-8 h-8 text-white" />
+                      </div>
+                      <div className="text-sm font-semibold text-blue-600 mb-2">
+                        Step {item.step || String(index + 1).padStart(2, '0')}
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-900 mb-2">
+                        {item.title}
+                      </h3>
+                      <p className="text-gray-600">{item.description}</p>
                     </div>
-                    <div className="text-sm font-semibold text-blue-600 mb-2">
-                      Step {item.step || index + 1}
-                    </div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-2">
-                      {item.title}
-                    </h3>
-                    <p className="text-gray-600">{item.description}</p>
-                  </div>
-                );
-              })}
-          </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
           {/* Stats */}
           {howItWorksData.stats && howItWorksData.stats.filter((s) => s.isActive !== false).length > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mt-16 pt-16 border-t border-gray-200">
@@ -399,31 +491,43 @@ export default function LandingPage() {
               {socialProofData.trustTitle || defaultSocialProof.trustTitle}
             </h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {(socialProofData.testimonials || defaultSocialProof.testimonials || [])
-              .filter((t) => t.isActive !== false)
-              .map((testimonial, index) => (
-                <div
-                  key={testimonial.id || index}
-                  className="bg-white rounded-xl p-8 shadow-sm border border-gray-200"
-                >
-                  <div className="flex mb-4">
-                    {[...Array(5)].map((_, i) => (
-                      <Star key={i} className="w-5 h-5 text-yellow-400 fill-current" />
-                    ))}
-                  </div>
-                  <p className="text-gray-700 mb-6 leading-relaxed">
-                    &ldquo;{testimonial.quote}&rdquo;
-                  </p>
-                  <div>
-                    <p className="font-semibold text-gray-900">{testimonial.author}</p>
-                    <p className="text-sm text-gray-600">
-                      {testimonial.role} at {testimonial.company}
+          {(() => {
+            const testimonials = (socialProofData.testimonials || defaultSocialProof.testimonials || []).filter((t) => t.isActive !== false);
+            const count = testimonials.length;
+            // Dynamic grid based on testimonial count
+            const gridClass = count === 1
+              ? 'grid grid-cols-1 max-w-lg mx-auto gap-8'
+              : count === 2
+              ? 'grid grid-cols-1 md:grid-cols-2 max-w-4xl mx-auto gap-8'
+              : count === 4
+              ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8'
+              : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8';
+            return (
+              <div className={gridClass}>
+                {testimonials.map((testimonial, index) => (
+                  <div
+                    key={testimonial.id || index}
+                    className="bg-white rounded-xl p-8 shadow-sm border border-gray-200"
+                  >
+                    <div className="flex mb-4">
+                      {[...Array(5)].map((_, i) => (
+                        <Star key={i} className="w-5 h-5 text-yellow-400 fill-current" />
+                      ))}
+                    </div>
+                    <p className="text-gray-700 mb-6 leading-relaxed">
+                      &ldquo;{testimonial.quote}&rdquo;
                     </p>
+                    <div>
+                      <p className="font-semibold text-gray-900">{testimonial.author}</p>
+                      <p className="text-sm text-gray-600">
+                        {testimonial.role} at {testimonial.company}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ))}
-          </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>
       </section>
 

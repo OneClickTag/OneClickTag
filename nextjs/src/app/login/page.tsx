@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/components/providers/auth-provider';
+import { Logo } from '@/components/Logo';
 import { Chrome, Loader2 } from 'lucide-react';
 
 function LoginForm() {
@@ -73,11 +74,11 @@ function LoginForm() {
     <div className="flex flex-col items-center justify-center min-h-screen p-8 bg-gradient-to-br from-gray-50 to-gray-100">
       <div className="w-full max-w-md space-y-8">
         <div className="text-center">
-          <Link href="/" className="text-3xl font-bold text-gray-900">
-            OneClickTag
+          <Link href="/" className="inline-block">
+            <Logo width={200} height={38} />
           </Link>
           <h1 className="text-2xl font-bold mt-6">Sign In</h1>
-          <p className="text-muted-foreground mt-2">Welcome back to OneClickTag</p>
+          <p className="text-muted-foreground mt-2">Welcome back</p>
         </div>
 
         {user && (
