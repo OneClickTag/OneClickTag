@@ -2,7 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import express, { Request, Response } from 'express';
-import { AppModule } from '../src/app.module';
+import { AppModule } from '../dist/app.module';
 
 let cachedApp: express.Express | null = null;
 
