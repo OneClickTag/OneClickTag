@@ -274,7 +274,7 @@ export function SocialProofEditor({
           ))}
           {(localContent.testimonials || []).length === 0 && (
             <div className="text-center py-8 text-gray-500">
-              No testimonials yet. Click "Add Testimonial" to create one.
+              No testimonials yet. Click &quot;Add Testimonial&quot; to create one.
             </div>
           )}
         </CardContent>

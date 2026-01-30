@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,7 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Sparkles, Loader2, Lock } from 'lucide-react';
 import Link from 'next/link';
 
-export default function EarlyAccessPage() {
+function EarlyAccessContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isRestricted = searchParams.get('restricted') === 'true';
@@ -253,5 +253,17 @@ export default function EarlyAccessPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function EarlyAccessPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    }>
+      <EarlyAccessContent />
+    </Suspense>
   );
 }
