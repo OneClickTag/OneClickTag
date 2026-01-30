@@ -293,7 +293,7 @@ export function HowItWorksEditor({
           })}
           {(localContent.steps || []).length === 0 && (
             <div className="text-center py-8 text-gray-500">
-              No steps yet. Click &quot;Add Step&quot; to create one.
+              {'No steps yet. Click "Add Step" to create one.'}
             </div>
           )}
         </CardContent>

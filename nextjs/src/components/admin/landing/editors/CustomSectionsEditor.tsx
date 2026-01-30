@@ -234,7 +234,7 @@ export function CustomSectionsEditor({
             <div className="text-center py-8 text-gray-500">
               <FileText className="w-12 h-12 mx-auto mb-4 text-gray-300" />
               <p>No custom sections yet.</p>
-              <p className="text-sm">Click &quot;Add Custom Section&quot; to create one.</p>
+              <p className="text-sm">{'Click "Add Custom Section" to create one.'}</p>
             </div>
           ) : (
             customSections.map((section) => {

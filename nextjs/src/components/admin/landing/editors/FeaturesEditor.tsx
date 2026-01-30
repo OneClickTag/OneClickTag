@@ -277,7 +277,7 @@ export function FeaturesEditor({
           })}
           {(localContent.features || []).length === 0 && (
             <div className="text-center py-8 text-gray-500">
-              No features yet. Click &quot;Add Feature&quot; to create one.
+              {'No features yet. Click "Add Feature" to create one.'}
             </div>
           )}
         </CardContent>
