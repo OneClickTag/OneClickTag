@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Sparkles, Loader2, Lock } from 'lucide-react';
 import Link from 'next/link';
 
@@ -114,19 +115,25 @@ export default function EarlyAccessPage() {
             </div>
           )}
 
-          {/* Badge */}
-          <div className="inline-flex items-center space-x-2 bg-blue-100 text-blue-700 px-3 py-1.5 rounded-full text-sm font-medium mb-4">
-            <Sparkles className="w-4 h-4" />
-            <span>Get Early Access</span>
-          </div>
+          {/* Header Section */}
+          <div className="text-center mb-6">
+            {/* Badge */}
+            <div className="inline-flex items-center space-x-2 bg-gradient-to-r from-blue-100 to-purple-100 text-blue-700 px-4 py-1.5 rounded-full text-sm font-medium mb-4">
+              <Sparkles className="w-4 h-4" />
+              <span>Limited Early Access</span>
+            </div>
 
-          {/* Heading */}
-          <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">
-            Join the Waitlist
-          </h1>
-          <p className="text-lg text-gray-600 mb-5">
-            Be among the first to experience OneClickTag when we launch.
-          </p>
+            {/* Heading */}
+            <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-3">
+              Set Up Conversion Tracking <br className="hidden sm:block" />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">
+                in Minutes, Not Hours
+              </span>
+            </h1>
+            <p className="text-base md:text-lg text-gray-600 max-w-md mx-auto">
+              Join marketers saving hours on GTM setup. Get notified when we launch and receive exclusive early-bird pricing.
+            </p>
+          </div>
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -176,19 +183,17 @@ export default function EarlyAccessPage() {
             </div>
 
             {/* Terms & Conditions Checkbox */}
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="flex items-start gap-2">
-                <input
-                  type="checkbox"
+                <Checkbox
                   id="acceptedTerms"
-                  name="acceptedTerms"
                   checked={formData.acceptedTerms}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, acceptedTerms: e.target.checked }))}
-                  className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 bg-white accent-blue-600"
-                  required
+                  onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, acceptedTerms: checked === true }))}
                   disabled={loading}
+                  required
+                  className="mt-0.5"
                 />
-                <label htmlFor="acceptedTerms" className="text-xs text-gray-600">
+                <label htmlFor="acceptedTerms" className="text-xs text-gray-600 cursor-pointer">
                   I agree to the{' '}
                   <Link href="/terms" className="text-blue-600 hover:underline" target="_blank">
                     Terms of Service
@@ -203,16 +208,14 @@ export default function EarlyAccessPage() {
 
               {/* Marketing Consent Checkbox */}
               <div className="flex items-start gap-2">
-                <input
-                  type="checkbox"
+                <Checkbox
                   id="marketingConsent"
-                  name="marketingConsent"
                   checked={formData.marketingConsent}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, marketingConsent: e.target.checked }))}
-                  className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 bg-white accent-blue-600"
+                  onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, marketingConsent: checked === true }))}
                   disabled={loading}
+                  className="mt-0.5"
                 />
-                <label htmlFor="marketingConsent" className="text-xs text-gray-600">
+                <label htmlFor="marketingConsent" className="text-xs text-gray-600 cursor-pointer">
                   I agree to receive marketing communications from OneClickTag.
                 </label>
               </div>

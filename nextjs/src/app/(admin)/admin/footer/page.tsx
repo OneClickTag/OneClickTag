@@ -9,6 +9,19 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { FileText, Save, Loader2, RefreshCw, Plus, Trash2 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+// Available social icon options that match the Footer component
+const AVAILABLE_ICONS = [
+  { value: 'twitter', label: 'Twitter' },
+  { value: 'x', label: 'X (Twitter)' },
+  { value: 'linkedin', label: 'LinkedIn' },
+  { value: 'github', label: 'GitHub' },
+  { value: 'facebook', label: 'Facebook' },
+  { value: 'instagram', label: 'Instagram' },
+  { value: 'youtube', label: 'YouTube' },
+  { value: 'tiktok', label: 'TikTok' },
+];
 
 interface FooterLink {
   label: string;
@@ -125,7 +138,7 @@ export default function AdminFooterPage() {
   const addSocialLink = () => {
     setFormData({
       ...formData,
-      socialLinks: [...(formData.socialLinks || []), { platform: '', url: '' }],
+      socialLinks: [...(formData.socialLinks || []), { platform: '', url: '', icon: 'twitter' }],
     });
   };
 
@@ -136,7 +149,7 @@ export default function AdminFooterPage() {
     });
   };
 
-  const updateSocialLink = (index: number, field: 'platform' | 'url', value: string) => {
+  const updateSocialLink = (index: number, field: 'platform' | 'url' | 'icon', value: string) => {
     const newSocialLinks = [...(formData.socialLinks || [])];
     newSocialLinks[index] = { ...newSocialLinks[index], [field]: value };
     setFormData({ ...formData, socialLinks: newSocialLinks });
@@ -301,17 +314,32 @@ export default function AdminFooterPage() {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-3">
               {formData.socialLinks?.map((social, index) => (
                 <div key={index} className="flex gap-2 items-center">
+                  <Select
+                    value={social.icon || 'twitter'}
+                    onValueChange={(value) => updateSocialLink(index, 'icon', value)}
+                  >
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue placeholder="Select icon" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {AVAILABLE_ICONS.map((icon) => (
+                        <SelectItem key={icon.value} value={icon.value}>
+                          {icon.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Input
-                    placeholder="Platform (e.g., Twitter, LinkedIn)"
+                    placeholder="Platform name (e.g., Twitter)"
                     value={social.platform}
                     onChange={(e) => updateSocialLink(index, 'platform', e.target.value)}
                     className="flex-1"
                   />
                   <Input
-                    placeholder="URL"
+                    placeholder="URL (e.g., https://twitter.com/...)"
                     value={social.url}
                     onChange={(e) => updateSocialLink(index, 'url', e.target.value)}
                     className="flex-1"
@@ -327,7 +355,7 @@ export default function AdminFooterPage() {
                 </div>
               ))}
               {(!formData.socialLinks || formData.socialLinks.length === 0) && (
-                <p className="text-sm text-gray-500 py-2 text-center">No social links added yet</p>
+                <p className="text-sm text-gray-500 py-2 text-center">No social links added yet. Click &quot;Add Social Link&quot; to get started.</p>
               )}
             </CardContent>
           </Card>

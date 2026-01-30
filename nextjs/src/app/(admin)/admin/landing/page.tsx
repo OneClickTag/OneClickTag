@@ -1,30 +1,30 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApi } from '@/hooks/use-api';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Layout,
-  Plus,
   RefreshCw,
-  Edit,
-  Trash2,
   Loader2,
-  Eye,
-  EyeOff,
+  ExternalLink,
+  Sparkles,
+  LayoutGrid,
+  ListOrdered,
+  MessageSquare,
+  Megaphone,
+  Plus,
 } from 'lucide-react';
+
+// Import editors
+import { HeroEditor } from '@/components/admin/landing/editors/HeroEditor';
+import { FeaturesEditor } from '@/components/admin/landing/editors/FeaturesEditor';
+import { HowItWorksEditor } from '@/components/admin/landing/editors/HowItWorksEditor';
+import { SocialProofEditor } from '@/components/admin/landing/editors/SocialProofEditor';
+import { CTAEditor } from '@/components/admin/landing/editors/CTAEditor';
+import { CustomSectionsEditor } from '@/components/admin/landing/editors/CustomSectionsEditor';
 
 interface LandingSection {
   id: string;
@@ -35,42 +35,85 @@ interface LandingSection {
   updatedAt: string;
 }
 
+// Default content for each section
+const defaultContent: Record<string, Record<string, unknown>> = {
+  hero: {
+    badge: { icon: 'Zap', text: 'Automated Conversion Tracking' },
+    headline: 'Stop Wasting Hours on',
+    headlineHighlight: 'Google Tag Setup',
+    subtitle: 'OneClickTag automatically creates GTM tags, Google Ads conversions, and GA4 events in seconds.',
+    benefits: ['No coding required', 'GTM + Google Ads + GA4', 'Live in 2 minutes'],
+    primaryCTA: { url: '/register', text: 'Start Free Trial' },
+    secondaryCTA: { url: '/plans', text: 'View Pricing' },
+    trustIndicators: 'No credit card required • Cancel anytime • 14-day free trial',
+  },
+  features: {
+    title: 'GTM, Google Ads & GA4',
+    titleHighlight: 'All Automated',
+    subtitle: 'Three tools. One click. Zero headaches.',
+    features: [
+      { id: '1', icon: 'Tag', color: 'from-blue-500 to-blue-600', title: 'Google Tag Manager', description: 'Automatically create tags, triggers, and variables.', isActive: true },
+      { id: '2', icon: 'Target', color: 'from-green-500 to-green-600', title: 'Google Ads Integration', description: 'Sync conversion actions instantly.', isActive: true },
+      { id: '3', icon: 'BarChart3', color: 'from-purple-500 to-purple-600', title: 'GA4 Events', description: 'Create custom GA4 events with proper parameters.', isActive: true },
+    ],
+  },
+  'how-it-works': {
+    title: 'Live Tracking in 3 Simple Steps',
+    subtitle: 'See how simple conversion tracking can be.',
+    steps: [
+      { id: '1', step: '01', icon: 'MousePointerClick', title: 'Connect Google Account', description: 'One-click OAuth connection.', isActive: true },
+      { id: '2', step: '02', icon: 'Link2', title: 'Configure Tracking', description: 'Select what you want to track.', isActive: true },
+      { id: '3', step: '03', icon: 'Rocket', title: 'Deploy Instantly', description: 'Everything is synced in seconds.', isActive: true },
+    ],
+  },
+  'social-proof': {
+    trustTitle: 'Join 1,000+ Marketers Saving Hours Every Week',
+    testimonials: [
+      { id: '1', author: 'Sarah Johnson', role: 'Marketing Director', company: 'Digital Growth Co.', quote: 'OneClickTag cut our tracking setup time from hours to minutes.', isActive: true },
+      { id: '2', author: 'Michael Chen', role: 'Performance Marketer', company: 'AdScale Agency', quote: 'The automation is incredible. No more manual GTM setup headaches.', isActive: true },
+    ],
+  },
+  cta: {
+    headline: 'Start Tracking in 2 Minutes.',
+    headlineSecondLine: 'Free for 14 Days.',
+    subtitle: 'No credit card required. Cancel anytime.',
+    primaryCTA: { url: '/register', text: 'Start Free Trial' },
+    secondaryCTA: { url: '/plans', text: 'View Pricing' },
+  },
+};
+
 export default function AdminLandingPage() {
   const api = useApi();
   const queryClient = useQueryClient();
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingSection, setEditingSection] = useState<LandingSection | null>(null);
-  const [formData, setFormData] = useState({
-    key: '',
-    content: '{}',
-    isActive: true,
-  });
+  const [activeTab, setActiveTab] = useState('hero');
+  const [pendingChanges, setPendingChanges] = useState<Record<string, Record<string, unknown>>>({});
 
+  // Fetch all sections
   const { data: sections = [], isLoading, refetch } = useQuery({
     queryKey: ['admin', 'landing-page'],
     queryFn: () => api.get<LandingSection[]>('/api/admin/landing-page'),
   });
 
+  // Create section mutation
   const createMutation = useMutation({
-    mutationFn: (data: { key: string; content: unknown; isActive: boolean }) =>
+    mutationFn: (data: { key: string; content: unknown; isActive?: boolean }) =>
       api.post('/api/admin/landing-page', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'landing-page'] });
-      setIsDialogOpen(false);
-      resetForm();
     },
   });
 
+  // Update section mutation
   const updateMutation = useMutation({
     mutationFn: ({ id, ...data }: { id: string; content?: unknown; isActive?: boolean }) =>
       api.patch(`/api/admin/landing-page/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'landing-page'] });
-      setIsDialogOpen(false);
-      resetForm();
+      setPendingChanges({});
     },
   });
 
+  // Delete section mutation
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/api/admin/landing-page/${id}`),
     onSuccess: () => {
@@ -78,6 +121,7 @@ export default function AdminLandingPage() {
     },
   });
 
+  // Toggle active mutation
   const toggleActiveMutation = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
       api.patch(`/api/admin/landing-page/${id}/toggle-active`, { isActive }),
@@ -86,48 +130,75 @@ export default function AdminLandingPage() {
     },
   });
 
-  const resetForm = () => {
-    setFormData({ key: '', content: '{}', isActive: true });
-    setEditingSection(null);
+  // Get section by key
+  const getSectionByKey = (key: string): LandingSection | undefined => {
+    return sections.find((s) => s.key === key);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const content = JSON.parse(formData.content);
-      if (editingSection) {
-        await updateMutation.mutateAsync({
-          id: editingSection.id,
-          content,
-          isActive: formData.isActive,
-        });
-      } else {
-        await createMutation.mutateAsync({
-          key: formData.key,
-          content,
-          isActive: formData.isActive,
-        });
-      }
-    } catch (error) {
-      console.error('Invalid JSON:', error);
-      alert('Invalid JSON content');
+  // Get content for a section (from DB or pending changes or default)
+  const getContentForSection = (key: string): Record<string, unknown> => {
+    if (pendingChanges[key]) {
+      return pendingChanges[key];
     }
+    const section = getSectionByKey(key);
+    if (section) {
+      return section.content;
+    }
+    return defaultContent[key] || {};
   };
 
-  const handleEdit = (section: LandingSection) => {
-    setEditingSection(section);
-    setFormData({
-      key: section.key,
-      content: JSON.stringify(section.content, null, 2),
-      isActive: section.isActive,
+  // Handle content change - accepts any content type and stores as Record
+  const handleContentChange = (key: string, content: unknown) => {
+    setPendingChanges((prev) => ({ ...prev, [key]: content as Record<string, unknown> }));
+  };
+
+  // Handle save for a section
+  const handleSave = async (key: string) => {
+    const content = pendingChanges[key];
+    if (!content) return;
+
+    const existingSection = getSectionByKey(key);
+    if (existingSection) {
+      await updateMutation.mutateAsync({ id: existingSection.id, content });
+    } else {
+      await createMutation.mutateAsync({ key, content, isActive: true });
+    }
+    setPendingChanges((prev) => {
+      const newChanges = { ...prev };
+      delete newChanges[key];
+      return newChanges;
     });
-    setIsDialogOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this section?')) return;
+  // Handle reset for a section
+  const handleReset = (key: string) => {
+    if (!confirm('Are you sure you want to reset to default content? This will discard any unsaved changes.')) {
+      return;
+    }
+    setPendingChanges((prev) => ({ ...prev, [key]: defaultContent[key] || {} }));
+  };
+
+  // Handle create custom section
+  const handleCreateCustomSection = async (key: string, content: unknown, templateId?: string) => {
+    await createMutation.mutateAsync({ key, content, isActive: true });
+  };
+
+  // Handle update custom section
+  const handleUpdateCustomSection = async (id: string, content: unknown, isActive?: boolean) => {
+    await updateMutation.mutateAsync({ id, content, isActive });
+  };
+
+  // Handle delete custom section
+  const handleDeleteCustomSection = async (id: string) => {
     await deleteMutation.mutateAsync(id);
   };
+
+  // Handle toggle active for custom section
+  const handleToggleActive = async (id: string, isActive: boolean) => {
+    await toggleActiveMutation.mutateAsync({ id, isActive });
+  };
+
+  const isSaving = createMutation.isPending || updateMutation.isPending;
 
   return (
     <div className="space-y-6">
@@ -135,150 +206,134 @@ export default function AdminLandingPage() {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Landing Page</h2>
-          <p className="text-gray-600 mt-1">Manage landing page content sections</p>
+          <p className="text-gray-600 mt-1">Manage landing page content and sections</p>
         </div>
         <div className="flex space-x-2">
           <Button variant="outline" onClick={() => refetch()}>
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </Button>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={resetForm}>
-                <Plus className="w-4 h-4 mr-2" />
-                Add Section
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>
-                  {editingSection ? 'Edit Section' : 'Add New Section'}
-                </DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <Label htmlFor="key">Section Key</Label>
-                  <Input
-                    id="key"
-                    value={formData.key}
-                    onChange={(e) => setFormData({ ...formData, key: e.target.value })}
-                    placeholder="hero, features, pricing..."
-                    disabled={!!editingSection}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="content">Content (JSON)</Label>
-                  <Textarea
-                    id="content"
-                    value={formData.content}
-                    onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                    rows={10}
-                    className="font-mono text-sm"
-                    required
-                  />
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="isActive"
-                    checked={formData.isActive}
-                    onCheckedChange={(checked) =>
-                      setFormData({ ...formData, isActive: checked })
-                    }
-                  />
-                  <Label htmlFor="isActive">Active</Label>
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
-                    {(createMutation.isPending || updateMutation.isPending) && (
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    )}
-                    {editingSection ? 'Update' : 'Create'}
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <Button variant="outline" asChild>
+            <a href="/" target="_blank" rel="noopener noreferrer">
+              <ExternalLink className="w-4 h-4 mr-2" />
+              Preview Site
+            </a>
+          </Button>
         </div>
       </div>
 
-      {/* Sections List */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        {isLoading ? (
-          <div className="text-center py-12">
+      {/* Loading State */}
+      {isLoading ? (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12">
+          <div className="text-center">
             <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-600" />
-            <p className="text-gray-600 mt-2">Loading sections...</p>
+            <p className="text-gray-600 mt-2">Loading landing page content...</p>
           </div>
-        ) : sections.length === 0 ? (
-          <div className="text-center py-12">
-            <Layout className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-600">No landing page sections found</p>
-            <Button className="mt-4" onClick={() => setIsDialogOpen(true)}>
-              Create First Section
-            </Button>
-          </div>
-        ) : (
-          <div className="divide-y">
-            {sections.map((section) => (
-              <div key={section.id} className="p-4 hover:bg-gray-50">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <code className="text-sm bg-gray-100 px-2 py-1 rounded font-medium">
-                        {section.key}
-                      </code>
-                      <button
-                        onClick={() =>
-                          toggleActiveMutation.mutate({
-                            id: section.id,
-                            isActive: !section.isActive,
-                          })
-                        }
-                        className={`flex items-center gap-1 px-2 py-1 text-xs rounded-full ${
-                          section.isActive
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-gray-100 text-gray-600'
-                        }`}
-                      >
-                        {section.isActive ? (
-                          <>
-                            <Eye className="w-3 h-3" />
-                            Active
-                          </>
-                        ) : (
-                          <>
-                            <EyeOff className="w-3 h-3" />
-                            Inactive
-                          </>
-                        )}
-                      </button>
-                    </div>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Updated: {new Date(section.updatedAt).toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => handleEdit(section)}>
-                      <Edit className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDelete(section.id)}
-                      disabled={deleteMutation.isPending}
-                    >
-                      <Trash2 className="w-4 h-4 text-red-500" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        /* Tabs */
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <div className="border-b px-4">
+              <TabsList className="h-14 bg-transparent gap-2">
+                <TabsTrigger value="hero" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 gap-2">
+                  <Sparkles className="w-4 h-4" />
+                  Hero
+                </TabsTrigger>
+                <TabsTrigger value="features" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 gap-2">
+                  <LayoutGrid className="w-4 h-4" />
+                  Features
+                </TabsTrigger>
+                <TabsTrigger value="how-it-works" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 gap-2">
+                  <ListOrdered className="w-4 h-4" />
+                  How It Works
+                </TabsTrigger>
+                <TabsTrigger value="social-proof" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 gap-2">
+                  <MessageSquare className="w-4 h-4" />
+                  Social Proof
+                </TabsTrigger>
+                <TabsTrigger value="cta" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 gap-2">
+                  <Megaphone className="w-4 h-4" />
+                  CTA
+                </TabsTrigger>
+                <TabsTrigger value="custom" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 gap-2">
+                  <Plus className="w-4 h-4" />
+                  Custom Sections
+                </TabsTrigger>
+              </TabsList>
+            </div>
+
+            <div className="p-6">
+              <TabsContent value="hero" className="mt-0">
+                <HeroEditor
+                  content={getContentForSection('hero')}
+                  onChange={(content) => handleContentChange('hero', content)}
+                  onSave={() => handleSave('hero')}
+                  onReset={() => handleReset('hero')}
+                  isSaving={isSaving}
+                  lastUpdated={getSectionByKey('hero')?.updatedAt}
+                />
+              </TabsContent>
+
+              <TabsContent value="features" className="mt-0">
+                <FeaturesEditor
+                  content={getContentForSection('features')}
+                  onChange={(content) => handleContentChange('features', content)}
+                  onSave={() => handleSave('features')}
+                  onReset={() => handleReset('features')}
+                  isSaving={isSaving}
+                  lastUpdated={getSectionByKey('features')?.updatedAt}
+                />
+              </TabsContent>
+
+              <TabsContent value="how-it-works" className="mt-0">
+                <HowItWorksEditor
+                  content={getContentForSection('how-it-works')}
+                  onChange={(content) => handleContentChange('how-it-works', content)}
+                  onSave={() => handleSave('how-it-works')}
+                  onReset={() => handleReset('how-it-works')}
+                  isSaving={isSaving}
+                  lastUpdated={getSectionByKey('how-it-works')?.updatedAt}
+                />
+              </TabsContent>
+
+              <TabsContent value="social-proof" className="mt-0">
+                <SocialProofEditor
+                  content={getContentForSection('social-proof')}
+                  onChange={(content) => handleContentChange('social-proof', content)}
+                  onSave={() => handleSave('social-proof')}
+                  onReset={() => handleReset('social-proof')}
+                  isSaving={isSaving}
+                  lastUpdated={getSectionByKey('social-proof')?.updatedAt}
+                />
+              </TabsContent>
+
+              <TabsContent value="cta" className="mt-0">
+                <CTAEditor
+                  content={getContentForSection('cta')}
+                  onChange={(content) => handleContentChange('cta', content)}
+                  onSave={() => handleSave('cta')}
+                  onReset={() => handleReset('cta')}
+                  isSaving={isSaving}
+                  lastUpdated={getSectionByKey('cta')?.updatedAt}
+                />
+              </TabsContent>
+
+              <TabsContent value="custom" className="mt-0">
+                <CustomSectionsEditor
+                  sections={sections}
+                  onCreateSection={handleCreateCustomSection}
+                  onUpdateSection={handleUpdateCustomSection}
+                  onDeleteSection={handleDeleteCustomSection}
+                  onToggleActive={handleToggleActive}
+                  isLoading={isLoading}
+                  isSaving={isSaving}
+                />
+              </TabsContent>
+            </div>
+          </Tabs>
+        </div>
+      )}
     </div>
   );
 }

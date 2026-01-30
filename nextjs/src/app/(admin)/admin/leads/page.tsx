@@ -28,6 +28,11 @@ import {
   Check,
   X,
   Loader2,
+  Mail,
+  MailX,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 
 interface Lead {
@@ -36,6 +41,10 @@ interface Lead {
   email: string;
   source: string;
   questionnaireCompleted: boolean;
+  marketingConsent: boolean;
+  marketingConsentAt: string | null;
+  acceptedTerms: boolean;
+  acceptedTermsAt: string | null;
   responseCount: number;
   createdAt: string;
 }
@@ -50,21 +59,36 @@ interface LeadsResponse {
   };
 }
 
+type SortField = 'name' | 'email' | 'createdAt' | 'source';
+type SortOrder = 'asc' | 'desc';
+
 export default function AdminLeadsPage() {
   const api = useApi();
   const [search, setSearch] = useState('');
   const [questionnaireFilter, setQuestionnaireFilter] = useState<string>('all');
+  const [marketingFilter, setMarketingFilter] = useState<string>('all');
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState<SortField>('createdAt');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['admin', 'leads', page, search, questionnaireFilter],
+    queryKey: ['admin', 'leads', page, search, questionnaireFilter, marketingFilter, sourceFilter, sortBy, sortOrder],
     queryFn: () => {
       const params = new URLSearchParams();
       params.set('page', page.toString());
       params.set('limit', '20');
+      params.set('sortBy', sortBy);
+      params.set('sortOrder', sortOrder);
       if (search) params.set('search', search);
       if (questionnaireFilter !== 'all') {
         params.set('questionnaireCompleted', questionnaireFilter);
+      }
+      if (marketingFilter !== 'all') {
+        params.set('marketingConsent', marketingFilter);
+      }
+      if (sourceFilter !== 'all') {
+        params.set('source', sourceFilter);
       }
       return api.get<LeadsResponse>(`/api/admin/leads?${params.toString()}`);
     },
@@ -88,8 +112,32 @@ export default function AdminLeadsPage() {
     }
   };
 
+  const handleSort = (field: SortField) => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+    setPage(1);
+  };
+
+  const getSortIcon = (field: SortField) => {
+    if (sortBy !== field) {
+      return <ArrowUpDown className="w-4 h-4 ml-1 opacity-50" />;
+    }
+    return sortOrder === 'asc' ? (
+      <ArrowUp className="w-4 h-4 ml-1" />
+    ) : (
+      <ArrowDown className="w-4 h-4 ml-1" />
+    );
+  };
+
   const leads = data?.data || [];
   const meta = data?.meta || { total: 0, page: 1, totalPages: 1 };
+
+  // Get unique sources for filter
+  const uniqueSources = Array.from(new Set(leads.map(l => l.source).filter(Boolean)));
 
   return (
     <div className="space-y-6">
@@ -112,36 +160,98 @@ export default function AdminLeadsPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-4 items-center">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input
-            placeholder="Search by name or email..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div className="flex flex-wrap gap-4 items-center">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input
+              placeholder="Search by name or email..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className="pl-10"
+            />
+          </div>
+          <Select
+            value={questionnaireFilter}
+            onValueChange={(value) => {
+              setQuestionnaireFilter(value);
               setPage(1);
             }}
-            className="pl-10"
-          />
+          >
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Questionnaire Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Questionnaire</SelectItem>
+              <SelectItem value="true">Completed</SelectItem>
+              <SelectItem value="false">Not Completed</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select
+            value={marketingFilter}
+            onValueChange={(value) => {
+              setMarketingFilter(value);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Marketing Consent" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Marketing</SelectItem>
+              <SelectItem value="true">Opted In</SelectItem>
+              <SelectItem value="false">Opted Out</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select
+            value={sourceFilter}
+            onValueChange={(value) => {
+              setSourceFilter(value);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Source" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Sources</SelectItem>
+              <SelectItem value="early-access">Early Access</SelectItem>
+              <SelectItem value="landing">Landing</SelectItem>
+              <SelectItem value="hero">Hero</SelectItem>
+              <SelectItem value="cta">CTA</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        <Select
-          value={questionnaireFilter}
-          onValueChange={(value) => {
-            setQuestionnaireFilter(value);
-            setPage(1);
-          }}
-        >
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Questionnaire Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Leads</SelectItem>
-            <SelectItem value="true">Completed Questionnaire</SelectItem>
-            <SelectItem value="false">Not Completed</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
+
+      {/* Stats Summary */}
+      {!isLoading && leads.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <p className="text-sm text-gray-600">Total Leads</p>
+            <p className="text-2xl font-bold text-gray-900">{meta.total}</p>
+          </div>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <p className="text-sm text-gray-600">Questionnaire Completed</p>
+            <p className="text-2xl font-bold text-green-600">
+              {leads.filter(l => l.questionnaireCompleted).length}
+            </p>
+          </div>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <p className="text-sm text-gray-600">Marketing Opt-ins</p>
+            <p className="text-2xl font-bold text-blue-600">
+              {leads.filter(l => l.marketingConsent).length}
+            </p>
+          </div>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <p className="text-sm text-gray-600">This Page</p>
+            <p className="text-2xl font-bold text-gray-700">{leads.length}</p>
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
@@ -157,55 +267,111 @@ export default function AdminLeadsPage() {
           </div>
         ) : (
           <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead>Questionnaire</TableHead>
-                  <TableHead>Responses</TableHead>
-                  <TableHead>Created</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {leads.map((lead) => (
-                  <TableRow key={lead.id}>
-                    <TableCell className="font-medium">{lead.name}</TableCell>
-                    <TableCell>{lead.email}</TableCell>
-                    <TableCell>
-                      <span className="px-2 py-1 bg-gray-100 rounded text-xs">
-                        {lead.source}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      {lead.questionnaireCompleted ? (
-                        <span className="flex items-center text-green-600">
-                          <Check className="w-4 h-4 mr-1" />
-                          Completed
-                        </span>
-                      ) : (
-                        <span className="flex items-center text-gray-400">
-                          <X className="w-4 h-4 mr-1" />
-                          Pending
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>{lead.responseCount}</TableCell>
-                    <TableCell className="text-gray-600">
-                      {new Date(lead.createdAt).toLocaleDateString()}
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead
+                      className="cursor-pointer hover:bg-gray-50"
+                      onClick={() => handleSort('name')}
+                    >
+                      <div className="flex items-center">
+                        Name
+                        {getSortIcon('name')}
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:bg-gray-50"
+                      onClick={() => handleSort('email')}
+                    >
+                      <div className="flex items-center">
+                        Email
+                        {getSortIcon('email')}
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:bg-gray-50"
+                      onClick={() => handleSort('source')}
+                    >
+                      <div className="flex items-center">
+                        Source
+                        {getSortIcon('source')}
+                      </div>
+                    </TableHead>
+                    <TableHead>Questionnaire</TableHead>
+                    <TableHead>Marketing</TableHead>
+                    <TableHead>Responses</TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:bg-gray-50"
+                      onClick={() => handleSort('createdAt')}
+                    >
+                      <div className="flex items-center">
+                        Created
+                        {getSortIcon('createdAt')}
+                      </div>
+                    </TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {leads.map((lead) => (
+                    <TableRow key={lead.id}>
+                      <TableCell className="font-medium">{lead.name}</TableCell>
+                      <TableCell>{lead.email}</TableCell>
+                      <TableCell>
+                        <span className="px-2 py-1 bg-gray-100 rounded text-xs">
+                          {lead.source || 'N/A'}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        {lead.questionnaireCompleted ? (
+                          <span className="flex items-center text-green-600">
+                            <Check className="w-4 h-4 mr-1" />
+                            Completed
+                          </span>
+                        ) : (
+                          <span className="flex items-center text-gray-400">
+                            <X className="w-4 h-4 mr-1" />
+                            Pending
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {lead.marketingConsent ? (
+                          <span className="flex items-center text-blue-600" title={lead.marketingConsentAt ? `Opted in: ${new Date(lead.marketingConsentAt).toLocaleString()}` : ''}>
+                            <Mail className="w-4 h-4 mr-1" />
+                            Opted In
+                          </span>
+                        ) : (
+                          <span className="flex items-center text-gray-400">
+                            <MailX className="w-4 h-4 mr-1" />
+                            Opted Out
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>{lead.responseCount}</TableCell>
+                      <TableCell className="text-gray-600">
+                        {new Date(lead.createdAt).toLocaleDateString()}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
 
             {/* Pagination */}
             <div className="flex items-center justify-between px-4 py-3 border-t">
               <p className="text-sm text-gray-600">
-                Showing {leads.length} of {meta.total} leads
+                Showing {leads.length} of {meta.total} leads (Page {meta.page} of {meta.totalPages})
               </p>
               <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(1)}
+                  disabled={page <= 1}
+                >
+                  First
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -221,6 +387,14 @@ export default function AdminLeadsPage() {
                   disabled={page >= meta.totalPages}
                 >
                   Next
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(meta.totalPages)}
+                  disabled={page >= meta.totalPages}
+                >
+                  Last
                 </Button>
               </div>
             </div>

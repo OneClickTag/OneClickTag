@@ -1,17 +1,37 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApi } from '@/hooks/use-api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
   Search,
   Trash2,
   RefreshCw,
   UserPlus,
-  Edit,
   Loader2,
+  Users,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Download,
 } from 'lucide-react';
 
 interface AdminUser {
@@ -29,28 +49,40 @@ interface UsersResponse {
   data: AdminUser[];
   total: number;
   totalPages: number;
+  page: number;
 }
+
+type SortField = 'name' | 'email' | 'role' | 'createdAt';
+type SortOrder = 'asc' | 'desc';
 
 export default function AdminUsersPage() {
   const api = useApi();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedRole, setSelectedRole] = useState<string>('');
+  const [selectedRole, setSelectedRole] = useState<string>('all');
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
+  const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState<SortField>('createdAt');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['admin', 'users', searchTerm, selectedRole],
-    queryFn: () =>
-      api.get<UsersResponse>('/api/admin/users', {
-        params: {
-          search: searchTerm || undefined,
-          role: selectedRole || undefined,
-          limit: 100,
-        },
-      }),
+    queryKey: ['admin', 'users', searchTerm, selectedRole, page, sortBy, sortOrder],
+    queryFn: () => {
+      const params: Record<string, string> = {
+        limit: '20',
+        page: page.toString(),
+        sortBy,
+        sortOrder,
+      };
+      if (searchTerm) params.search = searchTerm;
+      if (selectedRole && selectedRole !== 'all') params.role = selectedRole;
+      return api.get<UsersResponse>('/api/admin/users', { params });
+    },
   });
 
   const users = data?.data || [];
+  const total = data?.total || 0;
+  const totalPages = data?.totalPages || 1;
 
   const deleteMutation = useMutation({
     mutationFn: (userId: string) => api.delete(`/api/admin/users/${userId}`),
@@ -110,6 +142,27 @@ export default function AdminUsersPage() {
     }
   };
 
+  const handleSort = (field: SortField) => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+    setPage(1);
+  };
+
+  const getSortIcon = (field: SortField) => {
+    if (sortBy !== field) {
+      return <ArrowUpDown className="w-4 h-4 ml-1 opacity-50" />;
+    }
+    return sortOrder === 'asc' ? (
+      <ArrowUp className="w-4 h-4 ml-1" />
+    ) : (
+      <ArrowDown className="w-4 h-4 ml-1" />
+    );
+  };
+
   const getRoleBadgeColor = (role: string) => {
     switch (role) {
       case 'SUPER_ADMIN':
@@ -121,6 +174,28 @@ export default function AdminUsersPage() {
     }
   };
 
+  const handleExport = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (searchTerm) params.set('search', searchTerm);
+      if (selectedRole && selectedRole !== 'all') params.set('role', selectedRole);
+
+      const response = await fetch(`/api/admin/users/export?${params.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('auth-token')}`,
+        },
+      });
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `users-export-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+    } catch (error) {
+      console.error('Export failed:', error);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -129,45 +204,85 @@ export default function AdminUsersPage() {
           <h2 className="text-2xl font-bold text-gray-900">Users Management</h2>
           <p className="text-gray-600 mt-1">Manage user accounts and permissions</p>
         </div>
-        <Button className="flex items-center space-x-2">
-          <UserPlus className="w-4 h-4" />
-          <span>Add User</span>
-        </Button>
+        <div className="flex space-x-2">
+          <Button variant="outline" onClick={() => refetch()}>
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh
+          </Button>
+          <Button variant="outline" onClick={handleExport}>
+            <Download className="w-4 h-4 mr-2" />
+            Export
+          </Button>
+          <Button className="flex items-center space-x-2">
+            <UserPlus className="w-4 h-4" />
+            <span>Add User</span>
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+        <div className="flex flex-wrap gap-4 items-center">
+          <div className="flex-1 min-w-[200px] relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
             <Input
               type="text"
               placeholder="Search by name or email..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setPage(1);
+              }}
               className="pl-10"
             />
           </div>
-          <select
+          <Select
             value={selectedRole}
-            onChange={(e) => setSelectedRole(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            onValueChange={(value) => {
+              setSelectedRole(value);
+              setPage(1);
+            }}
           >
-            <option value="">All Roles</option>
-            <option value="USER">User</option>
-            <option value="ADMIN">Admin</option>
-            <option value="SUPER_ADMIN">Super Admin</option>
-          </select>
-          <Button
-            variant="outline"
-            onClick={() => refetch()}
-            className="flex items-center space-x-2"
-          >
-            <RefreshCw className="w-4 h-4" />
-            <span>Refresh</span>
-          </Button>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="All Roles" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Roles</SelectItem>
+              <SelectItem value="USER">User</SelectItem>
+              <SelectItem value="ADMIN">Admin</SelectItem>
+              <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
+
+      {/* Stats Summary */}
+      {!isLoading && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <p className="text-sm text-gray-600">Total Users</p>
+            <p className="text-2xl font-bold text-gray-900">{total}</p>
+          </div>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <p className="text-sm text-gray-600">Regular Users</p>
+            <p className="text-2xl font-bold text-gray-700">
+              {users.filter(u => u.role === 'USER').length}
+            </p>
+          </div>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <p className="text-sm text-gray-600">Admins</p>
+            <p className="text-2xl font-bold text-blue-600">
+              {users.filter(u => u.role === 'ADMIN').length}
+            </p>
+          </div>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <p className="text-sm text-gray-600">Super Admins</p>
+            <p className="text-2xl font-bold text-purple-600">
+              {users.filter(u => u.role === 'SUPER_ADMIN').length}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Batch Actions */}
       {selectedUsers.size > 0 && (
@@ -198,105 +313,148 @@ export default function AdminUsersPage() {
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         {isLoading ? (
           <div className="text-center py-12">
-            <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-gray-600">Loading users...</p>
+            <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-600" />
+            <p className="text-gray-600 mt-2">Loading users...</p>
           </div>
         ) : users.length === 0 ? (
           <div className="text-center py-12">
+            <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-600">No users found</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-6 py-3 text-left">
-                    <input
-                      type="checkbox"
-                      checked={
-                        selectedUsers.size === users.length && users.length > 0
-                      }
-                      onChange={handleSelectAll}
-                      className="rounded border-gray-300"
-                    />
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    User
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Role
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Tenant
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Created
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {users.map((user) => (
-                  <tr key={user.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4">
-                      <input
-                        type="checkbox"
-                        checked={selectedUsers.has(user.id)}
-                        onChange={() => handleSelectUser(user.id)}
-                        className="rounded border-gray-300"
+          <>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={selectedUsers.size === users.length && users.length > 0}
+                        onCheckedChange={handleSelectAll}
                       />
-                    </td>
-                    <td className="px-6 py-4">
-                      <div>
-                        <div className="font-medium text-gray-900">
-                          {user.name}
-                        </div>
-                        <div className="text-sm text-gray-500">{user.email}</div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:bg-gray-50"
+                      onClick={() => handleSort('name')}
+                    >
+                      <div className="flex items-center">
+                        User
+                        {getSortIcon('name')}
                       </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`px-2 py-1 text-xs font-medium rounded-full ${getRoleBadgeColor(
-                          user.role
-                        )}`}
-                      >
-                        {user.role}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {user.tenant?.name || 'No tenant'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {new Date(user.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <button className="text-blue-600 hover:text-blue-900 text-sm font-medium mr-4">
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeleteUser(user.id)}
-                        className="text-red-600 hover:text-red-900 text-sm font-medium"
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:bg-gray-50"
+                      onClick={() => handleSort('role')}
+                    >
+                      <div className="flex items-center">
+                        Role
+                        {getSortIcon('role')}
+                      </div>
+                    </TableHead>
+                    <TableHead>Tenant</TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:bg-gray-50"
+                      onClick={() => handleSort('createdAt')}
+                    >
+                      <div className="flex items-center">
+                        Created
+                        {getSortIcon('createdAt')}
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {users.map((user) => (
+                    <TableRow key={user.id} className="hover:bg-gray-50">
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedUsers.has(user.id)}
+                          onCheckedChange={() => handleSelectUser(user.id)}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium text-gray-900">
+                            {user.name}
+                          </div>
+                          <div className="text-sm text-gray-500">{user.email}</div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span
+                          className={`px-2 py-1 text-xs font-medium rounded-full ${getRoleBadgeColor(
+                            user.role
+                          )}`}
+                        >
+                          {user.role}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-sm text-gray-600">
+                        {user.tenant?.name || 'No tenant'}
+                      </TableCell>
+                      <TableCell className="text-sm text-gray-600">
+                        {new Date(user.createdAt).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <button className="text-blue-600 hover:text-blue-900 text-sm font-medium mr-4">
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteUser(user.id)}
+                          className="text-red-600 hover:text-red-900 text-sm font-medium"
+                        >
+                          Delete
+                        </button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
 
-      {/* Stats */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-        <p className="text-sm text-gray-600">
-          Showing{' '}
-          <span className="font-semibold text-gray-900">{users.length}</span>{' '}
-          users
-        </p>
+            {/* Pagination */}
+            <div className="flex items-center justify-between px-4 py-3 border-t">
+              <p className="text-sm text-gray-600">
+                Showing {users.length} of {total} users (Page {page} of {totalPages})
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(1)}
+                  disabled={page <= 1}
+                >
+                  First
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(page - 1)}
+                  disabled={page <= 1}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(page + 1)}
+                  disabled={page >= totalPages}
+                >
+                  Next
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(totalPages)}
+                  disabled={page >= totalPages}
+                >
+                  Last
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

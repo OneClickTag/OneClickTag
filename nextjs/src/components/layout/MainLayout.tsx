@@ -176,8 +176,8 @@ export function MainLayout({ children }: MainLayoutProps) {
 
         {/* Sidebar footer */}
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200">
-          <div className="text-xs text-gray-500 text-center">
-            OneClickTag v1.0.0
+          <div className="flex justify-center">
+            <Logo width={100} height={19} />
           </div>
         </div>
       </aside>

@@ -40,7 +40,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   }
 }
 
-// PUT /api/admin/landing-page/[id] - Update landing page section
+// PUT/PATCH /api/admin/landing-page/[id] - Update landing page section
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
     const session = await getSessionFromRequest(request);
@@ -98,6 +98,11 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
+}
+
+// PATCH /api/admin/landing-page/[id] - Update landing page section (alias for PUT)
+export async function PATCH(request: NextRequest, routeParams: RouteParams) {
+  return PUT(request, routeParams);
 }
 
 // DELETE /api/admin/landing-page/[id] - Delete landing page section

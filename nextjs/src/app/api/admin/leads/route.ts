@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const search = searchParams.get('search') || undefined;
     const questionnaireCompleted = searchParams.get('questionnaireCompleted');
+    const marketingConsent = searchParams.get('marketingConsent');
     const startDate = searchParams.get('startDate') || undefined;
     const endDate = searchParams.get('endDate') || undefined;
     const source = searchParams.get('source') || undefined;
@@ -37,6 +38,10 @@ export async function GET(request: NextRequest) {
 
     if (questionnaireCompleted !== null && questionnaireCompleted !== undefined) {
       where.questionnaireCompleted = questionnaireCompleted === 'true';
+    }
+
+    if (marketingConsent !== null && marketingConsent !== undefined) {
+      where.marketingConsent = marketingConsent === 'true';
     }
 
     if (startDate || endDate) {

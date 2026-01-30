@@ -205,10 +205,10 @@ interface LandingPageContent {
 // Default/fallback content
 const defaultHero: HeroContent = {
   badge: { icon: 'Zap', text: 'Automated Conversion Tracking' },
-  headline: 'Setup Google Tracking',
-  headlineHighlight: 'In One Click',
-  subtitle: 'Stop wasting hours on manual tag setup. OneClickTag automatically creates GTM tags, Google Ads conversions, and GA4 events in seconds.',
-  benefits: ['No coding required', 'GTM + Google Ads + GA4', 'Setup in 2 minutes'],
+  headline: 'Stop Wasting Hours on',
+  headlineHighlight: 'Google Tag Setup',
+  subtitle: 'OneClickTag automatically creates GTM tags, Google Ads conversions, and GA4 events in seconds. What takes 30 minutes manually takes just 2 minutes here.',
+  benefits: ['No coding required', 'GTM + Google Ads + GA4', 'Live in 2 minutes'],
   primaryCTA: {
     url: EARLY_ACCESS_MODE ? '/early-access' : '/register',
     text: EARLY_ACCESS_MODE ? 'Join Waitlist' : 'Start Free Trial'
@@ -220,9 +220,9 @@ const defaultHero: HeroContent = {
 };
 
 const defaultFeatures: FeaturesContent = {
-  title: 'Everything You Need',
-  titleHighlight: 'In One Platform',
-  subtitle: 'Stop juggling multiple tools. OneClickTag brings all your tracking needs together in one simple interface.',
+  title: 'GTM, Google Ads & GA4',
+  titleHighlight: 'All Automated',
+  subtitle: 'Three tools. One click. Zero headaches. OneClickTag connects everything so you never have to manually configure tracking again.',
   features: [
     { icon: 'Tag', title: 'Google Tag Manager', description: 'Automatically create tags, triggers, and variables in your GTM container.' },
     { icon: 'Target', title: 'Google Ads Integration', description: 'Sync conversion actions to Google Ads instantly.' },
@@ -231,8 +231,8 @@ const defaultFeatures: FeaturesContent = {
 };
 
 const defaultHowItWorks: HowItWorksContent = {
-  title: 'How It Works',
-  subtitle: 'Get up and running in minutes, not hours.',
+  title: 'Live Tracking in 3 Simple Steps',
+  subtitle: 'See how simple conversion tracking can be.',
   steps: [
     { step: '01', icon: 'MousePointerClick', title: 'Connect Google Account', description: 'One-click OAuth connection.' },
     { step: '02', icon: 'Link2', title: 'Configure Tracking', description: 'Select what you want to track.' },
@@ -241,19 +241,23 @@ const defaultHowItWorks: HowItWorksContent = {
 };
 
 const defaultSocialProof: SocialProofContent = {
-  trustTitle: 'Trusted by Marketers',
+  trustTitle: 'Join 1,000+ Marketers Saving Hours Every Week',
   testimonials: [
-    { author: 'Sarah Johnson', role: 'Marketing Director', company: 'Digital Growth Co.', quote: 'OneClickTag cut our tracking setup time from hours to minutes.' },
-    { author: 'Michael Chen', role: 'Performance Marketer', company: 'AdScale Agency', quote: 'The automation is incredible.' },
+    { author: 'Sarah Johnson', role: 'Marketing Director', company: 'Digital Growth Co.', quote: 'OneClickTag cut our tracking setup time from hours to minutes. Game changer!' },
+    { author: 'Michael Chen', role: 'Performance Marketer', company: 'AdScale Agency', quote: 'The automation is incredible. No more manual GTM setup headaches.' },
+    { author: 'Emily Rodriguez', role: 'Head of Growth', company: 'TechStart Inc.', quote: 'Finally, a tool that understands what marketers actually need.' },
+    { author: 'David Kim', role: 'Digital Marketing Lead', company: 'E-Commerce Pro', quote: 'Saved us 10+ hours per week on conversion tracking setup.' },
+    { author: 'Jessica Taylor', role: 'Agency Owner', company: 'Growth Labs', quote: 'Our clients love how fast we can now deploy tracking. Essential tool.' },
+    { author: 'Alex Thompson', role: 'PPC Specialist', company: 'AdVantage Media', quote: 'Best investment for our agency this year. ROI tracking made simple.' },
   ],
 };
 
 const defaultCta: CtaContent = {
-  headline: 'Ready to Transform Your',
-  headlineSecondLine: 'Tracking Workflow?',
+  headline: 'Start Tracking in 2 Minutes.',
+  headlineSecondLine: 'Free for 14 Days.',
   subtitle: EARLY_ACCESS_MODE
     ? 'Join the waitlist to be among the first to experience OneClickTag when we launch.'
-    : 'Join 1,000+ marketers who are saving hours every week with automated tracking setup.',
+    : 'No credit card required. Cancel anytime. Your first conversion tracking setup is just clicks away.',
   primaryCTA: {
     url: EARLY_ACCESS_MODE ? '/early-access' : '/register',
     text: EARLY_ACCESS_MODE ? 'Join Waitlist' : 'Start Free Trial'
@@ -562,8 +566,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Testimonials Section */}
-      <section ref={testimonialsRef} className="py-16 sm:py-20 bg-white">
+      {/* Testimonials Section - Marquee Animation */}
+      <section ref={testimonialsRef} className="py-16 sm:py-20 bg-white overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div
             className={`text-center mb-12 sm:mb-16 transform transition-all duration-700 ${
@@ -574,40 +578,35 @@ export default function LandingPage() {
               {socialProofData.trustTitle || defaultSocialProof.trustTitle}
             </h2>
           </div>
+        </div>
+        {/* Marquee container */}
+        <div
+          className={`relative transform transition-all duration-700 group ${
+            testimonialsInView ? 'opacity-100' : 'opacity-0'
+          }`}
+        >
           {(() => {
             const testimonials = (socialProofData.testimonials || defaultSocialProof.testimonials || []).filter((t) => t.isActive !== false);
-            const count = testimonials.length;
-            // Dynamic grid based on testimonial count
-            const gridClass = count === 1
-              ? 'grid grid-cols-1 max-w-lg mx-auto gap-8'
-              : count === 2
-              ? 'grid grid-cols-1 md:grid-cols-2 max-w-4xl mx-auto gap-8'
-              : count === 4
-              ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8'
-              : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8';
+            // Duplicate testimonials for seamless loop
+            const duplicatedTestimonials = [...testimonials, ...testimonials];
             return (
-              <div className={gridClass}>
-                {testimonials.map((testimonial, index) => (
+              <div className="flex animate-marquee group-hover:[animation-play-state:paused]">
+                {duplicatedTestimonials.map((testimonial, index) => (
                   <div
-                    key={testimonial.id || index}
-                    className={`bg-white rounded-xl p-8 shadow-sm border border-gray-200 transform transition-all duration-500 ${
-                      testimonialsInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-                    }`}
-                    style={{
-                      transitionDelay: testimonialsInView ? `${100 + index * 100}ms` : '0ms',
-                    }}
+                    key={`${testimonial.id || index}-${index}`}
+                    className="flex-shrink-0 w-80 mx-3 bg-white rounded-xl p-6 shadow-sm border border-gray-200 transition-all duration-300 hover:shadow-lg hover:scale-105 hover:-translate-y-1 hover:border-blue-300 cursor-pointer"
                   >
-                    <div className="flex mb-4">
+                    <div className="flex mb-3">
                       {[...Array(5)].map((_, i) => (
-                        <Star key={i} className="w-5 h-5 text-yellow-400 fill-current" />
+                        <Star key={i} className="w-4 h-4 text-yellow-400 fill-current" />
                       ))}
                     </div>
-                    <p className="text-gray-700 mb-6 leading-relaxed">
+                    <p className="text-gray-700 mb-4 leading-relaxed text-sm">
                       &ldquo;{testimonial.quote}&rdquo;
                     </p>
                     <div>
-                      <p className="font-semibold text-gray-900">{testimonial.author}</p>
-                      <p className="text-sm text-gray-600">
+                      <p className="font-semibold text-gray-900 text-sm">{testimonial.author}</p>
+                      <p className="text-xs text-gray-600">
                         {testimonial.role} at {testimonial.company}
                       </p>
                     </div>
