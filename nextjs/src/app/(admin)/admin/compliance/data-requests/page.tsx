@@ -49,15 +49,19 @@ export default function DataRequestsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
 
-  const { data: requests = [], isLoading, refetch } = useQuery({
+  const { data: requestsData, isLoading, refetch } = useQuery({
     queryKey: ['compliance', 'data-requests', statusFilter, typeFilter],
-    queryFn: () => {
+    queryFn: async () => {
       const params = new URLSearchParams();
       if (statusFilter !== 'all') params.set('status', statusFilter);
       if (typeFilter !== 'all') params.set('type', typeFilter);
-      return api.get<DataRequest[]>(`/api/compliance/data-requests?${params.toString()}`);
+      const response = await api.get<{ data: DataRequest[] } | DataRequest[]>(`/api/compliance/data-requests?${params.toString()}`);
+      // Handle both { data: DataRequest[] } and DataRequest[] response formats
+      return Array.isArray(response) ? response : (response?.data || []);
     },
   });
+
+  const requests = requestsData || [];
 
   const updateStatusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>

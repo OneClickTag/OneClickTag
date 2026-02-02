@@ -233,8 +233,12 @@ export function AdminUsersPage() {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {users.map((user) => (
-                    <tr key={user.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4">
+                    <tr
+                      key={user.id}
+                      className="hover:bg-gray-50 cursor-pointer"
+                      onClick={() => handleOpenEditModal(user)}
+                    >
+                      <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={selectedUsers.has(user.id)}
@@ -259,7 +263,7 @@ export function AdminUsersPage() {
                       <td className="px-6 py-4 text-sm text-gray-600">
                         {new Date(user.createdAt).toLocaleDateString()}
                       </td>
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <button
                           onClick={() => handleOpenEditModal(user)}
                           className="text-blue-600 hover:text-blue-900 text-sm font-medium mr-4"

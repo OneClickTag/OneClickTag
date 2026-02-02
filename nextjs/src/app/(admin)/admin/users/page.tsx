@@ -22,6 +22,14 @@ import {
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import {
   Search,
   Trash2,
   RefreshCw,
@@ -64,6 +72,13 @@ export default function AdminUsersPage() {
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState<SortField>('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    role: 'USER' as 'USER' | 'ADMIN' | 'SUPER_ADMIN',
+  });
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['admin', 'users', searchTerm, selectedRole, page, sortBy, sortOrder],
@@ -97,6 +112,24 @@ export default function AdminUsersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
       setSelectedUsers(new Set());
+    },
+  });
+
+  const createUserMutation = useMutation({
+    mutationFn: (userData: { name: string; email: string; role: string }) =>
+      api.post('/api/admin/users', userData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      handleCloseModal();
+    },
+  });
+
+  const updateUserMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: { name?: string; role?: string } }) =>
+      api.patch(`/api/admin/users/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      handleCloseModal();
     },
   });
 
@@ -150,6 +183,40 @@ export default function AdminUsersPage() {
       setSortOrder('asc');
     }
     setPage(1);
+  };
+
+  const handleOpenCreateModal = () => {
+    setEditingUser(null);
+    setFormData({ name: '', email: '', role: 'USER' });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (user: AdminUser) => {
+    setEditingUser(user);
+    setFormData({ name: user.name, email: user.email, role: user.role });
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setEditingUser(null);
+    setFormData({ name: '', email: '', role: 'USER' });
+  };
+
+  const handleSaveUser = async () => {
+    try {
+      if (editingUser) {
+        await updateUserMutation.mutateAsync({
+          id: editingUser.id,
+          data: { name: formData.name, role: formData.role },
+        });
+      } else {
+        await createUserMutation.mutateAsync(formData);
+      }
+    } catch (error) {
+      console.error('Failed to save user:', error);
+      alert('Failed to save user');
+    }
   };
 
   const getSortIcon = (field: SortField) => {
@@ -213,7 +280,7 @@ export default function AdminUsersPage() {
             <Download className="w-4 h-4 mr-2" />
             Export
           </Button>
-          <Button className="flex items-center space-x-2">
+          <Button onClick={handleOpenCreateModal} className="flex items-center space-x-2">
             <UserPlus className="w-4 h-4" />
             <span>Add User</span>
           </Button>
@@ -397,7 +464,10 @@ export default function AdminUsersPage() {
                         {new Date(user.createdAt).toLocaleDateString()}
                       </TableCell>
                       <TableCell className="text-right">
-                        <button className="text-blue-600 hover:text-blue-900 text-sm font-medium mr-4">
+                        <button
+                          onClick={() => handleOpenEditModal(user)}
+                          className="text-blue-600 hover:text-blue-900 text-sm font-medium mr-4"
+                        >
                           Edit
                         </button>
                         <button
@@ -456,6 +526,74 @@ export default function AdminUsersPage() {
           </>
         )}
       </div>
+
+      {/* Edit/Create User Modal */}
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editingUser ? 'Edit User' : 'Create New User'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Enter name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                placeholder="Enter email"
+                disabled={!!editingUser}
+              />
+              {editingUser && (
+                <p className="text-xs text-gray-500">Email cannot be changed after creation</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="role">Role</Label>
+              <Select
+                value={formData.role}
+                onValueChange={(value: 'USER' | 'ADMIN' | 'SUPER_ADMIN') =>
+                  setFormData({ ...formData, role: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="USER">User</SelectItem>
+                  <SelectItem value="ADMIN">Admin</SelectItem>
+                  <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCloseModal}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveUser}
+              disabled={createUserMutation.isPending || updateUserMutation.isPending}
+            >
+              {(createUserMutation.isPending || updateUserMutation.isPending) && (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              )}
+              {editingUser ? 'Update User' : 'Create User'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
