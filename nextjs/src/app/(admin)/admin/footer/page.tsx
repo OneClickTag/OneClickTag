@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApi } from '@/hooks/use-api';
+import { useAuth } from '@/components/providers/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -51,6 +52,7 @@ interface FooterSettings {
 
 export default function AdminFooterPage() {
   const api = useApi();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [formData, setFormData] = useState<FooterSettings>({
     brandName: '',
@@ -60,10 +62,11 @@ export default function AdminFooterPage() {
     socialLinks: [],
   });
 
-  const { isLoading, refetch } = useQuery({
+  const { isLoading, error, refetch } = useQuery({
     queryKey: ['admin', 'footer-content'],
     queryFn: async () => {
       const footer = await api.get<FooterSettings>('/api/admin/footer-content');
+      console.log('[AdminFooter] Loaded footer data:', footer);
       if (footer) {
         setFormData({
           ...footer,
@@ -73,14 +76,27 @@ export default function AdminFooterPage() {
       }
       return footer;
     },
+    enabled: !!user, // Only fetch when user is authenticated
+    retry: 1, // Retry once on failure
   });
+
+  // Show error state if query failed
+  if (error) {
+    console.error('[AdminFooter] Error loading footer:', error);
+  }
 
   const saveMutation = useMutation({
     mutationFn: (data: FooterSettings) =>
       api.put('/api/admin/footer-content', data),
     onSuccess: () => {
+      // Invalidate both admin and public footer queries
       queryClient.invalidateQueries({ queryKey: ['admin', 'footer-content'] });
+      queryClient.invalidateQueries({ queryKey: ['public', 'footer'] });
       alert('Footer settings saved successfully!');
+    },
+    onError: (error) => {
+      console.error('[AdminFooter] Error saving footer:', error);
+      alert(`Failed to save footer settings: ${error instanceof Error ? error.message : 'Unknown error'}`);
     },
   });
 
@@ -169,9 +185,16 @@ export default function AdminFooterPage() {
         </Button>
       </div>
 
-      {isLoading ? (
+      {isLoading || !user ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        </div>
+      ) : error ? (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-red-800">Failed to load footer settings: {error instanceof Error ? error.message : 'Unknown error'}</p>
+          <Button variant="outline" onClick={() => refetch()} className="mt-2">
+            Try Again
+          </Button>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-6">

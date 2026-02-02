@@ -33,28 +33,31 @@ export function EditContentModal({ page, isOpen, onClose, onSave }: EditContentM
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (page) {
-      setFormData({
-        slug: page.slug || '',
-        title: page.title || '',
-        content: page.content || '',
-        metaTitle: page.metaTitle || '',
-        metaDescription: page.metaDescription || '',
-        isPublished: page.isPublished ?? false,
-        order: page.order ?? 0,
-      });
-    } else {
-      setFormData({
-        slug: '',
-        title: '',
-        content: '',
-        metaTitle: '',
-        metaDescription: '',
-        isPublished: false,
-        order: 0,
-      });
+    // Reset form data whenever modal opens or page changes
+    if (isOpen) {
+      if (page) {
+        setFormData({
+          slug: page.slug || '',
+          title: page.title || '',
+          content: page.content || '',
+          metaTitle: page.metaTitle || '',
+          metaDescription: page.metaDescription || '',
+          isPublished: page.isPublished ?? false,
+          order: page.order ?? 0,
+        });
+      } else {
+        setFormData({
+          slug: '',
+          title: '',
+          content: '',
+          metaTitle: '',
+          metaDescription: '',
+          isPublished: false,
+          order: 0,
+        });
+      }
     }
-  }, [page]);
+  }, [page, isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

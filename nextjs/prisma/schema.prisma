@@ -11,17 +11,20 @@ datasource db {
 }
 
 model User {
-  id         String   @id @default(cuid())
-  email      String   @unique
-  name       String
-  password   String?
-  firebaseId String?  @unique
-  role       UserRole @default(USER)
-  tenantId   String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id          String    @id @default(cuid())
+  email       String    @unique
+  name        String
+  password    String?
+  firebaseId  String?   @unique
+  role        UserRole  @default(USER)
+  tenantId    String?
+  planId      String?
+  planEndDate DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   tenant      Tenant?      @relation(fields: [tenantId], references: [id])
+  plan        Plan?        @relation(fields: [planId], references: [id])
   oauthTokens OAuthToken[]
 
   // Compliance relations
@@ -30,6 +33,7 @@ model User {
   assignedDataRequests DataAccessRequest[] @relation("AssignedRequests")
   apiAuditLogs         ApiAuditLog[]
 
+  @@index([planId])
   @@map("users")
 }
 
@@ -457,6 +461,8 @@ model Plan {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  users User[]
+
   @@index([isActive])
   @@index([order])
   @@map("plans")
@@ -487,6 +493,7 @@ model SiteSettings {
   socialImageUrl    String? // OG image
   customCSS         String?  @db.Text
   customJS          String?  @db.Text
+  seoSettings       Json? // Advanced SEO: {googleAnalyticsId, googleTagManagerId, robotsNoIndex, robotsNoFollow, canonicalUrl, twitterCardType, ogType, structuredData}
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   updatedBy         String?

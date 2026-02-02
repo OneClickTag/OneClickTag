@@ -2,6 +2,31 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEmail, IsString, IsEnum, IsOptional, IsArray, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 
+export class CreateUserDto {
+  @ApiProperty()
+  @IsString()
+  name: string;
+
+  @ApiProperty()
+  @IsEmail()
+  email: string;
+
+  @ApiPropertyOptional({ enum: ['USER', 'ADMIN', 'SUPER_ADMIN'], default: 'USER' })
+  @IsOptional()
+  @IsEnum(['USER', 'ADMIN', 'SUPER_ADMIN'])
+  role?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  tenantId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
 export class UpdateUserDto {
   @ApiPropertyOptional()
   @IsOptional()
@@ -22,6 +47,11 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   tenantId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 export class BatchDeleteUsersDto {

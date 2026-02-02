@@ -184,6 +184,7 @@ export const apiEndpoints = {
     landingSection: (key: string) => `/v1/landing/${key}`,
     siteSettings: '/v1/site-settings/global',
     contact: '/v1/contact',
+    footer: '/v1/footer',
   },
 
   // Leads endpoints (public)

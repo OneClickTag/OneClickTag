@@ -14,7 +14,7 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { AdminOnly } from '../../auth/decorators/roles.decorator';
 import { AdminUsersService } from '../services/admin-users.service';
-import { UpdateUserDto, BatchDeleteUsersDto, BatchUpdateRoleDto, UserQueryDto } from '../dto/admin-user.dto';
+import { CreateUserDto, UpdateUserDto, BatchDeleteUsersDto, BatchUpdateRoleDto, UserQueryDto } from '../dto/admin-user.dto';
 
 @ApiTags('Admin - Users')
 @Controller('v1/admin/users')
@@ -29,6 +29,14 @@ export class AdminUsersController {
   @ApiResponse({ status: 200, description: 'Users retrieved successfully' })
   async findAll(@Query() query: UserQueryDto) {
     return this.adminUsersService.findAll(query);
+  }
+
+  @Post()
+  @ApiOperation({ summary: 'Create new user' })
+  @ApiResponse({ status: 201, description: 'User created successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid input or email already exists' })
+  async create(@Body() createUserDto: CreateUserDto) {
+    return this.adminUsersService.create(createUserDto);
   }
 
   @Get('stats')

@@ -80,19 +80,21 @@ export interface SiteSettings {
 
 export interface ContactPageContent {
   id: string;
-  headline: string;
-  subheadline: string;
-  emailLabel: string;
-  emailPlaceholder: string;
-  messageLabel: string;
-  messagePlaceholder: string;
-  submitButtonText: string;
-  successMessage: string;
-  errorMessage: string;
-  contactInfo: {
-    email?: string;
-    phone?: string;
-    address?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  businessHours?: string;
+  socialLinks?: Array<{ platform: string; url: string }>;
+  faqs?: Array<{ question: string; answer: string }>;
+  formSettings?: {
+    enableForm: boolean;
+    emailTo: string;
+    successMessage: string;
+    subjects: string[];
+    showEmail?: boolean;
+    showPhone?: boolean;
+    showAddress?: boolean;
+    showBusinessHours?: boolean;
   };
   isActive: boolean;
   createdAt: string;
@@ -152,49 +154,7 @@ export const publicService = {
    * Get footer configuration
    */
   async getFooterConfig(): Promise<FooterConfig> {
-    // Try localStorage first (for admin-configured footer)
-    const saved = localStorage.getItem('footer_config');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (error) {
-        console.error('Failed to parse footer config from localStorage:', error);
-      }
-    }
-
-    // Fallback to default config
-    return {
-      id: 'default',
-      brandName: 'OneClickTag',
-      brandDescription: 'Simplify your conversion tracking with automated GTM and Google Ads integration.',
-      socialLinks: [
-        { platform: 'Twitter', url: 'https://twitter.com/oneclicktag', icon: 'twitter' },
-        { platform: 'LinkedIn', url: 'https://linkedin.com/company/oneclicktag', icon: 'linkedin' },
-        { platform: 'GitHub', url: 'https://github.com/oneclicktag', icon: 'github' },
-      ],
-      sections: [
-        {
-          title: 'Product',
-          links: [
-            { label: 'Pricing', url: '/plans' },
-          ],
-        },
-        {
-          title: 'Company',
-          links: [
-            { label: 'About Us', url: '/about' },
-            { label: 'Contact', url: '/contact' },
-          ],
-        },
-        {
-          title: 'Legal',
-          links: [
-            { label: 'Terms of Service', url: '/terms' },
-            { label: 'Privacy Policy', url: '/privacy' },
-          ],
-        },
-      ],
-      copyrightText: 'OneClickTag. All rights reserved.',
-    };
+    const response = await publicApi.get<FooterConfig>(apiEndpoints.public.footer);
+    return response.data;
   },
 };

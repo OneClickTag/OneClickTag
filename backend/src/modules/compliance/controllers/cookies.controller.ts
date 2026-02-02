@@ -46,6 +46,23 @@ export class CookiesController {
     required: false,
     description: 'Filter by cookie category ID',
   })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    description: 'Page number (default: 1)',
+    type: Number,
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Number of records per page (default: 10)',
+    type: Number,
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: 'Search term for cookie name or provider',
+  })
   @ApiResponse({
     status: 200,
     description: 'Cookies retrieved successfully',
@@ -53,10 +70,19 @@ export class CookiesController {
   async findAll(
     @CurrentUser() user: AuthenticatedUser,
     @Query('categoryId') categoryId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
   ) {
+    const pageNum = parseInt(page || '1', 10);
+    const limitNum = parseInt(limit || '10', 10);
+
     return this.cookieManagementService.findAllCookies(
       user.tenantId,
       categoryId,
+      pageNum,
+      limitNum,
+      search,
     );
   }
 
@@ -170,7 +196,7 @@ export class CookiesController {
     await this.cookieManagementService.deleteCookie(id, user.tenantId);
   }
 
-  @Delete()
+  @Post('bulk-delete')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
     summary: 'Bulk delete cookies',

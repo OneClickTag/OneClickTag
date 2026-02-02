@@ -106,22 +106,55 @@ export class CookieManagementService {
   // ========================================
 
   /**
-   * Find all cookies for a tenant
-   * Optionally filter by category
+   * Find all cookies for a tenant with pagination
+   * Optionally filter by category and search
    */
-  async findAllCookies(tenantId: string, categoryId?: string) {
-    return this.prisma.cookie.findMany({
-      where: {
-        tenantId,
-        ...(categoryId && { categoryId }),
+  async findAllCookies(
+    tenantId: string,
+    categoryId?: string,
+    page = 1,
+    limit = 10,
+    search?: string,
+  ) {
+    const skip = (page - 1) * limit;
+
+    const where: any = {
+      tenantId,
+      ...(categoryId && { categoryId }),
+    };
+
+    // Add search filter
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { provider: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.cookie.findMany({
+        where,
+        include: {
+          category: true,
+        },
+        orderBy: {
+          name: 'asc',
+        },
+        skip,
+        take: limit,
+      }),
+      this.prisma.cookie.count({ where }),
+    ]);
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
       },
-      include: {
-        category: true,
-      },
-      orderBy: {
-        name: 'asc',
-      },
-    });
+    };
   }
 
   /**

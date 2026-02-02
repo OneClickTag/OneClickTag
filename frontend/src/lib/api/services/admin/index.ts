@@ -7,3 +7,4 @@ export * from './adminContactService';
 export * from './adminLeadsService';
 export * from './adminQuestionnaireService';
 export * from './adminComplianceService';
+export * from './adminFooterService';

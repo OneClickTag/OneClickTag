@@ -12,62 +12,125 @@ import {
   TrendingUp,
   CheckCircle,
   Sparkles,
+  Star,
+  type LucideIcon,
 } from 'lucide-react';
 
 const EARLY_ACCESS_MODE = process.env.NEXT_PUBLIC_EARLY_ACCESS_MODE === 'true';
 
+// Icon mapping for dynamic icons
+const iconMap: Record<string, LucideIcon> = {
+  Zap,
+  Target,
+  Users,
+  TrendingUp,
+  CheckCircle,
+  Sparkles,
+  Star,
+};
+
+interface AboutContent {
+  hero: {
+    badge: string;
+    headline: string;
+    headlineHighlight: string;
+    subtitle: string;
+  };
+  mission: {
+    title: string;
+    description: string;
+  };
+  features: Array<{
+    icon: string;
+    title: string;
+    description: string;
+  }>;
+  values: Array<{
+    title: string;
+    description: string;
+  }>;
+  story: {
+    title: string;
+    paragraphs: string[];
+  };
+  cta: {
+    headline: string;
+    subtitle: string;
+    primaryButton: { text: string; url: string };
+    secondaryButton: { text: string; url: string };
+  };
+}
+
+// Default content (fallback)
+const defaultContent: AboutContent = {
+  hero: {
+    badge: 'About OneClickTag',
+    headline: 'Simplifying',
+    headlineHighlight: 'Conversion Tracking',
+    subtitle: "We're on a mission to make Google Tag Manager and conversion tracking accessible to everyone. No coding required, no headaches—just results.",
+  },
+  mission: {
+    title: 'Our Mission',
+    description: 'To empower businesses of all sizes with enterprise-level tracking capabilities. We believe that every business deserves access to accurate data and powerful insights, regardless of technical expertise or budget.',
+  },
+  features: [
+    { icon: 'Zap', title: 'Lightning Fast Setup', description: 'Get your tracking up and running in minutes, not hours. No technical expertise required.' },
+    { icon: 'Target', title: 'Precision Tracking', description: 'Accurate conversion tracking that helps you measure what matters most to your business.' },
+    { icon: 'Users', title: 'Built for Teams', description: 'Collaborate seamlessly with your team members and stakeholders in real-time.' },
+    { icon: 'TrendingUp', title: 'Data-Driven Growth', description: 'Make informed decisions with comprehensive analytics and actionable insights.' },
+  ],
+  values: [
+    { title: 'Simplicity First', description: 'We believe powerful tools should be easy to use.' },
+    { title: 'Customer Success', description: "Your growth is our success. We're here to help you win." },
+    { title: 'Innovation', description: 'Constantly improving and adapting to the latest marketing trends.' },
+    { title: 'Transparency', description: 'Clear pricing, honest communication, and no hidden surprises.' },
+  ],
+  story: {
+    title: 'Our Story',
+    paragraphs: [
+      "OneClickTag was born from a simple frustration: setting up conversion tracking shouldn't require a computer science degree. Our founders, experienced marketers themselves, spent countless hours wrestling with Google Tag Manager configurations, only to realize that most of the process could be automated.",
+      "We built OneClickTag to eliminate the complexity and technical barriers that prevent businesses from accessing crucial conversion data. What used to take hours of development time now takes just minutes with our intuitive platform.",
+      "Today, we're proud to help thousands of businesses track their conversions accurately and make data-driven decisions with confidence. And we're just getting started.",
+    ],
+  },
+  cta: {
+    headline: 'Ready to Get Started?',
+    subtitle: 'Join thousands of businesses already tracking their conversions with OneClickTag',
+    primaryButton: { text: 'Start Free Trial', url: '/register' },
+    secondaryButton: { text: 'Contact Us', url: '/contact' },
+  },
+};
+
 export default function AboutPage() {
   const [isVisible, setIsVisible] = useState(false);
+  const [content, setContent] = useState<AboutContent>(defaultContent);
 
   useEffect(() => {
     setIsVisible(true);
+
+    // Fetch content from API
+    fetch('/api/pages/about')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.content) {
+          setContent({
+            hero: data.content.hero || defaultContent.hero,
+            mission: data.content.mission || defaultContent.mission,
+            features: data.content.features || defaultContent.features,
+            values: data.content.values || defaultContent.values,
+            story: data.content.story || defaultContent.story,
+            cta: data.content.cta || defaultContent.cta,
+          });
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to fetch about page content:', err);
+      });
   }, []);
 
-  const features = [
-    {
-      icon: Zap,
-      title: 'Lightning Fast Setup',
-      description:
-        'Get your tracking up and running in minutes, not hours. No technical expertise required.',
-    },
-    {
-      icon: Target,
-      title: 'Precision Tracking',
-      description:
-        'Accurate conversion tracking that helps you measure what matters most to your business.',
-    },
-    {
-      icon: Users,
-      title: 'Built for Teams',
-      description:
-        'Collaborate seamlessly with your team members and stakeholders in real-time.',
-    },
-    {
-      icon: TrendingUp,
-      title: 'Data-Driven Growth',
-      description:
-        'Make informed decisions with comprehensive analytics and actionable insights.',
-    },
-  ];
-
-  const values = [
-    {
-      title: 'Simplicity First',
-      description: 'We believe powerful tools should be easy to use.',
-    },
-    {
-      title: 'Customer Success',
-      description: "Your growth is our success. We're here to help you win.",
-    },
-    {
-      title: 'Innovation',
-      description: 'Constantly improving and adapting to the latest marketing trends.',
-    },
-    {
-      title: 'Transparency',
-      description: 'Clear pricing, honest communication, and no hidden surprises.',
-    },
-  ];
+  const getIcon = (iconName: string): LucideIcon => {
+    return iconMap[iconName] || Zap;
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
@@ -84,19 +147,16 @@ export default function AboutPage() {
         >
           <div className="inline-flex items-center space-x-2 bg-blue-100 text-blue-800 px-4 py-2 rounded-full text-sm font-medium mb-6">
             <Sparkles className="w-4 h-4" />
-            <span>About OneClickTag</span>
+            <span>{content.hero.badge}</span>
           </div>
           <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6 leading-tight">
-            Simplifying
+            {content.hero.headline}
             <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              {' '}
-              Conversion Tracking
+              {' '}{content.hero.headlineHighlight}
             </span>
           </h1>
           <p className="text-xl text-gray-600 leading-relaxed max-w-3xl mx-auto">
-            We&apos;re on a mission to make Google Tag Manager and conversion
-            tracking accessible to everyone. No coding required, no
-            headaches&mdash;just results.
+            {content.hero.subtitle}
           </p>
         </div>
       </section>
@@ -105,12 +165,9 @@ export default function AboutPage() {
       <section className="py-16 bg-white">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl p-12 text-white text-center shadow-2xl transform hover:scale-105 transition-transform duration-300">
-            <h2 className="text-3xl font-bold mb-4">Our Mission</h2>
+            <h2 className="text-3xl font-bold mb-4">{content.mission.title}</h2>
             <p className="text-lg leading-relaxed opacity-90">
-              To empower businesses of all sizes with enterprise-level tracking
-              capabilities. We believe that every business deserves access to
-              accurate data and powerful insights, regardless of technical
-              expertise or budget.
+              {content.mission.description}
             </p>
           </div>
         </div>
@@ -128,8 +185,8 @@ export default function AboutPage() {
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {features.map((feature, index) => {
-              const Icon = feature.icon;
+            {content.features.map((feature, index) => {
+              const Icon = getIcon(feature.icon);
               return (
                 <div
                   key={index}
@@ -166,7 +223,7 @@ export default function AboutPage() {
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {values.map((value, index) => (
+            {content.values.map((value, index) => (
               <div
                 key={index}
                 className={`text-center p-6 transition-all duration-300 ${
@@ -195,27 +252,14 @@ export default function AboutPage() {
       <section className="py-20 bg-gradient-to-b from-gray-50 to-white">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <h2 className="text-4xl font-bold text-gray-900 mb-4">Our Story</h2>
+            <h2 className="text-4xl font-bold text-gray-900 mb-4">{content.story.title}</h2>
           </div>
           <div className="prose prose-lg prose-blue max-w-none">
-            <p className="text-gray-700 leading-relaxed mb-6">
-              OneClickTag was born from a simple frustration: setting up
-              conversion tracking shouldn&apos;t require a computer science
-              degree. Our founders, experienced marketers themselves, spent
-              countless hours wrestling with Google Tag Manager configurations,
-              only to realize that most of the process could be automated.
-            </p>
-            <p className="text-gray-700 leading-relaxed mb-6">
-              We built OneClickTag to eliminate the complexity and technical
-              barriers that prevent businesses from accessing crucial conversion
-              data. What used to take hours of development time now takes just
-              minutes with our intuitive platform.
-            </p>
-            <p className="text-gray-700 leading-relaxed">
-              Today, we&apos;re proud to help thousands of businesses track
-              their conversions accurately and make data-driven decisions with
-              confidence. And we&apos;re just getting started.
-            </p>
+            {content.story.paragraphs.map((paragraph, index) => (
+              <p key={index} className="text-gray-700 leading-relaxed mb-6">
+                {paragraph}
+              </p>
+            ))}
           </div>
         </div>
       </section>
@@ -224,29 +268,29 @@ export default function AboutPage() {
       <section className="py-20 bg-gradient-to-r from-blue-600 to-purple-600">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-4xl font-bold text-white mb-6">
-            {EARLY_ACCESS_MODE ? 'Be Among the First' : 'Ready to Get Started?'}
+            {EARLY_ACCESS_MODE ? 'Be Among the First' : content.cta.headline}
           </h2>
           <p className="text-xl text-blue-100 mb-8 leading-relaxed">
             {EARLY_ACCESS_MODE
               ? 'Join our waitlist to get early access when we launch'
-              : 'Join thousands of businesses already tracking their conversions with OneClickTag'}
+              : content.cta.subtitle}
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href={EARLY_ACCESS_MODE ? '/early-access' : '/register'}>
+            <Link href={EARLY_ACCESS_MODE ? '/early-access' : (content.cta.primaryButton?.url || '/register')}>
               <Button
                 size="lg"
                 className="text-lg px-8 py-6 bg-white text-blue-600 hover:bg-gray-100"
               >
-                {EARLY_ACCESS_MODE ? 'Join Waitlist' : 'Start Free Trial'}
+                {EARLY_ACCESS_MODE ? 'Join Waitlist' : (content.cta.primaryButton?.text || 'Start Free Trial')}
               </Button>
             </Link>
-            <Link href="/contact">
+            <Link href={content.cta.secondaryButton?.url || '/contact'}>
               <Button
                 size="lg"
                 variant="outline"
                 className="text-lg px-8 py-6 bg-transparent text-white border-white hover:bg-white hover:text-blue-600"
               >
-                Contact Us
+                {content.cta.secondaryButton?.text || 'Contact Us'}
               </Button>
             </Link>
           </div>

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -11,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Save, RefreshCw, Eye, Layout } from 'lucide-react';
+import { Save, RefreshCw, Eye, Layout, Link as LinkIcon, Shield } from 'lucide-react';
 import {
   adminComplianceService,
   ConsentBanner,
@@ -31,11 +32,19 @@ export function CookieBannerPage() {
     acceptAllButtonText: '',
     rejectAllButtonText: '',
     customizeButtonText: '',
+    savePreferencesText: '',
+    backgroundColor: '#ffffff',
+    textColor: '#1F2937',
     acceptButtonColor: '#3B82F6',
     rejectButtonColor: '#6B7280',
-    textColor: '#1F2937',
+    customizeButtonColor: '#6B7280',
     position: 'bottom',
     consentExpiryDays: 365,
+    showOnEveryPage: true,
+    blockCookiesUntilConsent: true,
+    privacyPolicyUrl: '/privacy',
+    cookiePolicyUrl: '/cookie-policy',
+    isActive: true,
   });
 
   const fetchBanner = async () => {
@@ -50,11 +59,19 @@ export function CookieBannerPage() {
         acceptAllButtonText: data.acceptAllButtonText,
         rejectAllButtonText: data.rejectAllButtonText,
         customizeButtonText: data.customizeButtonText,
+        savePreferencesText: data.savePreferencesText,
+        backgroundColor: data.backgroundColor,
+        textColor: data.textColor,
         acceptButtonColor: data.acceptButtonColor,
         rejectButtonColor: data.rejectButtonColor,
-        textColor: data.textColor,
+        customizeButtonColor: data.customizeButtonColor,
         position: data.position,
         consentExpiryDays: data.consentExpiryDays,
+        showOnEveryPage: data.showOnEveryPage,
+        blockCookiesUntilConsent: data.blockCookiesUntilConsent,
+        privacyPolicyUrl: data.privacyPolicyUrl,
+        cookiePolicyUrl: data.cookiePolicyUrl,
+        isActive: data.isActive,
       });
     } catch (error: any) {
       console.error('Failed to fetch consent banner:', error);
@@ -163,7 +180,7 @@ export function CookieBannerPage() {
               <div
                 className="max-w-2xl mx-auto p-6 rounded-lg shadow-xl"
                 style={{
-                  backgroundColor: '#ffffff',
+                  backgroundColor: formData.backgroundColor,
                   borderColor: formData.acceptButtonColor,
                   borderWidth: '2px',
                 }}
@@ -182,21 +199,22 @@ export function CookieBannerPage() {
                     {formData.acceptAllButtonText}
                   </button>
                   <button
-                    className="px-4 py-2 rounded-md font-medium"
-                    style={{
-                      backgroundColor: formData.rejectButtonColor,
-                      color: '#ffffff',
-                    }}
+                    className="px-4 py-2 rounded-md font-medium text-white"
+                    style={{ backgroundColor: formData.rejectButtonColor }}
                   >
                     {formData.rejectAllButtonText}
                   </button>
-                  <button className="px-4 py-2 rounded-md font-medium underline" style={{ color: formData.textColor }}>
+                  <button
+                    className="px-4 py-2 rounded-md font-medium"
+                    style={{ backgroundColor: formData.customizeButtonColor, color: '#ffffff' }}
+                  >
                     {formData.customizeButtonText}
                   </button>
                 </div>
               </div>
               <div className="text-center mt-4 text-sm text-gray-500">
                 Position: {formData.position} • Consent expires after {formData.consentExpiryDays} days
+                {!formData.isActive && <span className="ml-2 text-red-500">(Inactive)</span>}
               </div>
             </div>
           </div>
@@ -227,7 +245,7 @@ export function CookieBannerPage() {
                 className="w-full"
               />
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="acceptAllButtonText">Accept Button Text *</Label>
                 <Input
@@ -258,6 +276,16 @@ export function CookieBannerPage() {
                   className="w-full"
                 />
               </div>
+              <div>
+                <Label htmlFor="savePreferencesText">Save Preferences Text *</Label>
+                <Input
+                  id="savePreferencesText"
+                  value={formData.savePreferencesText}
+                  onChange={(e) => updateFormData('savePreferencesText', e.target.value)}
+                  placeholder="Save Preferences"
+                  className="w-full"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -265,9 +293,49 @@ export function CookieBannerPage() {
         {/* Banner Styling */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Banner Styling</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div>
+              <Label htmlFor="backgroundColor">Background Color *</Label>
+              <div className="flex items-center space-x-3">
+                <input
+                  type="color"
+                  value={formData.backgroundColor}
+                  onChange={(e) => updateFormData('backgroundColor', e.target.value)}
+                  className="w-12 h-10 border border-gray-300 rounded cursor-pointer"
+                />
+                <Input
+                  type="text"
+                  value={formData.backgroundColor}
+                  onChange={(e) => updateFormData('backgroundColor', e.target.value)}
+                  placeholder="#ffffff"
+                  className="flex-1"
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Banner background color</p>
+            </div>
+            <div>
+              <Label htmlFor="textColor">Text Color *</Label>
+              <div className="flex items-center space-x-3">
+                <input
+                  type="color"
+                  value={formData.textColor}
+                  onChange={(e) => updateFormData('textColor', e.target.value)}
+                  className="w-12 h-10 border border-gray-300 rounded cursor-pointer"
+                />
+                <Input
+                  type="text"
+                  value={formData.textColor}
+                  onChange={(e) => updateFormData('textColor', e.target.value)}
+                  placeholder="#1F2937"
+                  className="flex-1"
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Heading and body text color</p>
+            </div>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
-              <Label htmlFor="acceptButtonColor">Primary Color *</Label>
+              <Label htmlFor="acceptButtonColor">Accept Button Color *</Label>
               <div className="flex items-center space-x-3">
                 <input
                   type="color"
@@ -285,7 +353,7 @@ export function CookieBannerPage() {
               </div>
             </div>
             <div>
-              <Label htmlFor="rejectButtonColor">Secondary Color *</Label>
+              <Label htmlFor="rejectButtonColor">Reject Button Color *</Label>
               <div className="flex items-center space-x-3">
                 <input
                   type="color"
@@ -303,19 +371,19 @@ export function CookieBannerPage() {
               </div>
             </div>
             <div>
-              <Label htmlFor="textColor">Text Color *</Label>
+              <Label htmlFor="customizeButtonColor">Customize Button Color *</Label>
               <div className="flex items-center space-x-3">
                 <input
                   type="color"
-                  value={formData.textColor}
-                  onChange={(e) => updateFormData('textColor', e.target.value)}
+                  value={formData.customizeButtonColor}
+                  onChange={(e) => updateFormData('customizeButtonColor', e.target.value)}
                   className="w-12 h-10 border border-gray-300 rounded cursor-pointer"
                 />
                 <Input
                   type="text"
-                  value={formData.textColor}
-                  onChange={(e) => updateFormData('textColor', e.target.value)}
-                  placeholder="#1F2937"
+                  value={formData.customizeButtonColor}
+                  onChange={(e) => updateFormData('customizeButtonColor', e.target.value)}
+                  placeholder="#6B7280"
                   className="flex-1"
                 />
               </div>
@@ -354,6 +422,78 @@ export function CookieBannerPage() {
                 className="w-full"
               />
               <p className="text-xs text-gray-500 mt-1">How long the user's consent choice is remembered (1-730 days)</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Behavior Settings */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center space-x-2 mb-4">
+            <Shield className="w-5 h-5 text-gray-600" />
+            <h3 className="text-lg font-semibold text-gray-900">Behavior Settings</h3>
+          </div>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between py-3 border-b border-gray-100">
+              <div>
+                <Label className="text-base">Banner Active</Label>
+                <p className="text-sm text-gray-500">Enable or disable the cookie consent banner</p>
+              </div>
+              <Switch
+                checked={formData.isActive}
+                onCheckedChange={(checked) => updateFormData('isActive', checked)}
+              />
+            </div>
+            <div className="flex items-center justify-between py-3 border-b border-gray-100">
+              <div>
+                <Label className="text-base">Show on Every Page</Label>
+                <p className="text-sm text-gray-500">Display banner on all pages until consent is given</p>
+              </div>
+              <Switch
+                checked={formData.showOnEveryPage}
+                onCheckedChange={(checked) => updateFormData('showOnEveryPage', checked)}
+              />
+            </div>
+            <div className="flex items-center justify-between py-3">
+              <div>
+                <Label className="text-base">Block Cookies Until Consent</Label>
+                <p className="text-sm text-gray-500">Prevent non-essential cookies from being set until user consents (GDPR recommended)</p>
+              </div>
+              <Switch
+                checked={formData.blockCookiesUntilConsent}
+                onCheckedChange={(checked) => updateFormData('blockCookiesUntilConsent', checked)}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Policy Links */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center space-x-2 mb-4">
+            <LinkIcon className="w-5 h-5 text-gray-600" />
+            <h3 className="text-lg font-semibold text-gray-900">Policy Links</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <Label htmlFor="privacyPolicyUrl">Privacy Policy URL</Label>
+              <Input
+                id="privacyPolicyUrl"
+                value={formData.privacyPolicyUrl}
+                onChange={(e) => updateFormData('privacyPolicyUrl', e.target.value)}
+                placeholder="/privacy"
+                className="w-full"
+              />
+              <p className="text-xs text-gray-500 mt-1">Link to your privacy policy page</p>
+            </div>
+            <div>
+              <Label htmlFor="cookiePolicyUrl">Cookie Policy URL</Label>
+              <Input
+                id="cookiePolicyUrl"
+                value={formData.cookiePolicyUrl}
+                onChange={(e) => updateFormData('cookiePolicyUrl', e.target.value)}
+                placeholder="/cookie-policy"
+                className="w-full"
+              />
+              <p className="text-xs text-gray-500 mt-1">Link to your cookie policy page</p>
             </div>
           </div>
         </div>

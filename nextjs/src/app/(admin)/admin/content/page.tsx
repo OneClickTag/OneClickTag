@@ -1,9 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApi } from '@/hooks/use-api';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import {
   FileText,
   Plus,
@@ -19,14 +29,37 @@ interface ContentPage {
   id: string;
   title: string;
   slug: string;
+  content?: string;
+  metaTitle?: string;
   metaDescription?: string;
   isPublished: boolean;
   updatedAt: string;
 }
 
+interface PageFormData {
+  title: string;
+  slug: string;
+  content: string;
+  metaTitle: string;
+  metaDescription: string;
+  isPublished: boolean;
+}
+
+const initialFormData: PageFormData = {
+  title: '',
+  slug: '',
+  content: '',
+  metaTitle: '',
+  metaDescription: '',
+  isPublished: false,
+};
+
 export default function AdminContentPage() {
   const api = useApi();
   const queryClient = useQueryClient();
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingPage, setEditingPage] = useState<ContentPage | null>(null);
+  const [formData, setFormData] = useState<PageFormData>(initialFormData);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['admin', 'content'],
@@ -55,6 +88,79 @@ export default function AdminContentPage() {
       queryClient.invalidateQueries({ queryKey: ['admin', 'content'] });
     },
   });
+
+  const createMutation = useMutation({
+    mutationFn: (data: PageFormData) => api.post('/api/admin/content-pages', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'content'] });
+      handleCloseModal();
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<PageFormData> }) =>
+      api.put(`/api/admin/content-pages/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'content'] });
+      handleCloseModal();
+    },
+  });
+
+  useEffect(() => {
+    if (isModalOpen && editingPage) {
+      setFormData({
+        title: editingPage.title || '',
+        slug: editingPage.slug || '',
+        content: editingPage.content || '',
+        metaTitle: editingPage.metaTitle || '',
+        metaDescription: editingPage.metaDescription || '',
+        isPublished: editingPage.isPublished ?? false,
+      });
+    } else if (isModalOpen && !editingPage) {
+      setFormData(initialFormData);
+    }
+  }, [isModalOpen, editingPage]);
+
+  const handleOpenCreateModal = () => {
+    setEditingPage(null);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (page: ContentPage) => {
+    setEditingPage(page);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setEditingPage(null);
+    setFormData(initialFormData);
+  };
+
+  const handleSavePage = async () => {
+    if (!formData.title.trim() || !formData.slug.trim()) {
+      alert('Title and slug are required');
+      return;
+    }
+
+    try {
+      if (editingPage) {
+        await updateMutation.mutateAsync({ id: editingPage.id, data: formData });
+      } else {
+        await createMutation.mutateAsync(formData);
+      }
+    } catch (error) {
+      console.error('Failed to save page:', error);
+      alert('Failed to save page. Please try again.');
+    }
+  };
+
+  const generateSlug = (title: string) => {
+    return title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  };
 
   const handleTogglePublish = async (
     pageId: string,
@@ -99,7 +205,7 @@ export default function AdminContentPage() {
             <RefreshCw className="w-4 h-4" />
             <span>Refresh</span>
           </Button>
-          <Button className="flex items-center space-x-2">
+          <Button onClick={handleOpenCreateModal} className="flex items-center space-x-2">
             <Plus className="w-4 h-4" />
             <span>New Page</span>
           </Button>
@@ -117,7 +223,7 @@ export default function AdminContentPage() {
           <div className="text-center py-12">
             <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-600">No content pages found</p>
-            <Button className="mt-4">Create First Page</Button>
+            <Button className="mt-4" onClick={handleOpenCreateModal}>Create First Page</Button>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -199,24 +305,41 @@ export default function AdminContentPage() {
                       })}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <a
-                        href={`/content/${page.slug}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:text-blue-900 text-sm font-medium mr-4"
-                      >
-                        View
-                      </a>
-                      <button className="text-blue-600 hover:text-blue-900 text-sm font-medium mr-4">
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(page.id)}
-                        disabled={deleteMutation.isPending}
-                        className="text-red-600 hover:text-red-900 text-sm font-medium"
-                      >
-                        {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
-                      </button>
+                      <div className="flex items-center justify-end space-x-2">
+                        <a
+                          href={`/content/${page.slug}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-900 text-sm font-medium px-2 py-1"
+                        >
+                          View
+                        </a>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenEditModal(page);
+                          }}
+                          className="text-blue-600 hover:text-blue-900 hover:bg-blue-50"
+                        >
+                          <Edit className="w-4 h-4 mr-1" />
+                          Edit
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(page.id);
+                          }}
+                          disabled={deleteMutation.isPending}
+                          className="text-red-600 hover:text-red-900 hover:bg-red-50"
+                        >
+                          <Trash2 className="w-4 h-4 mr-1" />
+                          {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -235,6 +358,119 @@ export default function AdminContentPage() {
           instead. Toggle the status to publish or unpublish pages.
         </p>
       </div>
+
+      {/* Edit/Create Modal */}
+      <Dialog open={isModalOpen} onOpenChange={(open) => {
+        if (!open) {
+          handleCloseModal();
+        }
+      }}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {editingPage ? 'Edit Page' : 'Create New Page'}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="title">Title *</Label>
+              <Input
+                id="title"
+                value={formData.title}
+                onChange={(e) => {
+                  const title = e.target.value;
+                  setFormData((prev) => ({
+                    ...prev,
+                    title,
+                    slug: !editingPage && !prev.slug ? generateSlug(title) : prev.slug,
+                  }));
+                }}
+                placeholder="Page Title"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="slug">Slug *</Label>
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500">/content/</span>
+                <Input
+                  id="slug"
+                  value={formData.slug}
+                  onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                  placeholder="page-slug"
+                  className="flex-1"
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="content">Content</Label>
+              <Textarea
+                id="content"
+                value={formData.content}
+                onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+                placeholder="Page content (HTML supported)"
+                rows={10}
+                className="font-mono text-sm"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="metaTitle">Meta Title</Label>
+              <Input
+                id="metaTitle"
+                value={formData.metaTitle}
+                onChange={(e) => setFormData({ ...formData, metaTitle: e.target.value })}
+                placeholder="SEO Title"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="metaDescription">Meta Description</Label>
+              <Textarea
+                id="metaDescription"
+                value={formData.metaDescription}
+                onChange={(e) => setFormData({ ...formData, metaDescription: e.target.value })}
+                placeholder="SEO Description"
+                rows={3}
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="isPublished"
+                checked={formData.isPublished}
+                onChange={(e) => setFormData({ ...formData, isPublished: e.target.checked })}
+                className="h-4 w-4 rounded border-gray-300"
+              />
+              <Label htmlFor="isPublished">Publish immediately</Label>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCloseModal}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSavePage}
+              disabled={createMutation.isPending || updateMutation.isPending}
+            >
+              {createMutation.isPending || updateMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : editingPage ? (
+                'Update Page'
+              ) : (
+                'Create Page'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

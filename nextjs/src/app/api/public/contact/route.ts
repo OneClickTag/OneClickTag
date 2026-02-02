@@ -85,7 +85,36 @@ export async function GET() {
     // Extract contentBlocks and contactFields from customContent
     const customContent = (contact.customContent as Record<string, unknown>) || {};
     const contentBlocks = customContent.contentBlocks || getDefaultBlocks();
-    const contactFields = customContent.contactFields || [];
+    const rawContactFields = customContent.contactFields as Array<{
+      id: string;
+      type: string;
+      label: string;
+      value: string;
+      enabled: boolean;
+      order: number;
+    }> | undefined;
+
+    // Filter to only include enabled fields with values
+    let contactFields: typeof rawContactFields = [];
+
+    if (rawContactFields && rawContactFields.length > 0) {
+      // Filter out disabled fields - only return enabled fields to public
+      contactFields = rawContactFields.filter((field) => field.enabled && field.value);
+    } else {
+      // If no contactFields in customContent, build from legacy fields (all enabled by default)
+      if (contact.email) {
+        contactFields.push({ id: 'email-1', type: 'email', label: 'Email', value: contact.email, enabled: true, order: 0 });
+      }
+      if (contact.phone) {
+        contactFields.push({ id: 'phone-1', type: 'phone', label: 'Phone', value: contact.phone, enabled: true, order: 1 });
+      }
+      if (contact.address) {
+        contactFields.push({ id: 'address-1', type: 'address', label: 'Office', value: contact.address, enabled: true, order: 2 });
+      }
+      if (contact.businessHours) {
+        contactFields.push({ id: 'hours-1', type: 'hours', label: 'Business Hours', value: contact.businessHours, enabled: true, order: 3 });
+      }
+    }
 
     return NextResponse.json({
       ...contact,

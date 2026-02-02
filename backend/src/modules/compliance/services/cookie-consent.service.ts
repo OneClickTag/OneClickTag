@@ -65,6 +65,7 @@ export class CookieConsentService {
         necessaryCookies: dto.necessaryCookies,
         analyticsCookies: dto.analyticsCookies,
         marketingCookies: dto.marketingCookies,
+        newsletterConsent: dto.newsletterConsent || false,
         consentExpiresAt,
         ipAddress: dto.ipAddress,
         userAgent: dto.userAgent,
@@ -144,6 +145,102 @@ export class CookieConsentService {
       total,
       skip,
       take,
+    };
+  }
+
+  /**
+   * Get all consent records with advanced filtering
+   * Supports filtering by consent types and search
+   */
+  async getAllConsentsWithFilters(
+    tenantId: string,
+    options?: {
+      skip?: number;
+      take?: number;
+      analyticsCookies?: boolean;
+      marketingCookies?: boolean;
+      newsletterConsent?: boolean;
+      search?: string;
+    },
+  ) {
+    const { skip = 0, take = 20, analyticsCookies, marketingCookies, newsletterConsent, search } = options || {};
+
+    const where: any = {
+      tenantId,
+      ...(analyticsCookies !== undefined && { analyticsCookies }),
+      ...(marketingCookies !== undefined && { marketingCookies }),
+      ...(newsletterConsent !== undefined && { newsletterConsent }),
+    };
+
+    // Add search filter for user email or anonymous ID
+    if (search) {
+      where.OR = [
+        { anonymousId: { contains: search, mode: 'insensitive' } },
+        { user: { email: { contains: search, mode: 'insensitive' } } },
+        { user: { name: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+
+    const [consents, total] = await Promise.all([
+      this.prisma.userCookieConsent.findMany({
+        where,
+        skip,
+        take,
+        orderBy: {
+          consentGivenAt: 'desc',
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              name: true,
+            },
+          },
+        },
+      }),
+      this.prisma.userCookieConsent.count({ where }),
+    ]);
+
+    return {
+      data: consents,
+      meta: {
+        total,
+        page: Math.floor(skip / take) + 1,
+        limit: take,
+        totalPages: Math.ceil(total / take),
+      },
+    };
+  }
+
+  /**
+   * Get consent statistics for a tenant
+   */
+  async getConsentStats(tenantId: string) {
+    const [total, analytics, marketing, newsletter] = await Promise.all([
+      this.prisma.userCookieConsent.count({ where: { tenantId } }),
+      this.prisma.userCookieConsent.count({ where: { tenantId, analyticsCookies: true } }),
+      this.prisma.userCookieConsent.count({ where: { tenantId, marketingCookies: true } }),
+      this.prisma.userCookieConsent.count({ where: { tenantId, newsletterConsent: true } }),
+    ]);
+
+    return {
+      total,
+      analytics: {
+        accepted: analytics,
+        rejected: total - analytics,
+        rate: total > 0 ? Math.round((analytics / total) * 100) : 0,
+      },
+      marketing: {
+        accepted: marketing,
+        rejected: total - marketing,
+        rate: total > 0 ? Math.round((marketing / total) * 100) : 0,
+      },
+      newsletter: {
+        subscribed: newsletter,
+        notSubscribed: total - newsletter,
+        rate: total > 0 ? Math.round((newsletter / total) * 100) : 0,
+      },
     };
   }
 }

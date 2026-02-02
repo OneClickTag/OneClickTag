@@ -12,6 +12,7 @@ import {
   DataRequestsController,
   ApiAuditController,
 } from './controllers';
+import { UserConsentsController } from './controllers/user-consents.controller';
 
 // Services
 import {
@@ -32,6 +33,7 @@ import {
     CookieConsentPublicController,
     DataRequestsController,
     ApiAuditController,
+    UserConsentsController,
   ],
   providers: [
     ComplianceSettingsService,

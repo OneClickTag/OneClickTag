@@ -48,6 +48,8 @@ const CookiesPage = lazy(() => import('./pages/compliance').then(m => ({ default
 const CookieBannerPage = lazy(() => import('./pages/compliance').then(m => ({ default: m.CookieBannerPage })))
 const DataRequestsPage = lazy(() => import('./pages/compliance').then(m => ({ default: m.DataRequestsPage })))
 const ApiAuditLogsPage = lazy(() => import('./pages/compliance').then(m => ({ default: m.ApiAuditLogsPage })))
+const UserConsentsPage = lazy(() => import('./pages/admin/compliance/UserConsentsPage').then(m => ({ default: m.UserConsentsPage })))
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then(m => ({ default: m.NotFoundPage })))
 
 // Loading fallback component
 const PageLoader = () => (
@@ -110,8 +112,12 @@ function App() {
           <Route path="/admin/compliance/cookie-categories" element={<AdminRoute><CookieCategoriesPage /></AdminRoute>} />
           <Route path="/admin/compliance/cookies" element={<AdminRoute><CookiesPage /></AdminRoute>} />
           <Route path="/admin/compliance/cookie-banner" element={<AdminRoute><CookieBannerPage /></AdminRoute>} />
+          <Route path="/admin/compliance/user-consents" element={<AdminRoute><UserConsentsPage /></AdminRoute>} />
           <Route path="/admin/compliance/data-requests" element={<AdminRoute><DataRequestsPage /></AdminRoute>} />
           <Route path="/admin/compliance/audit-logs" element={<AdminRoute><ApiAuditLogsPage /></AdminRoute>} />
+
+          {/* 404 Not Found */}
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
 

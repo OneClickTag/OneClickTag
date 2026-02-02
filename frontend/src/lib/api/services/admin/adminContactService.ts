@@ -20,6 +20,10 @@ export interface ContactPageContent {
     emailTo: string;
     successMessage: string;
     subjects: string[];
+    showEmail?: boolean;
+    showPhone?: boolean;
+    showAddress?: boolean;
+    showBusinessHours?: boolean;
   };
   customContent?: any;
   isActive: boolean;
@@ -46,6 +50,10 @@ export interface UpdateContactPageData {
     emailTo?: string;
     successMessage?: string;
     subjects?: string[];
+    showEmail?: boolean;
+    showPhone?: boolean;
+    showAddress?: boolean;
+    showBusinessHours?: boolean;
   };
   customContent?: any;
   isActive?: boolean;

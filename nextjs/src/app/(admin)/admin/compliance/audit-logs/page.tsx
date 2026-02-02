@@ -32,6 +32,14 @@ import {
   FileText,
 } from 'lucide-react';
 
+interface AuditLogDetails {
+  endpoint?: string;
+  responseStatus?: number;
+  durationMs?: number;
+  customerName?: string;
+  error?: string;
+}
+
 interface AuditLog {
   id: string;
   userId?: string;
@@ -39,7 +47,7 @@ interface AuditLog {
   action: string;
   resource: string;
   resourceId?: string;
-  details?: Record<string, unknown>;
+  details?: AuditLogDetails;
   ipAddress?: string;
   userAgent?: string;
   createdAt: string;
@@ -54,58 +62,71 @@ export default function AuditLogsPage() {
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['compliance', 'audit-logs', actionFilter, resourceFilter, page],
-    queryFn: () => {
+    queryFn: async () => {
       const params = new URLSearchParams();
       params.set('page', page.toString());
       params.set('limit', '50');
       if (actionFilter !== 'all') params.set('action', actionFilter);
       if (resourceFilter !== 'all') params.set('resource', resourceFilter);
-      return api.get<{ data: AuditLog[]; meta: { total: number; totalPages: number } }>(
-        `/api/compliance/audit-logs?${params.toString()}`
-      );
+      try {
+        const response = await api.get<{ data: AuditLog[]; meta: { total: number; totalPages: number } }>(
+          `/api/compliance/audit-logs?${params.toString()}`
+        );
+        return response;
+      } catch (err) {
+        // API might not exist yet
+        console.warn('Audit logs API not available:', err);
+        return { data: [], meta: { total: 0, totalPages: 1 } };
+      }
     },
+    retry: false,
   });
 
   const logs = data?.data || [];
   const meta = data?.meta || { total: 0, totalPages: 1 };
 
-  const filteredLogs = logs.filter(
-    (log) =>
-      log.userEmail?.toLowerCase().includes(search.toLowerCase()) ||
-      log.action.toLowerCase().includes(search.toLowerCase()) ||
-      log.resource.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredLogs = logs.filter((log) => {
+    if (!search) return true;
+    const searchLower = search.toLowerCase();
+    return (
+      log.userEmail?.toLowerCase().includes(searchLower) ||
+      log.action?.toLowerCase().includes(searchLower) ||
+      log.resource?.toLowerCase().includes(searchLower) ||
+      log.details?.endpoint?.toLowerCase().includes(searchLower) ||
+      log.details?.customerName?.toLowerCase().includes(searchLower)
+    );
+  });
 
   const getActionIcon = (action: string) => {
-    if (action.includes('CREATE') || action.includes('ADD')) {
-      return <FileText className="w-4 h-4 text-green-500" />;
+    switch (action) {
+      case 'POST':
+        return <FileText className="w-4 h-4 text-green-500" />;
+      case 'PUT':
+      case 'PATCH':
+        return <Settings className="w-4 h-4 text-blue-500" />;
+      case 'DELETE':
+        return <Database className="w-4 h-4 text-red-500" />;
+      case 'GET':
+        return <User className="w-4 h-4 text-purple-500" />;
+      default:
+        return <Shield className="w-4 h-4 text-gray-500" />;
     }
-    if (action.includes('UPDATE') || action.includes('EDIT')) {
-      return <Settings className="w-4 h-4 text-blue-500" />;
-    }
-    if (action.includes('DELETE') || action.includes('REMOVE')) {
-      return <Database className="w-4 h-4 text-red-500" />;
-    }
-    if (action.includes('LOGIN') || action.includes('AUTH')) {
-      return <User className="w-4 h-4 text-purple-500" />;
-    }
-    return <Shield className="w-4 h-4 text-gray-500" />;
   };
 
   const getActionColor = (action: string) => {
-    if (action.includes('CREATE') || action.includes('ADD')) {
-      return 'bg-green-100 text-green-700';
+    switch (action) {
+      case 'POST':
+        return 'bg-green-100 text-green-700';
+      case 'PUT':
+      case 'PATCH':
+        return 'bg-blue-100 text-blue-700';
+      case 'DELETE':
+        return 'bg-red-100 text-red-700';
+      case 'GET':
+        return 'bg-purple-100 text-purple-700';
+      default:
+        return 'bg-gray-100 text-gray-700';
     }
-    if (action.includes('UPDATE') || action.includes('EDIT')) {
-      return 'bg-blue-100 text-blue-700';
-    }
-    if (action.includes('DELETE') || action.includes('REMOVE')) {
-      return 'bg-red-100 text-red-700';
-    }
-    if (action.includes('LOGIN') || action.includes('AUTH')) {
-      return 'bg-purple-100 text-purple-700';
-    }
-    return 'bg-gray-100 text-gray-700';
   };
 
   return (
@@ -135,27 +156,25 @@ export default function AuditLogsPage() {
         </div>
         <Select value={actionFilter} onValueChange={setActionFilter}>
           <SelectTrigger className="w-40">
-            <SelectValue placeholder="Action" />
+            <SelectValue placeholder="API Service" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Actions</SelectItem>
-            <SelectItem value="CREATE">Create</SelectItem>
-            <SelectItem value="UPDATE">Update</SelectItem>
-            <SelectItem value="DELETE">Delete</SelectItem>
-            <SelectItem value="LOGIN">Login</SelectItem>
-            <SelectItem value="LOGOUT">Logout</SelectItem>
+            <SelectItem value="all">All Services</SelectItem>
+            <SelectItem value="GTM">GTM API</SelectItem>
+            <SelectItem value="Google Ads">Google Ads API</SelectItem>
+            <SelectItem value="GA4">GA4 API</SelectItem>
           </SelectContent>
         </Select>
         <Select value={resourceFilter} onValueChange={setResourceFilter}>
           <SelectTrigger className="w-40">
-            <SelectValue placeholder="Resource" />
+            <SelectValue placeholder="Method" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Resources</SelectItem>
-            <SelectItem value="USER">Users</SelectItem>
-            <SelectItem value="CUSTOMER">Customers</SelectItem>
-            <SelectItem value="TRACKING">Trackings</SelectItem>
-            <SelectItem value="SETTINGS">Settings</SelectItem>
+            <SelectItem value="all">All Methods</SelectItem>
+            <SelectItem value="GET">GET</SelectItem>
+            <SelectItem value="POST">POST</SelectItem>
+            <SelectItem value="PUT">PUT</SelectItem>
+            <SelectItem value="DELETE">DELETE</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -179,10 +198,10 @@ export default function AuditLogsPage() {
                 <TableRow>
                   <TableHead>Timestamp</TableHead>
                   <TableHead>User</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Resource</TableHead>
+                  <TableHead>Method</TableHead>
+                  <TableHead>API Service</TableHead>
                   <TableHead>Details</TableHead>
-                  <TableHead>IP Address</TableHead>
+                  <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -198,31 +217,52 @@ export default function AuditLogsPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs ${getActionColor(log.action)}`}>
-                        {getActionIcon(log.action)}
-                        {log.action}
+                      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs ${getActionColor(log.action || '')}`}>
+                        {getActionIcon(log.action || '')}
+                        {log.action || '-'}
                       </span>
                     </TableCell>
                     <TableCell>
-                      <span className="text-sm">{log.resource}</span>
-                      {log.resourceId && (
-                        <span className="text-xs text-gray-400 ml-1">
-                          ({log.resourceId.slice(0, 8)}...)
+                      <span className="text-sm">{log.resource || '-'}</span>
+                      {log.details?.customerName && (
+                        <span className="text-xs text-gray-400 block">
+                          {log.details.customerName}
                         </span>
                       )}
                     </TableCell>
                     <TableCell>
-                      {log.details ? (
-                        <code className="text-xs bg-gray-100 px-2 py-1 rounded">
-                          {JSON.stringify(log.details).slice(0, 50)}
-                          {JSON.stringify(log.details).length > 50 && '...'}
-                        </code>
+                      {log.details?.endpoint ? (
+                        <div className="max-w-xs">
+                          <code className="text-xs bg-gray-100 px-2 py-1 rounded block truncate" title={log.details.endpoint}>
+                            {log.details.endpoint}
+                          </code>
+                          {log.details.durationMs && (
+                            <span className="text-xs text-gray-400">{log.details.durationMs}ms</span>
+                          )}
+                        </div>
                       ) : (
                         <span className="text-gray-400">-</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-sm text-gray-600">
-                      {log.ipAddress || '-'}
+                    <TableCell>
+                      {log.details?.responseStatus ? (
+                        <span className={`text-sm font-medium ${
+                          log.details.responseStatus >= 200 && log.details.responseStatus < 300
+                            ? 'text-green-600'
+                            : log.details.responseStatus >= 400
+                              ? 'text-red-600'
+                              : 'text-yellow-600'
+                        }`}>
+                          {log.details.responseStatus}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                      {log.details?.error && (
+                        <span className="text-xs text-red-500 block truncate max-w-[150px]" title={log.details.error}>
+                          {log.details.error}
+                        </span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

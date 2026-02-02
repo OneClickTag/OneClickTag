@@ -27,22 +27,24 @@ export function EditUserModal({ user, isOpen, onClose, onSave }: EditUserModalPr
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (user) {
-      setFormData({
-        name: user.name || '',
-        email: user.email || '',
-        role: user.role || 'USER',
-        isActive: user.isActive ?? true,
-      });
-    } else {
-      setFormData({
-        name: '',
-        email: '',
-        role: 'USER',
-        isActive: true,
-      });
+    if (isOpen) {
+      if (user) {
+        setFormData({
+          name: user.name || '',
+          email: user.email || '',
+          role: user.role || 'USER',
+          isActive: user.isActive ?? true,
+        });
+      } else {
+        setFormData({
+          name: '',
+          email: '',
+          role: 'USER',
+          isActive: true,
+        });
+      }
     }
-  }, [user]);
+  }, [user, isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

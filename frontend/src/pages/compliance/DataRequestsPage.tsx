@@ -29,8 +29,14 @@ export function DataRequestsPage() {
         status: filterStatus || undefined,
         requestType: filterType || undefined,
       });
-      setRequests(Array.isArray(response.data) ? response.data : []);
-      setTotalPages(response.meta?.totalPages || 1);
+      // Backend returns { requests, total, skip, take } format
+      // Handle both the expected format and the actual backend format
+      const requestsData = response.data || (response as any).requests || [];
+      setRequests(Array.isArray(requestsData) ? requestsData : []);
+
+      // Calculate totalPages from the response
+      const total = response.meta?.totalPages || Math.ceil(((response as any).total || 0) / 20) || 1;
+      setTotalPages(total);
     } catch (error: any) {
       console.error('Failed to fetch data requests:', error);
       setMessage({ type: 'error', text: 'Failed to load data requests' });

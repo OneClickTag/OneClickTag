@@ -29,17 +29,30 @@ import {
   Clock,
   X,
   Download,
-  Trash2,
 } from 'lucide-react';
 
 interface DataRequest {
   id: string;
   email: string;
-  requestType: 'access' | 'deletion' | 'rectification' | 'portability';
-  status: 'pending' | 'processing' | 'completed' | 'rejected';
-  notes?: string;
-  createdAt: string;
+  requestType: 'ACCESS' | 'DELETION' | 'RECTIFICATION' | 'PORTABILITY' | 'access' | 'deletion' | 'rectification' | 'portability';
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED' | 'pending' | 'processing' | 'completed' | 'rejected';
+  description?: string;
+  requestedAt: string;
+  createdAt?: string;
   completedAt?: string;
+  dueDate?: string;
+  user?: {
+    id: string;
+    email: string;
+    name?: string;
+  };
+}
+
+interface DataRequestsResponse {
+  requests: DataRequest[];
+  total: number;
+  skip: number;
+  take: number;
 }
 
 export default function DataRequestsPage() {
@@ -49,19 +62,35 @@ export default function DataRequestsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
 
-  const { data: requestsData, isLoading, refetch } = useQuery({
+  const { data: requestsData, isLoading, refetch } = useQuery<DataRequest[]>({
     queryKey: ['compliance', 'data-requests', statusFilter, typeFilter],
-    queryFn: async () => {
+    queryFn: async (): Promise<DataRequest[]> => {
       const params = new URLSearchParams();
-      if (statusFilter !== 'all') params.set('status', statusFilter);
-      if (typeFilter !== 'all') params.set('type', typeFilter);
-      const response = await api.get<{ data: DataRequest[] } | DataRequest[]>(`/api/compliance/data-requests?${params.toString()}`);
-      // Handle both { data: DataRequest[] } and DataRequest[] response formats
-      return Array.isArray(response) ? response : (response?.data || []);
+      if (statusFilter !== 'all') params.set('status', statusFilter.toUpperCase());
+      if (typeFilter !== 'all') params.set('requestType', typeFilter.toUpperCase());
+      const response = await api.get<DataRequestsResponse | DataRequest[] | { data: DataRequest[] }>(`/api/compliance/data-requests?${params.toString()}`);
+
+      // Handle multiple API response formats
+      if (Array.isArray(response)) {
+        return response;
+      }
+      if (response && typeof response === 'object') {
+        // API returns { requests, total, skip, take }
+        const responseObj = response as Record<string, unknown>;
+        if ('requests' in responseObj && Array.isArray(responseObj.requests)) {
+          return responseObj.requests as DataRequest[];
+        }
+        // Also handle { data: [...] } format
+        if ('data' in responseObj && Array.isArray(responseObj.data)) {
+          return responseObj.data as DataRequest[];
+        }
+      }
+      return [];
     },
   });
 
-  const requests = requestsData || [];
+  // Ensure requests is always an array
+  const requests: DataRequest[] = Array.isArray(requestsData) ? requestsData : [];
 
   const updateStatusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
@@ -72,11 +101,14 @@ export default function DataRequestsPage() {
   });
 
   const filteredRequests = requests.filter((req) =>
-    req.email.toLowerCase().includes(search.toLowerCase())
+    req.email?.toLowerCase().includes(search.toLowerCase()) ?? false
   );
 
+  const normalizeStatus = (status: string) => status.toLowerCase();
+  const normalizeType = (type: string) => type.toLowerCase();
+
   const getStatusIcon = (status: string) => {
-    switch (status) {
+    switch (normalizeStatus(status)) {
       case 'completed':
         return <Check className="w-4 h-4 text-green-500" />;
       case 'pending':
@@ -91,7 +123,7 @@ export default function DataRequestsPage() {
   };
 
   const getStatusBadgeColor = (status: string) => {
-    switch (status) {
+    switch (normalizeStatus(status)) {
       case 'completed':
         return 'bg-green-100 text-green-700';
       case 'pending':
@@ -106,7 +138,7 @@ export default function DataRequestsPage() {
   };
 
   const getTypeLabel = (type: string) => {
-    switch (type) {
+    switch (normalizeType(type)) {
       case 'access':
         return 'Data Access';
       case 'deletion':
@@ -205,13 +237,13 @@ export default function DataRequestsPage() {
                     </span>
                   </TableCell>
                   <TableCell>
-                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-sm ${getStatusBadgeColor(request.status)}`}>
+                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-sm capitalize ${getStatusBadgeColor(request.status)}`}>
                       {getStatusIcon(request.status)}
-                      {request.status}
+                      {normalizeStatus(request.status)}
                     </span>
                   </TableCell>
                   <TableCell className="text-gray-600">
-                    {new Date(request.createdAt).toLocaleDateString()}
+                    {new Date(request.requestedAt || request.createdAt || '').toLocaleDateString()}
                   </TableCell>
                   <TableCell className="text-gray-600">
                     {request.completedAt
@@ -220,7 +252,7 @@ export default function DataRequestsPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      {request.status === 'pending' && (
+                      {normalizeStatus(request.status) === 'pending' && (
                         <>
                           <Button
                             variant="outline"
@@ -228,7 +260,7 @@ export default function DataRequestsPage() {
                             onClick={() =>
                               updateStatusMutation.mutate({
                                 id: request.id,
-                                status: 'processing',
+                                status: 'PROCESSING',
                               })
                             }
                           >
@@ -241,7 +273,7 @@ export default function DataRequestsPage() {
                             onClick={() =>
                               updateStatusMutation.mutate({
                                 id: request.id,
-                                status: 'rejected',
+                                status: 'REJECTED',
                               })
                             }
                           >
@@ -249,14 +281,14 @@ export default function DataRequestsPage() {
                           </Button>
                         </>
                       )}
-                      {request.status === 'processing' && (
+                      {normalizeStatus(request.status) === 'processing' && (
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() =>
                             updateStatusMutation.mutate({
                               id: request.id,
-                              status: 'completed',
+                              status: 'COMPLETED',
                             })
                           }
                         >
@@ -264,7 +296,7 @@ export default function DataRequestsPage() {
                           Complete
                         </Button>
                       )}
-                      {request.requestType === 'access' && request.status === 'completed' && (
+                      {normalizeType(request.requestType) === 'access' && normalizeStatus(request.status) === 'completed' && (
                         <Button variant="outline" size="sm">
                           <Download className="w-4 h-4" />
                         </Button>

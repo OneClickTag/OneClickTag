@@ -7,6 +7,7 @@ export interface ConsentChoice {
   necessaryCookies: boolean;
   analyticsCookies: boolean;
   marketingCookies: boolean;
+  newsletterConsent: boolean;
   consentGivenAt: Date;
 }
 
@@ -209,6 +210,7 @@ export function useCookieConsent(tenantId: string) {
       necessaryCookies: true,
       analyticsCookies: true,
       marketingCookies: true,
+      newsletterConsent: false,
       consentGivenAt: new Date(),
     };
 
@@ -229,6 +231,7 @@ export function useCookieConsent(tenantId: string) {
       necessaryCookies: true,
       analyticsCookies: false,
       marketingCookies: false,
+      newsletterConsent: false,
       consentGivenAt: new Date(),
     };
 
@@ -242,13 +245,14 @@ export function useCookieConsent(tenantId: string) {
   /**
    * Update preferences with custom choices
    */
-  const updatePreferences = useCallback((analyticsCookies: boolean, marketingCookies: boolean) => {
+  const updatePreferences = useCallback((analyticsCookies: boolean, marketingCookies: boolean, newsletterConsent = false) => {
     const choice: ConsentChoice = {
       tenantId,
       anonymousId: getOrCreateAnonymousId(),
       necessaryCookies: true,
       analyticsCookies,
       marketingCookies,
+      newsletterConsent,
       consentGivenAt: new Date(),
     };
 

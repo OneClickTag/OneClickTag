@@ -37,8 +37,16 @@ function getFirebaseAdmin() {
 }
 
 export const verifyIdToken = async (token: string) => {
+  console.log('[Firebase Admin] Verifying token...');
   const { auth } = getFirebaseAdmin();
-  return auth.verifyIdToken(token);
+  try {
+    const result = await auth.verifyIdToken(token);
+    console.log('[Firebase Admin] Token verified successfully, uid:', result.uid);
+    return result;
+  } catch (error) {
+    console.error('[Firebase Admin] Token verification failed:', error);
+    throw error;
+  }
 };
 
 export const getUser = async (uid: string) => {

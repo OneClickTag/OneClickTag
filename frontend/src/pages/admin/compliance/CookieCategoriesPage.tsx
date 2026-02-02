@@ -13,10 +13,18 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Plus, Pencil, Trash2, RefreshCw, FolderTree } from 'lucide-react';
 import {
   adminComplianceService,
   CookieCategory,
+  CookieConsentCategory,
   CreateCookieCategoryData,
   UpdateCookieCategoryData,
 } from '@/lib/api/services/admin/adminComplianceService';
@@ -32,11 +40,10 @@ export function CookieCategoriesPage() {
   const [categoryToDelete, setCategoryToDelete] = useState<CookieCategory | null>(null);
 
   const [formData, setFormData] = useState<CreateCookieCategoryData>({
+    category: 'ANALYTICS',
     name: '',
-    slug: '',
     description: '',
     isRequired: false,
-    displayOrder: 0,
   });
 
   const fetchCategories = async () => {
@@ -44,7 +51,13 @@ export function CookieCategoriesPage() {
       setLoading(true);
       setMessage(null);
       const data = await adminComplianceService.getCookieCategories();
-      setCategories(data.sort((a, b) => a.displayOrder - b.displayOrder));
+      // Sort by category type: NECESSARY first, then ANALYTICS, then MARKETING
+      const categoryOrder: Record<CookieConsentCategory, number> = {
+        NECESSARY: 0,
+        ANALYTICS: 1,
+        MARKETING: 2,
+      };
+      setCategories(data.sort((a, b) => categoryOrder[a.category] - categoryOrder[b.category]));
     } catch (error: any) {
       console.error('Failed to fetch cookie categories:', error);
       setMessage({ type: 'error', text: 'Failed to load cookie categories' });
@@ -61,20 +74,18 @@ export function CookieCategoriesPage() {
     if (category) {
       setEditingCategory(category);
       setFormData({
+        category: category.category,
         name: category.name,
-        slug: category.slug,
         description: category.description,
         isRequired: category.isRequired,
-        displayOrder: category.displayOrder,
       });
     } else {
       setEditingCategory(null);
       setFormData({
+        category: 'ANALYTICS',
         name: '',
-        slug: '',
         description: '',
         isRequired: false,
-        displayOrder: categories.length,
       });
     }
     setDialogOpen(true);
@@ -84,11 +95,10 @@ export function CookieCategoriesPage() {
     setDialogOpen(false);
     setEditingCategory(null);
     setFormData({
+      category: 'ANALYTICS',
       name: '',
-      slug: '',
       description: '',
       isRequired: false,
-      displayOrder: 0,
     });
   };
 
@@ -200,13 +210,10 @@ export function CookieCategoriesPage() {
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Order
+                      Category Type
                     </th>
                     <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Name
-                    </th>
-                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Slug
                     </th>
                     <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Description
@@ -222,11 +229,10 @@ export function CookieCategoriesPage() {
                 <tbody className="divide-y divide-gray-200">
                   {categories.map((category) => (
                     <tr key={category.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 text-sm text-gray-900">{category.displayOrder}</td>
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900">{category.name}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">
-                        <code className="bg-gray-100 px-2 py-1 rounded text-xs">{category.slug}</code>
+                        <code className="bg-gray-100 px-2 py-1 rounded text-xs">{category.category}</code>
                       </td>
+                      <td className="px-6 py-4 text-sm font-medium text-gray-900">{category.name}</td>
                       <td className="px-6 py-4 text-sm text-gray-600 max-w-md truncate">{category.description}</td>
                       <td className="px-6 py-4 text-sm">
                         {category.isRequired ? (
@@ -294,21 +300,28 @@ export function CookieCategoriesPage() {
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
+                <Label htmlFor="category">Category Type *</Label>
+                <Select
+                  value={formData.category}
+                  onValueChange={(value) => updateFormData('category', value as CookieConsentCategory)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select category type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NECESSARY">Necessary</SelectItem>
+                    <SelectItem value="ANALYTICS">Analytics</SelectItem>
+                    <SelectItem value="MARKETING">Marketing</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
                 <Label htmlFor="name">Category Name *</Label>
                 <Input
                   id="name"
                   value={formData.name}
                   onChange={(e) => updateFormData('name', e.target.value)}
                   placeholder="Essential Cookies"
-                />
-              </div>
-              <div>
-                <Label htmlFor="slug">Slug *</Label>
-                <Input
-                  id="slug"
-                  value={formData.slug}
-                  onChange={(e) => updateFormData('slug', e.target.value)}
-                  placeholder="essential"
                 />
               </div>
             </div>
@@ -322,26 +335,15 @@ export function CookieCategoriesPage() {
                 rows={3}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="displayOrder">Display Order</Label>
-                <Input
-                  id="displayOrder"
-                  type="number"
-                  value={formData.displayOrder}
-                  onChange={(e) => updateFormData('displayOrder', parseInt(e.target.value) || 0)}
-                />
-              </div>
-              <div className="flex items-center space-x-2 pt-8">
-                <Switch
-                  id="isRequired"
-                  checked={formData.isRequired}
-                  onCheckedChange={(checked) => updateFormData('isRequired', checked)}
-                />
-                <Label htmlFor="isRequired" className="cursor-pointer">
-                  Required (cannot be declined)
-                </Label>
-              </div>
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="isRequired"
+                checked={formData.isRequired}
+                onCheckedChange={(checked) => updateFormData('isRequired', checked)}
+              />
+              <Label htmlFor="isRequired" className="cursor-pointer">
+                Required (cannot be declined)
+              </Label>
             </div>
           </div>
           <DialogFooter>

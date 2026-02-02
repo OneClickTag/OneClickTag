@@ -46,6 +46,7 @@ export async function POST(request: NextRequest) {
       socialImageUrl,
       customCSS,
       customJS,
+      seoSettings,
     } = body;
 
     if (!key) {
@@ -77,6 +78,7 @@ export async function POST(request: NextRequest) {
         socialImageUrl,
         customCSS,
         customJS,
+        seoSettings,
         updatedBy: session.id,
       },
     });
@@ -114,6 +116,7 @@ export async function PUT(request: NextRequest) {
       socialImageUrl,
       customCSS,
       customJS,
+      seoSettings,
     } = body;
 
     // Get or create global settings
@@ -144,6 +147,7 @@ export async function PUT(request: NextRequest) {
         ...(socialImageUrl !== undefined && { socialImageUrl }),
         ...(customCSS !== undefined && { customCSS }),
         ...(customJS !== undefined && { customJS }),
+        ...(seoSettings !== undefined && { seoSettings }),
         key: 'global', // Ensure key stays as 'global'
         updatedBy: session.id,
       },

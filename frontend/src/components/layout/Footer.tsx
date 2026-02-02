@@ -90,7 +90,15 @@ export function Footer() {
     const fetchFooterConfig = async () => {
       try {
         const response = await publicService.getFooterConfig();
-        setConfig(response);
+        // Map backend response to config format, using defaults for missing values
+        setConfig({
+          id: response.id || 'default',
+          brandName: response.brandName || defaultFooterConfig.brandName,
+          brandDescription: response.brandDescription || defaultFooterConfig.brandDescription,
+          socialLinks: response.socialLinks || defaultFooterConfig.socialLinks,
+          sections: response.sections || defaultFooterConfig.sections,
+          copyrightText: response.copyrightText || defaultFooterConfig.copyrightText,
+        });
       } catch (error) {
         console.error('Failed to load footer config, using defaults:', error);
         // Use default config if fetch fails

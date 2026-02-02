@@ -1,40 +1,152 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { X, Cookie, ChevronDown, ChevronUp } from 'lucide-react';
+
+interface CookieItem {
+  id: string;
+  name: string;
+  provider: string;
+  purpose: string;
+  duration: string;
+  type?: string;
+}
+
+interface CookieCategoryData {
+  id: string;
+  name: string;
+  description: string;
+  category: 'NECESSARY' | 'ANALYTICS' | 'MARKETING' | 'PREFERENCES' | 'FUNCTIONAL';
+  isRequired: boolean;
+  cookies: CookieItem[];
+}
 
 interface CookiePreferences {
   necessary: boolean;
   analytics: boolean;
   marketing: boolean;
+  preferences: boolean;
+  functional: boolean;
   timestamp: number;
 }
 
+interface BannerSettings {
+  isActive: boolean;
+  headingText: string;
+  bodyText: string;
+  acceptAllButtonText: string;
+  rejectAllButtonText: string;
+  customizeButtonText: string;
+  savePreferencesText: string;
+  position: string;
+  backgroundColor: string;
+  textColor: string;
+  acceptButtonColor: string;
+  rejectButtonColor: string;
+  customizeButtonColor: string;
+  consentExpiryDays: number;
+  showOnEveryPage: boolean;
+  blockCookiesUntilConsent: boolean;
+  privacyPolicyUrl: string;
+  cookiePolicyUrl: string;
+}
+
+interface CookieBannerData {
+  tenantId: string;
+  banner: BannerSettings;
+  categories: CookieCategoryData[];
+}
+
 const COOKIE_CONSENT_KEY = 'oct_cookie_consent';
-const CONSENT_EXPIRY_DAYS = 365;
+
+// Default settings used as fallback
+const defaultSettings: BannerSettings = {
+  isActive: true,
+  headingText: 'We value your privacy',
+  bodyText: 'We use cookies to enhance your browsing experience, serve personalized content, and analyze our traffic. By clicking "Accept All", you consent to our use of cookies.',
+  acceptAllButtonText: 'Accept All',
+  rejectAllButtonText: 'Reject All',
+  customizeButtonText: 'Customize',
+  savePreferencesText: 'Save Preferences',
+  position: 'bottom',
+  backgroundColor: '#ffffff',
+  textColor: '#000000',
+  acceptButtonColor: '#3b82f6',
+  rejectButtonColor: '#6b7280',
+  customizeButtonColor: '#6b7280',
+  consentExpiryDays: 365,
+  showOnEveryPage: false,
+  blockCookiesUntilConsent: true,
+  privacyPolicyUrl: '/privacy',
+  cookiePolicyUrl: '/cookie-policy',
+};
+
+// Map category enum to preference key
+const categoryToPreferenceKey: Record<string, keyof Omit<CookiePreferences, 'timestamp'>> = {
+  NECESSARY: 'necessary',
+  ANALYTICS: 'analytics',
+  MARKETING: 'marketing',
+  PREFERENCES: 'preferences',
+  FUNCTIONAL: 'functional',
+};
 
 export function CookieBanner() {
   const [showBanner, setShowBanner] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
-  const [isClosing, setIsClosing] = useState(false);
   const [showCustomize, setShowCustomize] = useState(false);
+  const [settings, setSettings] = useState<BannerSettings>(defaultSettings);
+  const [categories, setCategories] = useState<CookieCategoryData[]>([]);
+  const [tenantId, setTenantId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [preferences, setPreferences] = useState<CookiePreferences>({
     necessary: true, // Always required
     analytics: false,
     marketing: false,
+    preferences: false,
+    functional: false,
     timestamp: 0,
   });
 
+  // Fetch banner settings and categories from the database
   useEffect(() => {
+    const fetchBannerData = async () => {
+      try {
+        const response = await fetch('/api/public/cookie-banner');
+        if (response.ok) {
+          const data: CookieBannerData = await response.json();
+          setSettings(data.banner);
+          setCategories(data.categories || []);
+          setTenantId(data.tenantId);
+        }
+      } catch (error) {
+        console.error('Failed to fetch cookie banner settings:', error);
+        // Use default settings on error
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchBannerData();
+  }, []);
+
+  // Check consent and show banner
+  useEffect(() => {
+    if (isLoading) return;
+
+    // Don't show banner if it's disabled
+    if (!settings.isActive) {
+      return;
+    }
+
     // Check if user has already consented
     const stored = localStorage.getItem(COOKIE_CONSENT_KEY);
     if (stored) {
       try {
         const parsed = JSON.parse(stored) as CookiePreferences;
-        // Check if consent has expired
-        const expiryTime = parsed.timestamp + CONSENT_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+        // Check if consent has expired using settings from DB
+        const expiryTime = parsed.timestamp + settings.consentExpiryDays * 24 * 60 * 60 * 1000;
         if (Date.now() < expiryTime) {
           setPreferences(parsed);
           return; // Don't show banner if valid consent exists
@@ -43,6 +155,7 @@ export function CookieBanner() {
         // Invalid stored data, show banner
       }
     }
+
     // Small delay to prevent flash on page load
     const timer = setTimeout(() => {
       setShowBanner(true);
@@ -51,21 +164,46 @@ export function CookieBanner() {
         requestAnimationFrame(() => setIsVisible(true));
       });
     }, 500);
-    return () => clearTimeout(timer);
-  }, []);
 
-  const savePreferences = (prefs: CookiePreferences) => {
+    return () => clearTimeout(timer);
+  }, [isLoading, settings.isActive, settings.consentExpiryDays]);
+
+  const savePreferences = async (prefs: CookiePreferences) => {
     const withTimestamp = { ...prefs, timestamp: Date.now() };
     localStorage.setItem(COOKIE_CONSENT_KEY, JSON.stringify(withTimestamp));
     setPreferences(withTimestamp);
 
     // Animate out before hiding
-    setIsClosing(true);
     setIsVisible(false);
     setTimeout(() => {
       setShowBanner(false);
-      setIsClosing(false);
     }, 300);
+
+    // Record consent to backend if we have tenant info
+    if (tenantId) {
+      try {
+        // Generate anonymous ID for tracking
+        let anonymousId = localStorage.getItem('oct_anonymous_id');
+        if (!anonymousId) {
+          anonymousId = crypto.randomUUID();
+          localStorage.setItem('oct_anonymous_id', anonymousId);
+        }
+
+        await fetch('/api/public/cookie-consent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tenantId,
+            anonymousId,
+            necessaryCookies: prefs.necessary,
+            analyticsCookies: prefs.analytics,
+            marketingCookies: prefs.marketing,
+          }),
+        });
+      } catch (error) {
+        console.error('Failed to record consent:', error);
+      }
+    }
 
     // Trigger analytics/marketing scripts based on consent
     if (typeof window !== 'undefined') {
@@ -78,6 +216,8 @@ export function CookieBanner() {
       necessary: true,
       analytics: true,
       marketing: true,
+      preferences: true,
+      functional: true,
       timestamp: 0,
     });
   };
@@ -87,6 +227,8 @@ export function CookieBanner() {
       necessary: true,
       analytics: false,
       marketing: false,
+      preferences: false,
+      functional: false,
       timestamp: 0,
     });
   };
@@ -95,37 +237,86 @@ export function CookieBanner() {
     savePreferences(preferences);
   };
 
-  if (!showBanner) return null;
+  const toggleCategoryPreference = (category: string) => {
+    const key = categoryToPreferenceKey[category];
+    if (key && key !== 'necessary') {
+      setPreferences((prev) => ({ ...prev, [key]: !prev[key] }));
+    }
+  };
+
+  if (!showBanner || isLoading) return null;
+
+  // Sort categories: NECESSARY first, then rest
+  const sortedCategories = [...categories].sort((a, b) => {
+    if (a.category === 'NECESSARY') return -1;
+    if (b.category === 'NECESSARY') return 1;
+    return 0;
+  });
+
+  const hasCategories = sortedCategories.length > 0;
+
+  // Determine position classes
+  const positionClasses = settings.position === 'top'
+    ? 'top-0 border-b'
+    : settings.position === 'center'
+    ? 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 max-w-2xl mx-4 rounded-lg border'
+    : 'bottom-0 border-t';
+
+  const animationClasses = settings.position === 'top'
+    ? (isVisible ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0')
+    : settings.position === 'center'
+    ? (isVisible ? 'scale-100 opacity-100' : 'scale-95 opacity-0')
+    : (isVisible ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0');
 
   return (
     <div
-      className={`fixed bottom-0 left-0 right-0 z-50 p-4 bg-white border-t border-gray-200 shadow-lg transform transition-all duration-300 ease-out ${
-        isVisible ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'
-      }`}
+      className={`fixed ${positionClasses} ${settings.position !== 'center' ? 'left-0 right-0' : ''} z-50 p-4 border-gray-200 shadow-lg transform transition-all duration-300 ease-out ${animationClasses}`}
+      style={{ backgroundColor: settings.backgroundColor }}
     >
-      <div className="max-w-7xl mx-auto">
+      <div className={settings.position === 'center' ? '' : 'max-w-7xl mx-auto'}>
         <div className="flex items-start gap-4">
-          <div className="hidden sm:flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full flex-shrink-0">
-            <Cookie className="w-6 h-6 text-blue-600" />
+          <div
+            className="hidden sm:flex items-center justify-center w-12 h-12 rounded-full flex-shrink-0"
+            style={{ backgroundColor: `${settings.acceptButtonColor}20` }}
+          >
+            <Cookie className="w-6 h-6" style={{ color: settings.acceptButtonColor }} />
           </div>
 
           <div className="flex-1">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                  We value your privacy
+                <h3
+                  className="text-lg font-semibold mb-1"
+                  style={{ color: settings.textColor }}
+                >
+                  {settings.headingText}
                 </h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  We use cookies to enhance your browsing experience, serve personalized content, and analyze our traffic.
-                  By clicking &quot;Accept All&quot;, you consent to our use of cookies.{' '}
-                  <Link href="/privacy" className="text-blue-600 hover:underline">
+                <p
+                  className="text-sm mb-4"
+                  style={{ color: settings.textColor, opacity: 0.8 }}
+                >
+                  {settings.bodyText}{' '}
+                  <Link
+                    href={settings.privacyPolicyUrl}
+                    className="hover:underline"
+                    style={{ color: settings.acceptButtonColor }}
+                  >
                     Privacy Policy
+                  </Link>
+                  {' | '}
+                  <Link
+                    href={settings.cookiePolicyUrl}
+                    className="hover:underline"
+                    style={{ color: settings.acceptButtonColor }}
+                  >
+                    Cookie Policy
                   </Link>
                 </p>
               </div>
               <button
                 onClick={handleRejectAll}
-                className="text-gray-400 hover:text-gray-600 flex-shrink-0"
+                className="flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+                style={{ color: settings.textColor }}
                 aria-label="Close"
               >
                 <X className="w-5 h-5" />
@@ -135,59 +326,135 @@ export function CookieBanner() {
             {/* Customize Section */}
             <button
               onClick={() => setShowCustomize(!showCustomize)}
-              className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-4"
+              className="flex items-center gap-1 text-sm mb-4 opacity-70 hover:opacity-100 transition-opacity"
+              style={{ color: settings.textColor }}
             >
               {showCustomize ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              Customize preferences
+              {settings.customizeButtonText}
             </button>
 
             <div
               className={`overflow-hidden transition-all duration-300 ease-out ${
-                showCustomize ? 'max-h-64 opacity-100 mb-4' : 'max-h-0 opacity-0'
+                showCustomize ? 'max-h-96 opacity-100 mb-4' : 'max-h-0 opacity-0'
               }`}
             >
-              <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                {/* Necessary Cookies */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-gray-900 text-sm">Strictly Necessary</p>
-                    <p className="text-xs text-gray-500">Required for the website to function properly</p>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={true}
-                    disabled
-                    className="w-5 h-5 rounded border-gray-300 text-blue-600"
-                  />
-                </div>
+              <div
+                className="rounded-lg p-4 space-y-3 max-h-80 overflow-y-auto"
+                style={{ backgroundColor: `${settings.textColor}08` }}
+              >
+                {/* Display categories from database if available */}
+                {hasCategories ? (
+                  sortedCategories.map((category) => {
+                    const prefKey = categoryToPreferenceKey[category.category];
+                    const isChecked = prefKey ? preferences[prefKey] : false;
+                    const isDisabled = category.isRequired || category.category === 'NECESSARY';
 
-                {/* Analytics Cookies */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-gray-900 text-sm">Analytics & Performance</p>
-                    <p className="text-xs text-gray-500">Help us understand how visitors interact with our website</p>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={preferences.analytics}
-                    onChange={(e) => setPreferences({ ...preferences, analytics: e.target.checked })}
-                    className="w-5 h-5 rounded border-gray-300 text-blue-600 cursor-pointer"
-                  />
-                </div>
+                    return (
+                      <div key={category.id} className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <p className="font-medium text-sm" style={{ color: settings.textColor }}>
+                            {category.name}
+                            {isDisabled && (
+                              <span className="ml-2 text-xs opacity-50">(Required)</span>
+                            )}
+                          </p>
+                          <p className="text-xs" style={{ color: settings.textColor, opacity: 0.6 }}>
+                            {category.description}
+                          </p>
+                          {category.cookies.length > 0 && (
+                            <details className="mt-2">
+                              <summary
+                                className="text-xs cursor-pointer hover:underline"
+                                style={{ color: settings.acceptButtonColor }}
+                              >
+                                View {category.cookies.length} cookie{category.cookies.length !== 1 ? 's' : ''}
+                              </summary>
+                              <ul className="mt-1 ml-4 text-xs space-y-1" style={{ color: settings.textColor, opacity: 0.6 }}>
+                                {category.cookies.map((cookie) => (
+                                  <li key={cookie.id}>
+                                    <span className="font-mono">{cookie.name}</span>
+                                    <span className="opacity-70"> - {cookie.provider}</span>
+                                    {cookie.duration && (
+                                      <span className="opacity-70"> ({cookie.duration})</span>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                            </details>
+                          )}
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={isDisabled ? true : isChecked}
+                          disabled={isDisabled}
+                          onChange={() => toggleCategoryPreference(category.category)}
+                          className="w-5 h-5 rounded border-gray-300 mt-1 cursor-pointer disabled:cursor-not-allowed"
+                          style={{ accentColor: settings.acceptButtonColor }}
+                        />
+                      </div>
+                    );
+                  })
+                ) : (
+                  // Fallback to default categories if none in database
+                  <>
+                    {/* Necessary Cookies */}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-sm" style={{ color: settings.textColor }}>
+                          Strictly Necessary
+                        </p>
+                        <p className="text-xs" style={{ color: settings.textColor, opacity: 0.6 }}>
+                          Required for the website to function properly
+                        </p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={true}
+                        disabled
+                        className="w-5 h-5 rounded border-gray-300"
+                        style={{ accentColor: settings.acceptButtonColor }}
+                      />
+                    </div>
 
-                {/* Marketing Cookies */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-gray-900 text-sm">Marketing</p>
-                    <p className="text-xs text-gray-500">Used to deliver personalized ads and track campaigns</p>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={preferences.marketing}
-                    onChange={(e) => setPreferences({ ...preferences, marketing: e.target.checked })}
-                    className="w-5 h-5 rounded border-gray-300 text-blue-600 cursor-pointer"
-                  />
-                </div>
+                    {/* Analytics Cookies */}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-sm" style={{ color: settings.textColor }}>
+                          Analytics & Performance
+                        </p>
+                        <p className="text-xs" style={{ color: settings.textColor, opacity: 0.6 }}>
+                          Help us understand how visitors interact with our website
+                        </p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={preferences.analytics}
+                        onChange={(e) => setPreferences({ ...preferences, analytics: e.target.checked })}
+                        className="w-5 h-5 rounded border-gray-300 cursor-pointer"
+                        style={{ accentColor: settings.acceptButtonColor }}
+                      />
+                    </div>
+
+                    {/* Marketing Cookies */}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-sm" style={{ color: settings.textColor }}>
+                          Marketing
+                        </p>
+                        <p className="text-xs" style={{ color: settings.textColor, opacity: 0.6 }}>
+                          Used to deliver personalized ads and track campaigns
+                        </p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={preferences.marketing}
+                        onChange={(e) => setPreferences({ ...preferences, marketing: e.target.checked })}
+                        className="w-5 h-5 rounded border-gray-300 cursor-pointer"
+                        style={{ accentColor: settings.acceptButtonColor }}
+                      />
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -195,24 +462,31 @@ export function CookieBanner() {
             <div className="flex flex-wrap gap-3">
               <Button
                 onClick={handleAcceptAll}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
+                className="text-white"
+                style={{ backgroundColor: settings.acceptButtonColor }}
               >
-                Accept All
+                {settings.acceptAllButtonText}
               </Button>
               <Button
                 onClick={handleRejectAll}
                 variant="outline"
-                className="border-gray-300"
+                style={{
+                  borderColor: settings.rejectButtonColor,
+                  color: settings.rejectButtonColor
+                }}
               >
-                Reject All
+                {settings.rejectAllButtonText}
               </Button>
               {showCustomize && (
                 <Button
                   onClick={handleSavePreferences}
                   variant="outline"
-                  className="border-blue-600 text-blue-600 hover:bg-blue-50"
+                  style={{
+                    borderColor: settings.customizeButtonColor,
+                    color: settings.customizeButtonColor
+                  }}
                 >
-                  Save Preferences
+                  {settings.savePreferencesText}
                 </Button>
               )}
             </div>

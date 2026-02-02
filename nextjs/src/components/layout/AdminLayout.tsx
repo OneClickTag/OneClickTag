@@ -59,6 +59,7 @@ const navigation: NavigationItem[] = [
     icon: FileText,
     items: [
       { name: "Pages", href: "/admin/content", icon: FileText },
+      { name: "Static Pages", href: "/admin/static-pages", icon: FileText },
       { name: "Landing Page", href: "/admin/landing", icon: Layout },
       { name: "Contact Page", href: "/admin/contact-page", icon: Mail },
       { name: "Footer", href: "/admin/footer", icon: FileText },

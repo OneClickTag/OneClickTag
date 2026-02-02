@@ -17,11 +17,19 @@ export function CookieBannerPage() {
     acceptAllButtonText: '',
     rejectAllButtonText: '',
     customizeButtonText: '',
+    savePreferencesText: '',
+    backgroundColor: '#ffffff',
+    textColor: '#1F2937',
     acceptButtonColor: '#3B82F6',
     rejectButtonColor: '#6B7280',
-    textColor: '#1F2937',
+    customizeButtonColor: '#6B7280',
     position: 'bottom',
     consentExpiryDays: 365,
+    showOnEveryPage: true,
+    blockCookiesUntilConsent: true,
+    privacyPolicyUrl: '/privacy',
+    cookiePolicyUrl: '/cookie-policy',
+    isActive: true,
   });
 
   const fetchBanner = async () => {
@@ -36,11 +44,19 @@ export function CookieBannerPage() {
         acceptAllButtonText: data.acceptAllButtonText || '',
         rejectAllButtonText: data.rejectAllButtonText || '',
         customizeButtonText: data.customizeButtonText || '',
+        savePreferencesText: data.savePreferencesText || '',
+        backgroundColor: data.backgroundColor || '#ffffff',
+        textColor: data.textColor || '#1F2937',
         acceptButtonColor: data.acceptButtonColor || '#3B82F6',
         rejectButtonColor: data.rejectButtonColor || '#6B7280',
-        textColor: data.textColor || '#1F2937',
+        customizeButtonColor: data.customizeButtonColor || '#6B7280',
         position: data.position || 'bottom',
         consentExpiryDays: data.consentExpiryDays || 365,
+        showOnEveryPage: data.showOnEveryPage ?? true,
+        blockCookiesUntilConsent: data.blockCookiesUntilConsent ?? true,
+        privacyPolicyUrl: data.privacyPolicyUrl || '/privacy',
+        cookiePolicyUrl: data.cookiePolicyUrl || '/cookie-policy',
+        isActive: data.isActive ?? true,
       });
     } catch (error: any) {
       console.error('Failed to fetch cookie banner:', error);
@@ -206,38 +222,22 @@ export function CookieBannerPage() {
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Appearance</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Primary Color</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Background Color</label>
                 <div className="flex items-center space-x-3">
                   <input
                     type="color"
-                    value={formData.acceptButtonColor}
-                    onChange={(e) => updateFormData('acceptButtonColor', e.target.value)}
+                    value={formData.backgroundColor}
+                    onChange={(e) => updateFormData('backgroundColor', e.target.value)}
                     className="w-12 h-10 border border-gray-300 rounded cursor-pointer"
                   />
                   <input
                     type="text"
-                    value={formData.acceptButtonColor}
-                    onChange={(e) => updateFormData('acceptButtonColor', e.target.value)}
+                    value={formData.backgroundColor}
+                    onChange={(e) => updateFormData('backgroundColor', e.target.value)}
                     className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Secondary Color</label>
-                <div className="flex items-center space-x-3">
-                  <input
-                    type="color"
-                    value={formData.rejectButtonColor}
-                    onChange={(e) => updateFormData('rejectButtonColor', e.target.value)}
-                    className="w-12 h-10 border border-gray-300 rounded cursor-pointer"
-                  />
-                  <input
-                    type="text"
-                    value={formData.rejectButtonColor}
-                    onChange={(e) => updateFormData('rejectButtonColor', e.target.value)}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
+                <p className="text-xs text-gray-500 mt-1">Banner background color</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Text Color</label>
@@ -252,6 +252,40 @@ export function CookieBannerPage() {
                     type="text"
                     value={formData.textColor}
                     onChange={(e) => updateFormData('textColor', e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Accept Button Color</label>
+                <div className="flex items-center space-x-3">
+                  <input
+                    type="color"
+                    value={formData.acceptButtonColor}
+                    onChange={(e) => updateFormData('acceptButtonColor', e.target.value)}
+                    className="w-12 h-10 border border-gray-300 rounded cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={formData.acceptButtonColor}
+                    onChange={(e) => updateFormData('acceptButtonColor', e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Reject Button Color</label>
+                <div className="flex items-center space-x-3">
+                  <input
+                    type="color"
+                    value={formData.rejectButtonColor}
+                    onChange={(e) => updateFormData('rejectButtonColor', e.target.value)}
+                    className="w-12 h-10 border border-gray-300 rounded cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={formData.rejectButtonColor}
+                    onChange={(e) => updateFormData('rejectButtonColor', e.target.value)}
                     className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -322,7 +356,7 @@ export function CookieBannerPage() {
                 <div
                   className="p-6 shadow-lg"
                   style={{
-                    backgroundColor: 'white',
+                    backgroundColor: formData.backgroundColor || '#ffffff',
                     borderTop: formData.position === 'bottom' ? `4px solid ${formData.acceptButtonColor}` : 'none',
                     borderBottom: formData.position === 'top' ? `4px solid ${formData.acceptButtonColor}` : 'none',
                     border: formData.position === 'center' ? `2px solid ${formData.acceptButtonColor}` : undefined,

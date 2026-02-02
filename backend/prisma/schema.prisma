@@ -484,9 +484,48 @@ model SiteSettings {
   brandName         String?
   brandColors       Json? // {primary, secondary, accent}
   heroBackgroundUrl String? // URL to hero background image
+
+  // Basic SEO
   metaTitle         String?
   metaDescription   String?
-  socialImageUrl    String? // OG image
+  metaTitleTemplate String? // e.g., "%s | OneClickTag" where %s is page title
+
+  // Open Graph Settings
+  ogTitle           String?
+  ogDescription     String?
+  ogImage           String? // URL to OG image (1200x630px recommended)
+  ogType            String? // website, article, product, etc.
+  ogSiteName        String?
+  ogLocale          String? // e.g., en_US
+
+  // Twitter Card Settings
+  twitterCard       String? // summary, summary_large_image, app, player
+  twitterTitle      String?
+  twitterDescription String?
+  twitterImage      String?
+  twitterSite       String? // @username
+  twitterCreator    String? // @username
+
+  // Robots & Indexing
+  robotsIndex       Boolean @default(true) // Allow indexing
+  robotsFollow      Boolean @default(true) // Allow following links
+  robotsNoArchive   Boolean @default(false)
+  robotsNoSnippet   Boolean @default(false)
+  robotsNoImageIndex Boolean @default(false)
+  googleVerification String? // Google Search Console verification
+  bingVerification  String? // Bing Webmaster verification
+
+  // Canonical URL Settings
+  canonicalUrl      String? // Base canonical URL
+  forceTrailingSlash Boolean @default(false)
+
+  // Schema.org / JSON-LD Settings
+  schemaType        String? // Organization, LocalBusiness, WebSite, etc.
+  schemaData        Json?   // Full JSON-LD schema object
+
+  // Legacy field (kept for backwards compatibility)
+  socialImageUrl    String? // OG image (deprecated, use ogImage)
+
   customCSS         String?  @db.Text
   customJS          String?  @db.Text
   createdAt         DateTime @default(now())
@@ -764,9 +803,10 @@ model UserCookieConsent {
   anonymousId String? // UUID for anonymous users (stored in localStorage)
 
   // Consent Choices
-  necessaryCookies Boolean @default(true) // Always true (can't be disabled)
-  analyticsCookies Boolean @default(false)
-  marketingCookies Boolean @default(false)
+  necessaryCookies  Boolean @default(true) // Always true (can't be disabled)
+  analyticsCookies  Boolean @default(false)
+  marketingCookies  Boolean @default(false)
+  newsletterConsent Boolean @default(false) // Newsletter subscription consent
 
   // Metadata
   consentGivenAt   DateTime @default(now())

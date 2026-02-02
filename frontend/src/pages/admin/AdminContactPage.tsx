@@ -32,6 +32,10 @@ export function AdminContactPage() {
       emailTo: '',
       successMessage: 'Thank you for your message! We will get back to you soon.',
       subjects: ['General Inquiry', 'Technical Support', 'Sales', 'Partnership'],
+      showEmail: true,
+      showPhone: true,
+      showAddress: true,
+      showBusinessHours: true,
     },
   });
 
@@ -51,11 +55,15 @@ export function AdminContactPage() {
         businessHours: data.businessHours || '',
         socialLinks: data.socialLinks || [],
         faqs: data.faqs || [],
-        formSettings: data.formSettings || {
-          enableForm: true,
-          emailTo: '',
-          successMessage: 'Thank you for your message! We will get back to you soon.',
-          subjects: ['General Inquiry', 'Technical Support', 'Sales', 'Partnership'],
+        formSettings: {
+          enableForm: data.formSettings?.enableForm ?? true,
+          emailTo: data.formSettings?.emailTo || '',
+          successMessage: data.formSettings?.successMessage || 'Thank you for your message! We will get back to you soon.',
+          subjects: data.formSettings?.subjects || ['General Inquiry', 'Technical Support', 'Sales', 'Partnership'],
+          showEmail: data.formSettings?.showEmail ?? true,
+          showPhone: data.formSettings?.showPhone ?? true,
+          showAddress: data.formSettings?.showAddress ?? true,
+          showBusinessHours: data.formSettings?.showBusinessHours ?? true,
         },
       });
     } catch (error: any) {
@@ -235,12 +243,24 @@ export function AdminContactPage() {
         {/* Contact Information */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Contact Information</h3>
+          <p className="text-sm text-gray-500 mb-4">Toggle the switch next to each field to show or hide it on the public contact page.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-                <Mail className="w-4 h-4 mr-2" />
-                Email
-              </label>
+            <div className={`p-4 rounded-lg border ${formData.formSettings?.showEmail ? 'border-gray-200 bg-white' : 'border-gray-200 bg-gray-50 opacity-75'}`}>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700 flex items-center">
+                  <Mail className="w-4 h-4 mr-2" />
+                  Email
+                </label>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.formSettings?.showEmail ?? true}
+                    onChange={(e) => updateFormSettings('showEmail', e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
               <input
                 type="email"
                 value={formData.email}
@@ -249,11 +269,22 @@ export function AdminContactPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-                <Phone className="w-4 h-4 mr-2" />
-                Phone
-              </label>
+            <div className={`p-4 rounded-lg border ${formData.formSettings?.showPhone ? 'border-gray-200 bg-white' : 'border-gray-200 bg-gray-50 opacity-75'}`}>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700 flex items-center">
+                  <Phone className="w-4 h-4 mr-2" />
+                  Phone
+                </label>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.formSettings?.showPhone ?? true}
+                    onChange={(e) => updateFormSettings('showPhone', e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
               <input
                 type="tel"
                 value={formData.phone}
@@ -262,11 +293,22 @@ export function AdminContactPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-                <MapPin className="w-4 h-4 mr-2" />
-                Address
-              </label>
+            <div className={`p-4 rounded-lg border ${formData.formSettings?.showAddress ? 'border-gray-200 bg-white' : 'border-gray-200 bg-gray-50 opacity-75'}`}>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700 flex items-center">
+                  <MapPin className="w-4 h-4 mr-2" />
+                  Address
+                </label>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.formSettings?.showAddress ?? true}
+                    onChange={(e) => updateFormSettings('showAddress', e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
               <input
                 type="text"
                 value={formData.address}
@@ -275,11 +317,22 @@ export function AdminContactPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-                <Clock className="w-4 h-4 mr-2" />
-                Business Hours
-              </label>
+            <div className={`p-4 rounded-lg border ${formData.formSettings?.showBusinessHours ? 'border-gray-200 bg-white' : 'border-gray-200 bg-gray-50 opacity-75'}`}>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700 flex items-center">
+                  <Clock className="w-4 h-4 mr-2" />
+                  Business Hours
+                </label>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.formSettings?.showBusinessHours ?? true}
+                    onChange={(e) => updateFormSettings('showBusinessHours', e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
               <input
                 type="text"
                 value={formData.businessHours}

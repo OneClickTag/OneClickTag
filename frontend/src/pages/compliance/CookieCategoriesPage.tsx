@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Plus, Trash2, RefreshCw, Edit2 } from 'lucide-react';
-import { adminComplianceService, CookieCategory, CreateCookieCategoryData, UpdateCookieCategoryData } from '@/lib/api/services/admin';
+import { adminComplianceService, CookieCategory, CookieConsentCategory, CreateCookieCategoryData, UpdateCookieCategoryData } from '@/lib/api/services/admin';
 
 export function CookieCategoriesPage() {
   const [categories, setCategories] = useState<CookieCategory[]>([]);
@@ -12,11 +12,10 @@ export function CookieCategoriesPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const [formData, setFormData] = useState<CreateCookieCategoryData>({
+    category: 'ANALYTICS',
     name: '',
-    slug: '',
     description: '',
     isRequired: false,
-    displayOrder: 0,
   });
 
   const fetchCategories = async () => {
@@ -37,24 +36,22 @@ export function CookieCategoriesPage() {
     fetchCategories();
   }, []);
 
-  const handleOpenModal = (category?: CookieCategory) => {
-    if (category) {
-      setEditingCategory(category);
+  const handleOpenModal = (cat?: CookieCategory) => {
+    if (cat) {
+      setEditingCategory(cat);
       setFormData({
-        name: category.name,
-        slug: category.slug,
-        description: category.description,
-        isRequired: category.isRequired,
-        displayOrder: category.displayOrder,
+        category: cat.category,
+        name: cat.name,
+        description: cat.description,
+        isRequired: cat.isRequired,
       });
     } else {
       setEditingCategory(null);
       setFormData({
+        category: 'ANALYTICS',
         name: '',
-        slug: '',
         description: '',
         isRequired: false,
-        displayOrder: categories.length,
       });
     }
     setShowModal(true);
@@ -64,11 +61,10 @@ export function CookieCategoriesPage() {
     setShowModal(false);
     setEditingCategory(null);
     setFormData({
+      category: 'ANALYTICS',
       name: '',
-      slug: '',
       description: '',
       isRequired: false,
-      displayOrder: 0,
     });
   };
 
@@ -169,10 +165,10 @@ export function CookieCategoriesPage() {
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Name
+                      Category Type
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Slug
+                      Name
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Description
@@ -180,22 +176,21 @@ export function CookieCategoriesPage() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Required
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Order
-                    </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {categories.map((category) => (
-                    <tr key={category.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900">{category.name}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{category.slug}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{category.description}</td>
+                  {categories.map((cat) => (
+                    <tr key={cat.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        <code className="bg-gray-100 px-2 py-1 rounded text-xs">{cat.category}</code>
+                      </td>
+                      <td className="px-6 py-4 text-sm font-medium text-gray-900">{cat.name}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{cat.description}</td>
                       <td className="px-6 py-4 text-sm">
-                        {category.isRequired ? (
+                        {cat.isRequired ? (
                           <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
                             Required
                           </span>
@@ -205,17 +200,16 @@ export function CookieCategoriesPage() {
                           </span>
                         )}
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{category.displayOrder}</td>
                       <td className="px-6 py-4 text-right space-x-2">
                         <button
-                          onClick={() => handleOpenModal(category)}
+                          onClick={() => handleOpenModal(cat)}
                           className="text-blue-600 hover:text-blue-900 text-sm font-medium"
                         >
                           <Edit2 className="w-4 h-4 inline mr-1" />
                           Edit
                         </button>
                         <button
-                          onClick={() => handleDelete(category.id)}
+                          onClick={() => handleDelete(cat.id)}
                           className="text-red-600 hover:text-red-900 text-sm font-medium"
                         >
                           <Trash2 className="w-4 h-4 inline mr-1" />
@@ -250,26 +244,28 @@ export function CookieCategoriesPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Category Type <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={formData.category}
+                    onChange={(e) => updateFormData('category', e.target.value as CookieConsentCategory)}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="NECESSARY">Necessary</option>
+                    <option value="ANALYTICS">Analytics</option>
+                    <option value="MARKETING">Marketing</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Name <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     value={formData.name}
                     onChange={(e) => updateFormData('name', e.target.value)}
-                    placeholder="Necessary"
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Slug <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.slug}
-                    onChange={(e) => updateFormData('slug', e.target.value)}
-                    placeholder="necessary"
+                    placeholder="Necessary Cookies"
                     required
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
@@ -288,31 +284,17 @@ export function CookieCategoriesPage() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Display Order
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.displayOrder}
-                    onChange={(e) => updateFormData('displayOrder', parseInt(e.target.value))}
-                    min={0}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div className="flex items-center pt-8">
-                  <input
-                    type="checkbox"
-                    id="isRequired"
-                    checked={formData.isRequired}
-                    onChange={(e) => updateFormData('isRequired', e.target.checked)}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
-                  />
-                  <label htmlFor="isRequired" className="ml-2 text-sm text-gray-700">
-                    Required (users cannot opt out)
-                  </label>
-                </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="isRequired"
+                  checked={formData.isRequired}
+                  onChange={(e) => updateFormData('isRequired', e.target.checked)}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                />
+                <label htmlFor="isRequired" className="ml-2 text-sm text-gray-700">
+                  Required (users cannot opt out)
+                </label>
               </div>
               <div className="flex justify-end space-x-2 pt-4">
                 <Button type="button" variant="outline" onClick={handleCloseModal}>

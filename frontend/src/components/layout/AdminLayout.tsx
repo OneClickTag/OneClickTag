@@ -69,6 +69,7 @@ const navigation: NavigationItem[] = [
       { name: 'Cookie Categories', href: '/admin/compliance/cookie-categories', icon: Cookie },
       { name: 'Cookies', href: '/admin/compliance/cookies', icon: Cookie },
       { name: 'Cookie Banner', href: '/admin/compliance/cookie-banner', icon: FileCheck },
+      { name: 'User Consents', href: '/admin/compliance/user-consents', icon: Users },
       { name: 'Data Requests', href: '/admin/compliance/data-requests', icon: Database },
       { name: 'Audit Logs', href: '/admin/compliance/audit-logs', icon: Eye },
     ],

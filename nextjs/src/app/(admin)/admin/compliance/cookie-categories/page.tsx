@@ -16,6 +16,13 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Cookie,
   Plus,
   RefreshCw,
@@ -24,13 +31,21 @@ import {
   Loader2,
 } from 'lucide-react';
 
+// Valid category types from Prisma enum
+const CATEGORY_TYPES = [
+  { value: 'NECESSARY', label: 'Necessary' },
+  { value: 'ANALYTICS', label: 'Analytics' },
+  { value: 'MARKETING', label: 'Marketing' },
+  { value: 'PREFERENCES', label: 'Preferences' },
+  { value: 'FUNCTIONAL', label: 'Functional' },
+];
+
 interface CookieCategory {
   id: string;
   name: string;
   description?: string;
+  category: string;
   isRequired: boolean;
-  isDefault: boolean;
-  sortOrder: number;
   createdAt: string;
 }
 
@@ -42,8 +57,8 @@ export default function CookieCategoriesPage() {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
+    category: 'NECESSARY',
     isRequired: false,
-    isDefault: false,
   });
 
   const { data: categories = [], isLoading, refetch } = useQuery({
@@ -59,15 +74,21 @@ export default function CookieCategoriesPage() {
       setIsDialogOpen(false);
       resetForm();
     },
+    onError: (error: Error) => {
+      alert(`Error creating category: ${error.message}`);
+    },
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, ...data }: { id: string } & typeof formData) =>
-      api.patch(`/api/compliance/cookie-categories/${id}`, data),
+      api.put(`/api/compliance/cookie-categories/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['compliance', 'cookie-categories'] });
       setIsDialogOpen(false);
       resetForm();
+    },
+    onError: (error: Error) => {
+      alert(`Error updating category: ${error.message}`);
     },
   });
 
@@ -79,7 +100,7 @@ export default function CookieCategoriesPage() {
   });
 
   const resetForm = () => {
-    setFormData({ name: '', description: '', isRequired: false, isDefault: false });
+    setFormData({ name: '', description: '', category: 'NECESSARY', isRequired: false });
     setEditingCategory(null);
   };
 
@@ -88,8 +109,8 @@ export default function CookieCategoriesPage() {
     setFormData({
       name: category.name,
       description: category.description || '',
+      category: category.category,
       isRequired: category.isRequired,
-      isDefault: category.isDefault,
     });
     setIsDialogOpen(true);
   };
@@ -141,9 +162,27 @@ export default function CookieCategoriesPage() {
                     id="name"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="Analytics, Marketing, etc."
+                    placeholder="e.g., Analytics Cookies"
                     required
                   />
+                </div>
+                <div>
+                  <Label htmlFor="categoryType">Category Type</Label>
+                  <Select
+                    value={formData.category}
+                    onValueChange={(value) => setFormData({ ...formData, category: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CATEGORY_TYPES.map((type) => (
+                        <SelectItem key={type.value} value={type.value}>
+                          {type.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <Label htmlFor="description">Description</Label>
@@ -151,27 +190,18 @@ export default function CookieCategoriesPage() {
                     id="description"
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Describe what this category is used for..."
+                    placeholder="Describe what cookies in this category are used for..."
                     rows={3}
+                    required
                   />
                 </div>
-                <div className="flex items-center gap-6">
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="isRequired"
-                      checked={formData.isRequired}
-                      onCheckedChange={(checked) => setFormData({ ...formData, isRequired: checked })}
-                    />
-                    <Label htmlFor="isRequired">Required (cannot be disabled)</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="isDefault"
-                      checked={formData.isDefault}
-                      onCheckedChange={(checked) => setFormData({ ...formData, isDefault: checked })}
-                    />
-                    <Label htmlFor="isDefault">Enabled by default</Label>
-                  </div>
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="isRequired"
+                    checked={formData.isRequired}
+                    onCheckedChange={(checked) => setFormData({ ...formData, isRequired: checked })}
+                  />
+                  <Label htmlFor="isRequired">Required (cannot be disabled by users)</Label>
                 </div>
                 <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
@@ -213,14 +243,12 @@ export default function CookieCategoriesPage() {
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <h3 className="font-medium">{category.name}</h3>
+                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                        {category.category}
+                      </span>
                       {category.isRequired && (
                         <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">
                           Required
-                        </span>
-                      )}
-                      {category.isDefault && (
-                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
-                          Default On
                         </span>
                       )}
                     </div>

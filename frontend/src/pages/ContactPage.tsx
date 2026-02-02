@@ -25,6 +25,10 @@ interface ContactContent {
     emailTo: string;
     successMessage: string;
     subjects: string[];
+    showEmail?: boolean;
+    showPhone?: boolean;
+    showAddress?: boolean;
+    showBusinessHours?: boolean;
   };
   isActive: boolean;
 }
@@ -100,6 +104,10 @@ export function ContactPage() {
             emailTo: 'hello@oneclicktag.com',
             successMessage: "Thank you for contacting us. We'll get back to you within 24 hours.",
             subjects: ['General Inquiry', 'Sales Question', 'Technical Support', 'Partnership Opportunity', 'Other'],
+            showEmail: true,
+            showPhone: true,
+            showAddress: true,
+            showBusinessHours: true,
           },
           isActive: true,
         });
@@ -109,31 +117,36 @@ export function ContactPage() {
     loadContent();
   }, []);
 
+  // Build contact info array, only including enabled items
   const contactInfo = [
-    {
+    // Email - only show if showEmail is true (default to true if not set)
+    ...(contactContent?.formSettings?.showEmail !== false ? [{
       icon: Mail,
       title: 'Email',
       value: contactContent?.email || 'hello@oneclicktag.com',
       link: `mailto:${contactContent?.email || 'hello@oneclicktag.com'}`,
-    },
-    {
+    }] : []),
+    // Phone - only show if showPhone is true (default to true if not set)
+    ...(contactContent?.formSettings?.showPhone !== false ? [{
       icon: Phone,
       title: 'Phone',
       value: contactContent?.phone || '+1 (555) 123-4567',
       link: `tel:${contactContent?.phone?.replace(/[^0-9+]/g, '') || '+15551234567'}`,
-    },
-    {
+    }] : []),
+    // Address - only show if showAddress is true (default to true if not set)
+    ...(contactContent?.formSettings?.showAddress !== false ? [{
       icon: MapPin,
       title: 'Office',
       value: contactContent?.address || 'San Francisco, CA',
       link: null,
-    },
-    {
+    }] : []),
+    // Business Hours - only show if showBusinessHours is true (default to true if not set)
+    ...(contactContent?.formSettings?.showBusinessHours !== false ? [{
       icon: Clock,
       title: 'Business Hours',
       value: contactContent?.businessHours || 'Mon-Fri: 9AM-6PM PST',
       link: null,
-    },
+    }] : []),
   ];
 
   return (
@@ -169,9 +182,15 @@ export function ContactPage() {
       </section>
 
       {/* Contact Info Cards */}
+      {contactInfo.length > 0 && (
       <section className="py-12 -mt-10 relative z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className={`grid grid-cols-1 gap-6 ${
+            contactInfo.length === 1 ? 'md:grid-cols-1 max-w-md mx-auto' :
+            contactInfo.length === 2 ? 'md:grid-cols-2 max-w-2xl mx-auto' :
+            contactInfo.length === 3 ? 'md:grid-cols-3 max-w-4xl mx-auto' :
+            'md:grid-cols-2 lg:grid-cols-4'
+          }`}>
             {contactInfo.map((info, index) => {
               const Icon = info.icon;
               return (
@@ -199,6 +218,7 @@ export function ContactPage() {
           </div>
         </div>
       </section>
+      )}
 
       {/* Contact Form */}
       <section className="py-20">

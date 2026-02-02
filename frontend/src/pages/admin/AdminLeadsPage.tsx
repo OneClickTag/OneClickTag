@@ -19,7 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Search, Download, Eye, Trash2, CheckCircle2, Clock, BarChart3 } from 'lucide-react';
+import { Search, Download, Eye, Trash2, CheckCircle2, Clock, BarChart3, Users, RefreshCw } from 'lucide-react';
 import { adminLeadsService } from '@/lib/api/services';
 import type { AdminLead, LeadQueryParams } from '@/lib/api/services/admin/adminLeadsService';
 
@@ -76,18 +76,40 @@ export function AdminLeadsPage() {
     }
   };
 
+  const [exporting, setExporting] = useState(false);
+
   const handleExport = async () => {
     try {
+      setExporting(true);
       const data = await adminLeadsService.exportLeads();
-      // Convert to CSV
-      const headers = Object.keys(data[0] || {});
+
+      // Check if there's data to export
+      if (!data || data.length === 0) {
+        alert('No leads to export');
+        return;
+      }
+
+      // Helper function to escape CSV values
+      const escapeCSV = (value: any): string => {
+        if (value === null || value === undefined) return '';
+        const str = String(value);
+        // If value contains comma, quote, or newline, wrap in quotes and escape inner quotes
+        if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+          return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+      };
+
+      // Convert to CSV with proper escaping
+      const headers = Object.keys(data[0]);
       const csv = [
-        headers.join(','),
-        ...data.map(row => headers.map(h => row[h]).join(',')),
+        headers.map(escapeCSV).join(','),
+        ...data.map(row => headers.map(h => escapeCSV(row[h])).join(',')),
       ].join('\n');
 
-      // Download
-      const blob = new Blob([csv], { type: 'text/csv' });
+      // Download with BOM for Excel compatibility
+      const BOM = '\uFEFF';
+      const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -98,6 +120,9 @@ export function AdminLeadsPage() {
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Failed to export leads:', error);
+      alert('Failed to export leads. Please try again.');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -162,9 +187,13 @@ export function AdminLeadsPage() {
               <BarChart3 className="w-4 h-4 mr-2" />
               Analytics
             </Button>
-            <Button onClick={handleExport}>
-              <Download className="w-4 h-4 mr-2" />
-              Export CSV
+            <Button onClick={() => { loadStats(); loadLeads(); }} variant="outline" disabled={loading}>
+              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+            <Button onClick={handleExport} disabled={exporting}>
+              <Download className={`w-4 h-4 mr-2 ${exporting ? 'animate-pulse' : ''}`} />
+              {exporting ? 'Exporting...' : 'Export CSV'}
             </Button>
           </div>
         </div>
@@ -280,7 +309,11 @@ export function AdminLeadsPage() {
                 </TableRow>
               ) : (
                 leads.map((lead) => (
-                  <TableRow key={lead.id} className="hover:bg-gray-50">
+                  <TableRow
+                    key={lead.id}
+                    className="hover:bg-gray-50 cursor-pointer"
+                    onClick={() => navigate(`/admin/leads/${lead.id}`)}
+                  >
                     <TableCell className="font-medium">{lead.name}</TableCell>
                     <TableCell>{lead.email}</TableCell>
                     <TableCell>
@@ -306,14 +339,20 @@ export function AdminLeadsPage() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => navigate(`/admin/leads/${lead.id}`)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/admin/leads/${lead.id}`);
+                          }}
                         >
                           <Eye className="w-4 h-4" />
                         </Button>
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => handleDelete(lead.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(lead.id);
+                          }}
                           className="text-red-600 hover:text-red-700 hover:bg-red-50"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -357,6 +396,3 @@ export function AdminLeadsPage() {
     </AdminLayout>
   );
 }
-
-// Missing import
-import { Users } from 'lucide-react';

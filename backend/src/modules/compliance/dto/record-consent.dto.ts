@@ -28,6 +28,11 @@ export class RecordConsentDto {
   @IsBoolean()
   marketingCookies: boolean;
 
+  @ApiProperty({ example: false, required: false })
+  @IsBoolean()
+  @IsOptional()
+  newsletterConsent?: boolean;
+
   @ApiProperty({ example: '192.168.1.1', required: false })
   @IsString()
   @IsOptional()

@@ -3,12 +3,12 @@ import { getSessionFromRequest, requireTenant } from '@/lib/auth/session';
 import prisma from '@/lib/prisma';
 
 interface UpdateCookieBody {
-  categoryId?: string;
   name?: string;
   provider?: string;
   purpose?: string;
   duration?: string;
   type?: string;
+  categoryId?: string;
 }
 
 interface RouteParams {
@@ -64,10 +64,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 /**
- * PUT /api/compliance/cookies/[id]
+ * PATCH /api/compliance/cookies/[id]
  * Update a cookie
  */
-export async function PUT(request: NextRequest, { params }: RouteParams) {
+export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const session = await getSessionFromRequest(request);
     requireTenant(session);
@@ -90,7 +90,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // If updating category, verify new category belongs to tenant
+    // If categoryId is provided, verify it belongs to tenant
     if (body.categoryId) {
       const category = await prisma.cookieCategory.findFirst({
         where: {
@@ -110,12 +110,12 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const cookie = await prisma.cookie.update({
       where: { id },
       data: {
-        ...(body.categoryId !== undefined && { categoryId: body.categoryId }),
         ...(body.name !== undefined && { name: body.name }),
         ...(body.provider !== undefined && { provider: body.provider }),
         ...(body.purpose !== undefined && { purpose: body.purpose }),
         ...(body.duration !== undefined && { duration: body.duration }),
         ...(body.type !== undefined && { type: body.type }),
+        ...(body.categoryId !== undefined && { categoryId: body.categoryId }),
       },
       include: {
         category: true,

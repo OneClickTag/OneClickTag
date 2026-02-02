@@ -31,32 +31,31 @@ export interface UpdateComplianceSettingsData {
 }
 
 // Cookie Category Types
+export type CookieConsentCategory = 'NECESSARY' | 'ANALYTICS' | 'MARKETING';
+
 export interface CookieCategory {
   id: string;
+  category: CookieConsentCategory;
   name: string;
-  slug: string;
   description: string;
   isRequired: boolean;
-  displayOrder: number;
   tenantId: string;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface CreateCookieCategoryData {
+  category: CookieConsentCategory;
   name: string;
-  slug: string;
   description: string;
   isRequired: boolean;
-  displayOrder?: number;
 }
 
 export interface UpdateCookieCategoryData {
+  category?: CookieConsentCategory;
   name?: string;
-  slug?: string;
   description?: string;
   isRequired?: boolean;
-  displayOrder?: number;
 }
 
 // Cookie Types
@@ -242,6 +241,67 @@ export interface AuditLogQueryParams {
   endDate?: string;
 }
 
+// User Consent Types
+export interface UserConsent {
+  id: string;
+  tenantId: string;
+  userId?: string;
+  anonymousId?: string;
+  necessaryCookies: boolean;
+  analyticsCookies: boolean;
+  marketingCookies: boolean;
+  newsletterConsent: boolean;
+  consentGivenAt: string;
+  consentExpiresAt: string;
+  ipAddress?: string;
+  userAgent?: string;
+  createdAt: string;
+  updatedAt: string;
+  user?: {
+    id: string;
+    email: string;
+    name: string;
+  };
+}
+
+export interface UserConsentsListResponse {
+  data: UserConsent[];
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
+
+export interface UserConsentQueryParams {
+  page?: number;
+  limit?: number;
+  analyticsCookies?: boolean;
+  marketingCookies?: boolean;
+  newsletterConsent?: boolean;
+  search?: string;
+}
+
+export interface ConsentStats {
+  total: number;
+  analytics: {
+    accepted: number;
+    rejected: number;
+    rate: number;
+  };
+  marketing: {
+    accepted: number;
+    rejected: number;
+    rate: number;
+  };
+  newsletter: {
+    subscribed: number;
+    notSubscribed: number;
+    rate: number;
+  };
+}
+
 // Compliance Service
 export const adminComplianceService = {
   // Compliance Settings
@@ -362,7 +422,61 @@ export const adminComplianceService = {
     if (params?.endDate) queryParams.append('endDate', params.endDate);
 
     const url = params ? `${apiEndpoints.admin.compliance.auditLogs}?${queryParams.toString()}` : apiEndpoints.admin.compliance.auditLogs;
-    const response = await apiClient.get<AuditLogsListResponse>(url);
+    const response = await apiClient.get<{ logs: any[]; total: number; skip: number; take: number }>(url);
+
+    // Transform backend response format to frontend expected format
+    const backendData = response.data;
+    const page = params?.page || 1;
+    const limit = params?.limit || 20;
+    const totalPages = Math.ceil(backendData.total / limit);
+
+    // Map backend log fields to frontend expected fields
+    const transformedLogs: ApiAuditLog[] = backendData.logs.map((log) => ({
+      id: log.id,
+      userId: log.userId,
+      service: log.apiService,
+      method: log.httpMethod,
+      endpoint: log.endpoint,
+      statusCode: log.responseStatus,
+      requestBody: log.requestPayload,
+      responseBody: log.responseBody,
+      ipAddress: log.ipAddress,
+      userAgent: log.userAgent,
+      timestamp: log.createdAt,
+      tenantId: log.tenantId,
+      user: log.user,
+    }));
+
+    return {
+      data: transformedLogs,
+      meta: {
+        total: backendData.total,
+        page,
+        limit,
+        totalPages,
+      },
+    };
+  },
+
+  // User Consents
+  async getUserConsents(params?: UserConsentQueryParams): Promise<UserConsentsListResponse> {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.analyticsCookies !== undefined) queryParams.append('analyticsCookies', params.analyticsCookies.toString());
+    if (params?.marketingCookies !== undefined) queryParams.append('marketingCookies', params.marketingCookies.toString());
+    if (params?.newsletterConsent !== undefined) queryParams.append('newsletterConsent', params.newsletterConsent.toString());
+    if (params?.search) queryParams.append('search', params.search);
+
+    const url = queryParams.toString()
+      ? `/compliance/user-consents?${queryParams.toString()}`
+      : '/compliance/user-consents';
+    const response = await apiClient.get<UserConsentsListResponse>(url);
+    return response.data;
+  },
+
+  async getConsentStats(): Promise<ConsentStats> {
+    const response = await apiClient.get<ConsentStats>('/compliance/user-consents/stats');
     return response.data;
   },
 };

@@ -25,6 +25,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             isActive: true,
           },
         },
+        plan: {
+          select: {
+            id: true,
+            name: true,
+            price: true,
+          },
+        },
         oauthTokens: {
           select: {
             id: true,
@@ -50,6 +57,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       role: user.role,
       tenantId: user.tenantId,
       tenant: user.tenant,
+      plan: user.plan ? {
+        id: user.plan.id,
+        name: user.plan.name,
+        price: user.plan.price ? Number(user.plan.price) : null,
+      } : null,
+      planEndDate: user.planEndDate,
       oauthTokens: user.oauthTokens,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
@@ -76,7 +89,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     const { id } = await params;
     const body = await request.json();
-    const { email, name, role, tenantId } = body;
+    const { email, name, role, tenantId, planId, planEndDate } = body;
 
     const user = await prisma.user.findUnique({ where: { id } });
 
@@ -108,6 +121,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         ...(name !== undefined && { name }),
         ...(role !== undefined && { role }),
         ...(tenantId !== undefined && { tenantId }),
+        ...(planId !== undefined && { planId: planId || null }),
+        ...(planEndDate !== undefined && { planEndDate: planEndDate ? new Date(planEndDate) : null }),
       },
       include: {
         tenant: {
@@ -115,6 +130,13 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
             id: true,
             name: true,
             domain: true,
+          },
+        },
+        plan: {
+          select: {
+            id: true,
+            name: true,
+            price: true,
           },
         },
       },
@@ -127,6 +149,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       role: updatedUser.role,
       tenantId: updatedUser.tenantId,
       tenant: updatedUser.tenant,
+      planId: updatedUser.planId,
+      plan: updatedUser.plan,
+      planEndDate: updatedUser.planEndDate,
       createdAt: updatedUser.createdAt,
       updatedAt: updatedUser.updatedAt,
     });
@@ -142,6 +167,11 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
+}
+
+// PATCH /api/admin/users/[id] - Partial update user
+export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  return PUT(request, { params });
 }
 
 // DELETE /api/admin/users/[id] - Delete user

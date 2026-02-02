@@ -13,9 +13,48 @@ export interface SiteSettings {
     accent: string;
   };
   heroBackgroundUrl?: string;
+
+  // Basic SEO
   metaTitle?: string;
   metaDescription?: string;
+  metaTitleTemplate?: string;
+
+  // Open Graph Settings
+  ogTitle?: string;
+  ogDescription?: string;
+  ogImage?: string;
+  ogType?: string;
+  ogSiteName?: string;
+  ogLocale?: string;
+
+  // Twitter Card Settings
+  twitterCard?: string;
+  twitterTitle?: string;
+  twitterDescription?: string;
+  twitterImage?: string;
+  twitterSite?: string;
+  twitterCreator?: string;
+
+  // Robots & Indexing
+  robotsIndex?: boolean;
+  robotsFollow?: boolean;
+  robotsNoArchive?: boolean;
+  robotsNoSnippet?: boolean;
+  robotsNoImageIndex?: boolean;
+  googleVerification?: string;
+  bingVerification?: string;
+
+  // Canonical URL Settings
+  canonicalUrl?: string;
+  forceTrailingSlash?: boolean;
+
+  // Schema.org / JSON-LD Settings
+  schemaType?: string;
+  schemaData?: Record<string, any>;
+
+  // Legacy field
   socialImageUrl?: string;
+
   customCSS?: string;
   customJS?: string;
   createdAt: string;
@@ -33,9 +72,48 @@ export interface UpdateSiteSettingsData {
     accent?: string;
   };
   heroBackgroundUrl?: string;
+
+  // Basic SEO
   metaTitle?: string;
   metaDescription?: string;
+  metaTitleTemplate?: string;
+
+  // Open Graph Settings
+  ogTitle?: string;
+  ogDescription?: string;
+  ogImage?: string;
+  ogType?: string;
+  ogSiteName?: string;
+  ogLocale?: string;
+
+  // Twitter Card Settings
+  twitterCard?: string;
+  twitterTitle?: string;
+  twitterDescription?: string;
+  twitterImage?: string;
+  twitterSite?: string;
+  twitterCreator?: string;
+
+  // Robots & Indexing
+  robotsIndex?: boolean;
+  robotsFollow?: boolean;
+  robotsNoArchive?: boolean;
+  robotsNoSnippet?: boolean;
+  robotsNoImageIndex?: boolean;
+  googleVerification?: string;
+  bingVerification?: string;
+
+  // Canonical URL Settings
+  canonicalUrl?: string;
+  forceTrailingSlash?: boolean;
+
+  // Schema.org / JSON-LD Settings
+  schemaType?: string;
+  schemaData?: Record<string, any>;
+
+  // Legacy field
   socialImageUrl?: string;
+
   customCSS?: string;
   customJS?: string;
 }

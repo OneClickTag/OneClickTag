@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApi } from '@/hooks/use-api';
+import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -29,6 +30,13 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Calendar } from '@/components/ui/calendar';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
 import {
   Search,
   Trash2,
@@ -40,6 +48,11 @@ import {
   ArrowUp,
   ArrowDown,
   Download,
+  Eye,
+  Mail,
+  Calendar as CalendarIcon,
+  Shield,
+  Building,
 } from 'lucide-react';
 
 interface AdminUser {
@@ -48,16 +61,42 @@ interface AdminUser {
   email: string;
   role: 'USER' | 'ADMIN' | 'SUPER_ADMIN';
   tenant?: {
+    id: string;
     name: string;
+    domain?: string;
+    isActive?: boolean;
   };
+  tenantId?: string;
+  plan?: {
+    id: string;
+    name: string;
+    price?: number;
+  };
+  planEndDate?: string;
+  oauthTokens?: Array<{
+    id: string;
+    provider: string;
+    scope?: string;
+    createdAt: string;
+  }>;
   createdAt: string;
+  updatedAt?: string;
+}
+
+interface Plan {
+  id: string;
+  name: string;
+  price: number;
 }
 
 interface UsersResponse {
   data: AdminUser[];
-  total: number;
-  totalPages: number;
-  page: number;
+  meta: {
+    total: number;
+    totalPages: number;
+    page: number;
+    limit: number;
+  };
 }
 
 type SortField = 'name' | 'email' | 'role' | 'createdAt';
@@ -73,12 +112,23 @@ export default function AdminUsersPage() {
   const [sortBy, setSortBy] = useState<SortField>('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     role: 'USER' as 'USER' | 'ADMIN' | 'SUPER_ADMIN',
+    planId: '' as string,
+    planEndDate: '' as string,
   });
+
+  // Fetch available plans
+  const { data: plansData } = useQuery({
+    queryKey: ['plans'],
+    queryFn: () => api.get<Plan[]>('/api/public/plans'),
+  });
+  const plans = plansData || [];
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['admin', 'users', searchTerm, selectedRole, page, sortBy, sortOrder],
@@ -95,9 +145,26 @@ export default function AdminUsersPage() {
     },
   });
 
+  // Fetch user details when view modal opens
+  const { data: userDetail, isLoading: isLoadingDetail } = useQuery({
+    queryKey: ['admin', 'user', selectedUserId],
+    queryFn: () => api.get<AdminUser>(`/api/admin/users/${selectedUserId}`),
+    enabled: !!selectedUserId && isViewModalOpen,
+  });
+
+  const handleViewUser = (userId: string) => {
+    setSelectedUserId(userId);
+    setIsViewModalOpen(true);
+  };
+
+  const handleCloseViewModal = () => {
+    setIsViewModalOpen(false);
+    setSelectedUserId(null);
+  };
+
   const users = data?.data || [];
-  const total = data?.total || 0;
-  const totalPages = data?.totalPages || 1;
+  const total = data?.meta?.total || 0;
+  const totalPages = data?.meta?.totalPages || 1;
 
   const deleteMutation = useMutation({
     mutationFn: (userId: string) => api.delete(`/api/admin/users/${userId}`),
@@ -125,7 +192,7 @@ export default function AdminUsersPage() {
   });
 
   const updateUserMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: { name?: string; role?: string } }) =>
+    mutationFn: ({ id, data }: { id: string; data: { name?: string; role?: string; planId?: string | null; planEndDate?: string | null } }) =>
       api.patch(`/api/admin/users/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
@@ -187,20 +254,26 @@ export default function AdminUsersPage() {
 
   const handleOpenCreateModal = () => {
     setEditingUser(null);
-    setFormData({ name: '', email: '', role: 'USER' });
+    setFormData({ name: '', email: '', role: 'USER', planId: '', planEndDate: '' });
     setIsModalOpen(true);
   };
 
   const handleOpenEditModal = (user: AdminUser) => {
     setEditingUser(user);
-    setFormData({ name: user.name, email: user.email, role: user.role });
+    setFormData({
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      planId: user.plan?.id || '',
+      planEndDate: user.planEndDate ? user.planEndDate.split('T')[0] : '',
+    });
     setIsModalOpen(true);
   };
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingUser(null);
-    setFormData({ name: '', email: '', role: 'USER' });
+    setFormData({ name: '', email: '', role: 'USER', planId: '', planEndDate: '' });
   };
 
   const handleSaveUser = async () => {
@@ -208,7 +281,12 @@ export default function AdminUsersPage() {
       if (editingUser) {
         await updateUserMutation.mutateAsync({
           id: editingUser.id,
-          data: { name: formData.name, role: formData.role },
+          data: {
+            name: formData.name,
+            role: formData.role,
+            planId: formData.planId || null,
+            planEndDate: formData.planEndDate || null,
+          },
         });
       } else {
         await createUserMutation.mutateAsync(formData);
@@ -218,6 +296,10 @@ export default function AdminUsersPage() {
       alert('Failed to save user');
     }
   };
+
+  // Check if selected plan is free (price = 0)
+  const selectedPlan = plans.find((p) => p.id === formData.planId);
+  const showPlanEndDate = selectedPlan && Number(selectedPlan.price) > 0;
 
   const getSortIcon = (field: SortField) => {
     if (sortBy !== field) {
@@ -418,6 +500,7 @@ export default function AdminUsersPage() {
                         {getSortIcon('role')}
                       </div>
                     </TableHead>
+                    <TableHead>Plan</TableHead>
                     <TableHead>Tenant</TableHead>
                     <TableHead
                       className="cursor-pointer hover:bg-gray-50"
@@ -433,8 +516,12 @@ export default function AdminUsersPage() {
                 </TableHeader>
                 <TableBody>
                   {users.map((user) => (
-                    <TableRow key={user.id} className="hover:bg-gray-50">
-                      <TableCell>
+                    <TableRow
+                      key={user.id}
+                      className="hover:bg-blue-50 cursor-pointer"
+                      onClick={() => handleViewUser(user.id)}
+                    >
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         <Checkbox
                           checked={selectedUsers.has(user.id)}
                           onCheckedChange={() => handleSelectUser(user.id)}
@@ -457,13 +544,34 @@ export default function AdminUsersPage() {
                           {user.role}
                         </span>
                       </TableCell>
+                      <TableCell className="text-sm">
+                        {user.plan ? (
+                          <div>
+                            <span className="font-medium text-gray-900">{user.plan.name}</span>
+                            {user.planEndDate && (
+                              <div className="text-xs text-gray-500">
+                                Expires: {new Date(user.planEndDate).toLocaleDateString()}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">No plan</span>
+                        )}
+                      </TableCell>
                       <TableCell className="text-sm text-gray-600">
                         {user.tenant?.name || 'No tenant'}
                       </TableCell>
                       <TableCell className="text-sm text-gray-600">
                         {new Date(user.createdAt).toLocaleDateString()}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => handleViewUser(user.id)}
+                          className="text-gray-600 hover:text-gray-900 text-sm font-medium mr-4"
+                        >
+                          <Eye className="w-4 h-4 inline mr-1" />
+                          View
+                        </button>
                         <button
                           onClick={() => handleOpenEditModal(user)}
                           className="text-blue-600 hover:text-blue-900 text-sm font-medium mr-4"
@@ -577,6 +685,57 @@ export default function AdminUsersPage() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="plan">Plan</Label>
+              <Select
+                value={formData.planId || '__none__'}
+                onValueChange={(value) => {
+                  const planId = value === '__none__' ? '' : value;
+                  setFormData({ ...formData, planId, planEndDate: planId ? formData.planEndDate : '' });
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select plan" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">No plan</SelectItem>
+                  {plans.map((plan) => (
+                    <SelectItem key={plan.id} value={plan.id}>
+                      {plan.name} {Number(plan.price) === 0 ? '(Free)' : `($${plan.price})`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {showPlanEndDate && (
+              <div className="space-y-2">
+                <Label>Plan End Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !formData.planEndDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {formData.planEndDate ? format(new Date(formData.planEndDate), "PPP") : "Select date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={formData.planEndDate ? new Date(formData.planEndDate) : undefined}
+                      onSelect={(date) => setFormData({ ...formData, planEndDate: date ? format(date, 'yyyy-MM-dd') : '' })}
+                      disabled={(date) => date < new Date()}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+                <p className="text-xs text-gray-500">Required for paid plans</p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={handleCloseModal}>
@@ -591,6 +750,152 @@ export default function AdminUsersPage() {
               )}
               {editingUser ? 'Update User' : 'Create User'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View User Modal */}
+      <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="w-5 h-5" />
+              User Details
+            </DialogTitle>
+          </DialogHeader>
+
+          {isLoadingDetail ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+            </div>
+          ) : userDetail ? (
+            <div className="space-y-6">
+              {/* Basic Info */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <Users className="w-4 h-4" />
+                  Account Information
+                </h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500">Name</p>
+                    <p className="font-medium">{userDetail.name || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Email</p>
+                    <p className="font-medium flex items-center gap-1">
+                      <Mail className="w-4 h-4 text-gray-400" />
+                      {userDetail.email}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Role</p>
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getRoleBadgeColor(userDetail.role)}`}>
+                      <Shield className="w-3 h-3 inline mr-1" />
+                      {userDetail.role}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Created</p>
+                    <p className="font-medium flex items-center gap-1">
+                      <CalendarIcon className="w-4 h-4 text-gray-400" />
+                      {new Date(userDetail.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tenant Info */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <Building className="w-4 h-4" />
+                  Organization
+                </h4>
+                {userDetail.tenant ? (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-500">Name</p>
+                      <p className="font-medium">{userDetail.tenant.name}</p>
+                    </div>
+                    {userDetail.tenant.domain && (
+                      <div>
+                        <p className="text-sm text-gray-500">Domain</p>
+                        <p className="font-medium">{userDetail.tenant.domain}</p>
+                      </div>
+                    )}
+                    {userDetail.tenant.isActive !== undefined && (
+                      <div>
+                        <p className="text-sm text-gray-500">Status</p>
+                        <span className={`px-2 py-1 text-xs rounded-full ${userDetail.tenant.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                          {userDetail.tenant.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-gray-500">No organization assigned</p>
+                )}
+              </div>
+
+              {/* Plan Info */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h4 className="font-semibold text-gray-900 mb-3">Subscription Plan</h4>
+                {userDetail.plan ? (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-500">Plan</p>
+                      <p className="font-medium">{userDetail.plan.name}</p>
+                    </div>
+                    {userDetail.planEndDate && (
+                      <div>
+                        <p className="text-sm text-gray-500">Expires</p>
+                        <p className="font-medium">{new Date(userDetail.planEndDate).toLocaleDateString()}</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-gray-500">No plan assigned</p>
+                )}
+              </div>
+
+              {/* OAuth Tokens */}
+              {userDetail.oauthTokens && userDetail.oauthTokens.length > 0 && (
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h4 className="font-semibold text-gray-900 mb-3">Connected Accounts</h4>
+                  <div className="space-y-2">
+                    {userDetail.oauthTokens.map((token) => (
+                      <div key={token.id} className="flex items-center justify-between p-2 bg-white rounded border">
+                        <div>
+                          <span className="font-medium capitalize">{token.provider}</span>
+                          {token.scope && (
+                            <span className="text-xs text-gray-500 ml-2">({token.scope})</span>
+                          )}
+                        </div>
+                        <span className="text-xs text-gray-500">
+                          Connected: {new Date(token.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-center py-8">User not found</p>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCloseViewModal}>
+              Close
+            </Button>
+            {userDetail && (
+              <Button onClick={() => {
+                handleCloseViewModal();
+                handleOpenEditModal(userDetail);
+              }}>
+                Edit User
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

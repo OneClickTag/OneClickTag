@@ -33,7 +33,42 @@ export class FooterService {
         return defaultFooter;
       }
 
-      throw new NotFoundException('No active footer content found');
+      // Return a default configuration if nothing exists in the database
+      return {
+        id: 'default',
+        brandName: 'OneClickTag',
+        brandDescription: 'Simplify your conversion tracking with automated GTM and Google Ads integration.',
+        socialLinks: [
+          { platform: 'Twitter', url: 'https://twitter.com/oneclicktag', icon: 'twitter' },
+          { platform: 'LinkedIn', url: 'https://linkedin.com/company/oneclicktag', icon: 'linkedin' },
+          { platform: 'GitHub', url: 'https://github.com/oneclicktag', icon: 'github' },
+        ],
+        sections: [
+          {
+            title: 'Product',
+            links: [{ label: 'Pricing', url: '/plans' }],
+          },
+          {
+            title: 'Company',
+            links: [
+              { label: 'About Us', url: '/about' },
+              { label: 'Contact', url: '/contact' },
+            ],
+          },
+          {
+            title: 'Legal',
+            links: [
+              { label: 'Terms of Service', url: '/terms' },
+              { label: 'Privacy Policy', url: '/privacy' },
+            ],
+          },
+        ],
+        copyrightText: 'OneClickTag. All rights reserved.',
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        updatedBy: null,
+      };
     }
 
     return footer;

@@ -58,11 +58,23 @@ export async function getSessionFromRequest(request: NextRequest): Promise<Sessi
     const authHeader = request.headers.get('authorization');
     const token = authHeader?.replace('Bearer ', '');
 
+    console.log('[Session] Auth header present:', !!authHeader);
+
     if (!token) {
+      console.log('[Session] No token found');
       return null;
     }
 
-    const decodedToken = await verifyIdToken(token);
+    console.log('[Session] Token length:', token.length, 'Token prefix:', token.substring(0, 20));
+
+    let decodedToken;
+    try {
+      decodedToken = await verifyIdToken(token);
+      console.log('[Session] Token verified, uid:', decodedToken.uid);
+    } catch (verifyError) {
+      console.error('[Session] Token verification failed:', verifyError);
+      return null;
+    }
 
     const user = await prisma.user.findUnique({
       where: { firebaseId: decodedToken.uid },
@@ -75,6 +87,8 @@ export async function getSessionFromRequest(request: NextRequest): Promise<Sessi
         firebaseId: true,
       },
     });
+
+    console.log('[Session] User found:', !!user);
 
     if (!user || !user.firebaseId) {
       return null;
@@ -89,7 +103,7 @@ export async function getSessionFromRequest(request: NextRequest): Promise<Sessi
       firebaseId: user.firebaseId,
     };
   } catch (error) {
-    console.error('Session verification error:', error);
+    console.error('[Session] Session verification error:', error);
     return null;
   }
 }

@@ -132,7 +132,7 @@ export function AdminContentPage() {
             <div className="text-center py-12">
               <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-600">No content pages found</p>
-              <Button className="mt-4">Create First Page</Button>
+              <Button className="mt-4" onClick={handleOpenCreateModal}>Create First Page</Button>
             </div>
           ) : (
             <div className="overflow-x-auto">

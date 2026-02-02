@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../../common/prisma/prisma.service';
-import { UpdateUserDto, UserQueryDto } from '../dto/admin-user.dto';
+import { CreateUserDto, UpdateUserDto, UserQueryDto } from '../dto/admin-user.dto';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class AdminUsersService {
@@ -55,6 +56,7 @@ export class AdminUsersService {
         role: user.role,
         tenantId: user.tenantId,
         tenant: user.tenant,
+        isActive: true, // Default to true since schema doesn't have this field
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       })),
@@ -64,6 +66,53 @@ export class AdminUsersService {
         limit,
         totalPages: Math.ceil(total / limit),
       },
+    };
+  }
+
+  async create(createUserDto: CreateUserDto) {
+    // Check if email already exists
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: createUserDto.email },
+    });
+
+    if (existingUser) {
+      throw new BadRequestException('Email already in use');
+    }
+
+    // Generate a random password for admin-created users
+    // They can reset it via email if needed
+    const randomPassword = Math.random().toString(36).slice(-12);
+    const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
+    const user = await this.prisma.user.create({
+      data: {
+        email: createUserDto.email,
+        name: createUserDto.name,
+        password: hashedPassword,
+        role: (createUserDto.role || 'USER') as any,
+        tenantId: createUserDto.tenantId || null,
+      },
+      include: {
+        tenant: {
+          select: {
+            id: true,
+            name: true,
+            domain: true,
+          },
+        },
+      },
+    });
+
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      tenantId: user.tenantId,
+      tenant: user.tenant,
+      isActive: true, // New users are always active
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
     };
   }
 
@@ -102,6 +151,7 @@ export class AdminUsersService {
       tenantId: user.tenantId,
       tenant: user.tenant,
       oauthTokens: user.oauthTokens,
+      isActive: true, // Default to true since schema doesn't have this field
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
@@ -146,6 +196,7 @@ export class AdminUsersService {
       role: updatedUser.role,
       tenantId: updatedUser.tenantId,
       tenant: updatedUser.tenant,
+      isActive: true, // Default to true since schema doesn't have this field
       createdAt: updatedUser.createdAt,
       updatedAt: updatedUser.updatedAt,
     };
