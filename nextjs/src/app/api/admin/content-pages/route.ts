@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getSessionFromRequest, requireAdmin } from '@/lib/auth/session';
 
+// Static page slugs managed by /admin/static-pages (not shown here)
+const STATIC_PAGE_SLUGS = ['about', 'terms', 'privacy'];
+
 // GET /api/admin/content-pages - Get all content pages
 export async function GET(request: NextRequest) {
   try {
@@ -12,7 +15,11 @@ export async function GET(request: NextRequest) {
     const publishedParam = searchParams.get('published');
     const published = publishedParam === 'true' ? true : publishedParam === 'false' ? false : undefined;
 
-    const where = published !== undefined ? { isPublished: published } : {};
+    // Filter out static pages (managed via /admin/static-pages)
+    const where = {
+      ...(published !== undefined ? { isPublished: published } : {}),
+      slug: { notIn: STATIC_PAGE_SLUGS },
+    };
 
     const pages = await prisma.contentPage.findMany({
       where,
@@ -47,6 +54,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Title and slug are required' }, { status: 400 });
     }
 
+    // Prevent creating pages with static slugs (managed via /admin/static-pages)
+    if (STATIC_PAGE_SLUGS.includes(slug)) {
+      return NextResponse.json(
+        { error: `"${slug}" is a reserved slug. Manage it via Static Pages.` },
+        { status: 400 }
+      );
+    }
+
     // Check if slug already exists
     const existing = await prisma.contentPage.findUnique({
       where: { slug },
@@ -71,6 +86,8 @@ export async function POST(request: NextRequest) {
         createdBy: session.id,
       },
     });
+
+    // Note: Pages use dynamic = 'force-dynamic' so they always fetch fresh data
 
     return NextResponse.json(page, { status: 201 });
   } catch (error) {

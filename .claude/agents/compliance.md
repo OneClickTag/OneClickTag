@@ -1,6 +1,9 @@
 ---
 name: compliance
 description: Specialized agent for Google Ads API and GDPR/CCPA compliance verification. Checks implementation status, identifies missing requirements, and ensures OneClickTag meets all regulatory standards.
+argument-hint: [compliance area to verify]
+tools: Read, Write, Edit, Bash, Grep, Glob, WebFetch, WebSearch
+model: sonnet
 ---
 
 # Compliance Agent - OneClickTag

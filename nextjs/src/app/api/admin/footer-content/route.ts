@@ -2,39 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getSessionFromRequest, requireAdmin } from '@/lib/auth/session';
 
-// Default footer configuration (matches Footer component defaults)
-const defaultFooterConfig = {
-  brandName: 'OneClickTag',
-  brandDescription: 'Simplify your conversion tracking with automated GTM and Google Ads integration.',
-  socialLinks: [
-    { platform: 'Twitter', url: 'https://twitter.com/oneclicktag', icon: 'twitter' },
-    { platform: 'LinkedIn', url: 'https://linkedin.com/company/oneclicktag', icon: 'linkedin' },
-    { platform: 'GitHub', url: 'https://github.com/oneclicktag', icon: 'github' },
-  ],
-  sections: [
-    {
-      title: 'Product',
-      links: [{ label: 'Pricing', url: '/plans' }],
-    },
-    {
-      title: 'Company',
-      links: [
-        { label: 'About Us', url: '/about' },
-        { label: 'Contact', url: '/contact' },
-      ],
-    },
-    {
-      title: 'Legal',
-      links: [
-        { label: 'Terms of Service', url: '/terms' },
-        { label: 'Privacy Policy', url: '/privacy' },
-      ],
-    },
-  ],
-  copyrightText: 'OneClickTag. All rights reserved.',
-  isActive: true,
-};
-
 // GET /api/admin/footer-content - Get footer content
 export async function GET(request: NextRequest) {
   try {
@@ -42,11 +9,11 @@ export async function GET(request: NextRequest) {
     requireAdmin(session);
 
     // Get the first (and should be only) footer content
-    let footer = await prisma.footerContent.findFirst();
+    const footer = await prisma.footerContent.findFirst();
 
-    // If no footer content exists, return default config so admin can see and edit
+    // Return null if no footer exists - admin should create one
     if (!footer) {
-      return NextResponse.json(defaultFooterConfig);
+      return NextResponse.json(null);
     }
 
     return NextResponse.json(footer);
@@ -98,7 +65,7 @@ export async function PUT(request: NextRequest) {
         },
       });
     } else {
-      // Create new
+      // Create new - require all fields
       footer = await prisma.footerContent.create({
         data: {
           brandName: brandName || '',

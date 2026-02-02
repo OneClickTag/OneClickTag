@@ -44,89 +44,97 @@ function getActiveItems<T extends { isActive: boolean; order: number }>(items: T
     .sort((a, b) => a.order - b.order);
 }
 
-const defaultContent: HowItWorksContent = {
-  title: 'How It Works',
-  subtitle: 'Get up and running in minutes, not hours. Our streamlined process makes tracking setup effortless.',
-  steps: [
-    {
-      id: 'step-1',
-      isActive: true,
-      order: 0,
-      icon: 'MousePointerClick',
-      title: 'Connect Google Account',
-      description: 'One-click OAuth connection. We securely access your GTM, Google Ads, and GA4 with your permission.',
-      step: '01',
-    },
-    {
-      id: 'step-2',
-      isActive: true,
-      order: 1,
-      icon: 'Link2',
-      title: 'Configure Tracking',
-      description: 'Select what you want to track (button clicks, form submits, page views). Just enter the CSS selector.',
-      step: '02',
-    },
-    {
-      id: 'step-3',
-      isActive: true,
-      order: 2,
-      icon: 'Rocket',
-      title: 'Deploy Instantly',
-      description: 'We automatically create tags, triggers, conversions, and events. Everything is synced in seconds.',
-      step: '03',
-    },
-    {
-      id: 'step-4',
-      isActive: true,
-      order: 3,
-      icon: 'CheckCircle2',
-      title: 'Monitor & Optimize',
-      description: 'See all your trackings in one dashboard. Update or delete anytime. Track status in real-time.',
-      step: '04',
-    },
-  ],
-  stats: [
-    { id: 'stat-1', isActive: true, order: 0, value: '2 min', label: 'Average Setup Time' },
-    { id: 'stat-2', isActive: true, order: 1, value: '95%', label: 'Time Saved' },
-    { id: 'stat-3', isActive: true, order: 2, value: '100%', label: 'Accuracy' },
-    { id: 'stat-4', isActive: true, order: 3, value: '0', label: 'Code Required' },
-  ],
-};
-
 export function LandingHowItWorks() {
-  const [content, setContent] = useState<HowItWorksContent>(defaultContent);
-  const [isActive, setIsActive] = useState(true); // default to true for default content
+  const [content, setContent] = useState<HowItWorksContent | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isActive, setIsActive] = useState(false);
   const [ref, inView] = useInView({
     triggerOnce: true,
     threshold: 0.1,
   });
 
   useEffect(() => {
+    let cancelled = false;
+
     async function fetchContent() {
       try {
         const data = await publicService.getLandingSection('how-it-works');
-        if (data && data.isActive && data.content) {
-          setContent(data.content as HowItWorksContent);
-          setIsActive(true);
-        } else if (data && !data.isActive) {
-          setIsActive(false);
+        if (!cancelled) {
+          if (data && data.isActive && data.content) {
+            setContent(data.content as HowItWorksContent);
+            setIsActive(true);
+          } else {
+            setIsActive(false);
+          }
         }
       } catch (error: any) {
-        // If section is inactive, backend returns 404 - hide the section
-        if (error?.response?.status === 404) {
-          console.log('How It Works section is inactive or not found');
+        if (!cancelled) {
+          // Hide section on any error - no fallback data
+          if (error?.response?.status === 404) {
+            console.log('How It Works section is inactive or not found');
+          } else {
+            console.error('Failed to fetch How It Works content:', error);
+          }
           setIsActive(false);
-        } else {
-          console.error('Failed to fetch How It Works content:', error);
-          // Keep default content and stay active for other errors
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
         }
       }
     }
     fetchContent();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Don't render if section is inactive
-  if (!isActive) {
+  if (loading) {
+    return (
+      <section className="py-20 bg-gradient-to-b from-gray-50 to-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="animate-pulse">
+            {/* Header skeleton */}
+            <div className="text-center mb-20">
+              <div className="h-12 bg-gray-200 rounded-lg w-1/3 mx-auto mb-4"></div>
+              <div className="h-6 bg-gray-200 rounded w-2/3 mx-auto"></div>
+            </div>
+
+            {/* Steps skeleton */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="relative">
+                  <div className="bg-white rounded-2xl p-8 shadow-lg border border-gray-100">
+                    <div className="absolute -top-4 -right-4 w-12 h-12 bg-gray-200 rounded-full"></div>
+                    <div className="w-16 h-16 bg-gray-200 rounded-xl mb-6"></div>
+                    <div className="h-6 bg-gray-200 rounded w-3/4 mb-3"></div>
+                    <div className="space-y-2">
+                      <div className="h-4 bg-gray-200 rounded w-full"></div>
+                      <div className="h-4 bg-gray-200 rounded w-5/6"></div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Stats skeleton */}
+            <div className="mt-20 grid grid-cols-2 md:grid-cols-4 gap-8">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="text-center">
+                  <div className="h-10 bg-gradient-to-r from-blue-200 to-purple-200 rounded w-20 mx-auto mb-2"></div>
+                  <div className="h-4 bg-gray-200 rounded w-24 mx-auto"></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // Don't render if section is inactive or no content
+  if (!isActive || !content) {
     return null;
   }
 

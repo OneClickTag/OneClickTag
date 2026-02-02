@@ -1,39 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 
-// Default footer configuration (matches Footer component defaults)
-const defaultFooterConfig = {
-  brandName: 'OneClickTag',
-  brandDescription: 'Simplify your conversion tracking with automated GTM and Google Ads integration.',
-  socialLinks: [
-    { platform: 'Twitter', url: 'https://twitter.com/oneclicktag', icon: 'twitter' },
-    { platform: 'LinkedIn', url: 'https://linkedin.com/company/oneclicktag', icon: 'linkedin' },
-    { platform: 'GitHub', url: 'https://github.com/oneclicktag', icon: 'github' },
-  ],
-  sections: [
-    {
-      title: 'Product',
-      links: [{ label: 'Pricing', url: '/plans' }],
-    },
-    {
-      title: 'Company',
-      links: [
-        { label: 'About Us', url: '/about' },
-        { label: 'Contact', url: '/contact' },
-      ],
-    },
-    {
-      title: 'Legal',
-      links: [
-        { label: 'Terms of Service', url: '/terms' },
-        { label: 'Privacy Policy', url: '/privacy' },
-      ],
-    },
-  ],
-  copyrightText: 'OneClickTag. All rights reserved.',
-};
-
-// GET /api/public/footer - Get footer content (public, no auth)
+// GET /api/public/footer - Get footer content from database ONLY
 export async function GET() {
   try {
     const footer = await prisma.footerContent.findFirst({
@@ -47,9 +15,9 @@ export async function GET() {
       },
     });
 
-    // Return DB data if exists, otherwise return defaults
+    // Return null if no footer configured - let client handle empty state
     if (!footer) {
-      return NextResponse.json(defaultFooterConfig);
+      return NextResponse.json(null);
     }
 
     return NextResponse.json(footer);

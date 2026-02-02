@@ -20,8 +20,8 @@ interface FooterSection {
   links: FooterLink[]
 }
 
-interface FooterConfig {
-  id: string
+export interface FooterConfig {
+  id?: string
   brandName: string
   brandDescription: string
   socialLinks: SocialLink[]
@@ -109,13 +109,27 @@ const socialIcons: Record<string, React.JSX.Element> = {
 // Export available icon names for use in admin panel
 export const availableSocialIcons = Object.keys(socialIcons)
 
-export function Footer() {
+interface FooterProps {
+  /** Server-fetched config. If provided, skips client-side fetch (SSR pattern). */
+  config?: FooterConfig | null
+}
+
+export function Footer({ config: serverConfig }: FooterProps = {}) {
   const currentYear = new Date().getFullYear()
-  const [config, setConfig] = React.useState<FooterConfig>(defaultFooterConfig)
-  const [loading, setLoading] = React.useState(true)
+  const [config, setConfig] = React.useState<FooterConfig>(
+    serverConfig || defaultFooterConfig
+  )
+  const [loading, setLoading] = React.useState(!serverConfig)
   const isEarlyAccessMode = process.env.NEXT_PUBLIC_EARLY_ACCESS_MODE === "true"
 
   React.useEffect(() => {
+    // Skip client-side fetch if server config was provided
+    if (serverConfig) {
+      setConfig(serverConfig)
+      setLoading(false)
+      return
+    }
+
     const fetchFooterConfig = async () => {
       try {
         const response = await fetch("/api/public/footer")
@@ -152,7 +166,7 @@ export function Footer() {
     }
 
     fetchFooterConfig()
-  }, [])
+  }, [serverConfig])
 
   if (loading) {
     return (

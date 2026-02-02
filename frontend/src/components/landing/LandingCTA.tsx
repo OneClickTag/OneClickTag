@@ -67,26 +67,8 @@ export function LandingCTA() {
             setIsActive(false);
           } else {
             console.error('Failed to load CTA content:', error);
-            // Use default content on error for other errors
-            setContent({
-              badge: { icon: 'Sparkles', text: 'Limited Time Offer' },
-              headline: 'Ready to Transform Your',
-              headlineSecondLine: 'Tracking Workflow?',
-              subtitle: 'Join 1,000+ marketers who are saving hours every week with automated tracking setup. Start your 14-day free trial today—no credit card required.',
-              features: ['14-day free trial', 'No credit card required', 'Cancel anytime', 'Setup in 2 minutes'],
-              primaryCTA: { text: 'Start Free Trial', url: '/register' },
-              secondaryCTA: { text: 'View Pricing', url: '/plans' },
-              trustBadge: 'Secure OAuth connection • GDPR compliant • SOC 2 certified',
-              testimonial: {
-                quote: 'OneClickTag is the tool I wish I had 5 years ago. It\'s saved our team countless hours and eliminated tracking errors completely.',
-                author: {
-                  name: 'James Davis',
-                  initials: 'JD',
-                  role: 'Head of Marketing, TechCorp'
-                }
-              }
-            });
-            setIsActive(true);
+            // Hide section on any error - no fallback data
+            setIsActive(false);
           }
         }
       } finally {
@@ -107,8 +89,56 @@ export function LandingCTA() {
   if (loading) {
     return (
       <section className="py-20 bg-gradient-to-br from-blue-600 via-purple-600 to-pink-600">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto"></div>
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="animate-pulse text-center">
+            {/* Badge skeleton */}
+            <div className="inline-flex h-8 w-40 bg-white/20 rounded-full mb-6"></div>
+
+            {/* Headline skeleton */}
+            <div className="space-y-4 mb-6">
+              <div className="h-12 md:h-16 bg-white/20 rounded-lg w-3/4 mx-auto"></div>
+              <div className="h-12 md:h-16 bg-white/20 rounded-lg w-1/2 mx-auto"></div>
+            </div>
+
+            {/* Subtitle skeleton */}
+            <div className="h-6 bg-white/20 rounded w-2/3 mx-auto mb-8"></div>
+
+            {/* Features skeleton */}
+            <div className="flex flex-wrap justify-center gap-4 mb-10">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-10 w-36 bg-white/10 rounded-lg"></div>
+              ))}
+            </div>
+
+            {/* CTA buttons skeleton */}
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
+              <div className="h-14 w-48 bg-white/30 rounded-lg"></div>
+              <div className="h-14 w-36 bg-white/20 rounded-lg"></div>
+            </div>
+
+            {/* Trust badge skeleton */}
+            <div className="h-4 w-80 bg-white/20 rounded mx-auto"></div>
+
+            {/* Testimonial skeleton */}
+            <div className="mt-12 bg-white/10 rounded-2xl p-8 max-w-2xl mx-auto">
+              <div className="flex items-start space-x-4">
+                <div className="w-8 h-8 bg-white/20 rounded"></div>
+                <div className="flex-1">
+                  <div className="space-y-2 mb-4">
+                    <div className="h-4 bg-white/20 rounded w-full"></div>
+                    <div className="h-4 bg-white/20 rounded w-5/6"></div>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-white/20 rounded-full"></div>
+                    <div>
+                      <div className="h-4 bg-white/20 rounded w-24 mb-1"></div>
+                      <div className="h-3 bg-white/20 rounded w-32"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
     );

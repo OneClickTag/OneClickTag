@@ -27,41 +27,6 @@ interface FooterConfig {
   copyrightText: string;
 }
 
-const defaultFooterConfig: FooterConfig = {
-  id: 'default',
-  brandName: 'OneClickTag',
-  brandDescription: 'Simplify your conversion tracking with automated GTM and Google Ads integration.',
-  socialLinks: [
-    { platform: 'Twitter', url: 'https://twitter.com/oneclicktag', icon: 'twitter' },
-    { platform: 'LinkedIn', url: 'https://linkedin.com/company/oneclicktag', icon: 'linkedin' },
-    { platform: 'GitHub', url: 'https://github.com/oneclicktag', icon: 'github' },
-  ],
-  sections: [
-    {
-      title: 'Product',
-      links: [
-        { label: 'Pricing', url: '/plans' },
-        { label: 'Features', url: '/content/features' },
-      ],
-    },
-    {
-      title: 'Company',
-      links: [
-        { label: 'About Us', url: '/content/about' },
-        { label: 'Contact', url: '/content/contact' },
-      ],
-    },
-    {
-      title: 'Legal',
-      links: [
-        { label: 'Terms of Service', url: '/content/terms' },
-        { label: 'Privacy Policy', url: '/content/privacy' },
-      ],
-    },
-  ],
-  copyrightText: 'OneClickTag. All rights reserved.',
-};
-
 const socialIcons: Record<string, JSX.Element> = {
   twitter: (
     <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
@@ -82,32 +47,45 @@ const socialIcons: Record<string, JSX.Element> = {
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
-  const [config, setConfig] = useState<FooterConfig>(defaultFooterConfig);
+  const [config, setConfig] = useState<FooterConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const isEarlyAccessMode = import.meta.env.VITE_EARLY_ACCESS_MODE === 'true';
 
   useEffect(() => {
+    let cancelled = false;
+
     const fetchFooterConfig = async () => {
       try {
         const response = await publicService.getFooterConfig();
-        // Map backend response to config format, using defaults for missing values
-        setConfig({
-          id: response.id || 'default',
-          brandName: response.brandName || defaultFooterConfig.brandName,
-          brandDescription: response.brandDescription || defaultFooterConfig.brandDescription,
-          socialLinks: response.socialLinks || defaultFooterConfig.socialLinks,
-          sections: response.sections || defaultFooterConfig.sections,
-          copyrightText: response.copyrightText || defaultFooterConfig.copyrightText,
-        });
+        if (!cancelled) {
+          // Use backend response directly - backend already provides proper defaults
+          // Don't use || fallbacks as they override admin's intentionally empty values
+          setConfig({
+            id: response.id ?? 'default',
+            brandName: response.brandName ?? '',
+            brandDescription: response.brandDescription ?? '',
+            socialLinks: response.socialLinks ?? [],
+            sections: response.sections ?? [],
+            copyrightText: response.copyrightText ?? '',
+          });
+        }
       } catch (error) {
-        console.error('Failed to load footer config, using defaults:', error);
-        // Use default config if fetch fails
+        if (!cancelled) {
+          console.error('Failed to load footer config:', error);
+          // Set null config - footer will not render if no data
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
     fetchFooterConfig();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (loading) {
@@ -115,12 +93,50 @@ export function Footer() {
       <footer className="bg-gray-900 text-gray-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="animate-pulse">
-            <div className="h-4 bg-gray-700 rounded w-1/4 mb-4"></div>
-            <div className="h-4 bg-gray-700 rounded w-1/2"></div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+              {/* Brand section skeleton */}
+              <div className="col-span-1">
+                <div className="flex items-center space-x-2 mb-4">
+                  <div className="w-8 h-8 bg-gray-700 rounded-lg"></div>
+                  <div className="h-6 bg-gray-700 rounded w-24"></div>
+                </div>
+                <div className="space-y-2 mb-4">
+                  <div className="h-3 bg-gray-700 rounded w-full"></div>
+                  <div className="h-3 bg-gray-700 rounded w-5/6"></div>
+                </div>
+                <div className="flex space-x-4">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="w-6 h-6 bg-gray-700 rounded"></div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Sections skeleton */}
+              {[1, 2, 3].map((i) => (
+                <div key={i}>
+                  <div className="h-5 bg-gray-700 rounded w-20 mb-4"></div>
+                  <div className="space-y-2">
+                    {[1, 2, 3].map((j) => (
+                      <div key={j} className="h-4 bg-gray-700 rounded w-24"></div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Bottom bar skeleton */}
+            <div className="border-t border-gray-800 mt-12 pt-8">
+              <div className="h-4 bg-gray-700 rounded w-48"></div>
+            </div>
           </div>
         </div>
       </footer>
     );
+  }
+
+  // Don't render if no config loaded
+  if (!config) {
+    return null;
   }
 
   return (
@@ -138,56 +154,64 @@ export function Footer() {
             <p className="text-sm text-gray-400 mb-4">
               {config.brandDescription}
             </p>
-            <div className="flex space-x-4">
-              {config.socialLinks.map((social, index) => (
-                <a
-                  key={index}
-                  href={social.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-gray-400 hover:text-white transition-colors"
-                  aria-label={social.platform}
-                >
-                  {socialIcons[social.icon.toLowerCase()] || socialIcons.twitter}
-                </a>
-              ))}
-            </div>
+            {config.socialLinks && config.socialLinks.length > 0 && (
+              <div className="flex space-x-4">
+                {config.socialLinks
+                  .filter((social) => social.url && social.platform)
+                  .map((social, index) => (
+                    <a
+                      key={index}
+                      href={social.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-gray-400 hover:text-white transition-colors"
+                      aria-label={social.platform}
+                    >
+                      {socialIcons[social.icon?.toLowerCase()] || socialIcons.twitter}
+                    </a>
+                  ))}
+              </div>
+            )}
           </div>
 
-          {/* Dynamic Sections */}
-          {config.sections.map((section, index) => (
-            <div key={index}>
-              <h3 className="text-white font-semibold mb-4">{section.title}</h3>
-              <ul className="space-y-2">
-                {section.links
-                  .filter((link) => {
-                    // Hide "Pricing" link in early access mode
-                    if (isEarlyAccessMode && (link.url === '/plans' || link.label.toLowerCase().includes('pricing'))) {
-                      return false;
-                    }
-                    return true;
-                  })
-                  .map((link, linkIndex) => (
-                    <li key={linkIndex}>
-                      {link.url.startsWith('http') ? (
-                        <a
-                          href={link.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm hover:text-white transition-colors"
-                        >
-                          {link.label}
-                        </a>
-                      ) : (
-                        <Link to={link.url} className="text-sm hover:text-white transition-colors">
-                          {link.label}
-                        </Link>
-                      )}
-                    </li>
-                  ))}
-              </ul>
-            </div>
-          ))}
+          {/* Dynamic Sections - Only show sections with title and links */}
+          {config.sections
+            .filter((section) => section.title && section.links && section.links.length > 0)
+            .map((section, index) => (
+              <div key={index}>
+                <h3 className="text-white font-semibold mb-4">{section.title}</h3>
+                <ul className="space-y-2">
+                  {section.links
+                    .filter((link) => {
+                      // Filter out links without url or label
+                      if (!link.url || !link.label) return false;
+                      // Hide "Pricing" link in early access mode
+                      if (isEarlyAccessMode && (link.url === '/plans' || link.label.toLowerCase().includes('pricing'))) {
+                        return false;
+                      }
+                      return true;
+                    })
+                    .map((link, linkIndex) => (
+                      <li key={linkIndex}>
+                        {link.url.startsWith('http') ? (
+                          <a
+                            href={link.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm hover:text-white transition-colors"
+                          >
+                            {link.label}
+                          </a>
+                        ) : (
+                          <Link to={link.url} className="text-sm hover:text-white transition-colors">
+                            {link.label}
+                          </Link>
+                        )}
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            ))}
         </div>
 
         {/* Bottom Bar */}

@@ -34,6 +34,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       data: { isPublished },
     });
 
+    // Note: Pages use dynamic = 'force-dynamic' so they always fetch fresh data
+
     return NextResponse.json(updatedPage);
   } catch (error) {
     console.error('Error publishing content page:', error);

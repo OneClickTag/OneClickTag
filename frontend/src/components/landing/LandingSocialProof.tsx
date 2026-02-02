@@ -54,118 +54,111 @@ function getActiveItems<T extends { isActive: boolean; order: number }>(items: T
     .sort((a, b) => a.order - b.order);
 }
 
-const defaultContent: SocialProofContent = {
-  stats: [
-    {
-      id: 'stat-1',
-      isActive: true,
-      order: 0,
-      icon: 'Users',
-      value: '1,000+',
-      label: 'Active Users',
-      description: 'Marketers trust OneClickTag',
-    },
-    {
-      id: 'stat-2',
-      isActive: true,
-      order: 1,
-      icon: 'Target',
-      value: '50,000+',
-      label: 'Trackings Created',
-      description: 'Automated conversions deployed',
-    },
-    {
-      id: 'stat-3',
-      isActive: true,
-      order: 2,
-      icon: 'Clock',
-      value: '10,000+',
-      label: 'Hours Saved',
-      description: 'Time freed for strategy',
-    },
-    {
-      id: 'stat-4',
-      isActive: true,
-      order: 3,
-      icon: 'TrendingUp',
-      value: '99.9%',
-      label: 'Uptime',
-      description: 'Reliable performance',
-    },
-  ],
-  trustTitle: 'Powered By Industry Leaders',
-  logos: [
-    { id: 'logo-1', isActive: true, order: 0, name: 'Google', width: 'w-24' },
-    { id: 'logo-2', isActive: true, order: 1, name: 'Analytics', width: 'w-28' },
-    { id: 'logo-3', isActive: true, order: 2, name: 'Ads', width: 'w-20' },
-    { id: 'logo-4', isActive: true, order: 3, name: 'Tag Manager', width: 'w-32' },
-    { id: 'logo-5', isActive: true, order: 4, name: 'Firebase', width: 'w-24' },
-  ],
-  testimonials: [
-    {
-      id: 'testimonial-1',
-      isActive: true,
-      order: 0,
-      quote: "OneClickTag cut our tracking setup time from hours to minutes. It's a game-changer for our agency.",
-      author: "Sarah Johnson",
-      role: "Marketing Director",
-      company: "Digital Growth Co.",
-    },
-    {
-      id: 'testimonial-2',
-      isActive: true,
-      order: 1,
-      quote: "The automation is incredible. We can now focus on strategy instead of tedious tag management.",
-      author: "Michael Chen",
-      role: "Performance Marketer",
-      company: "AdScale Agency",
-    },
-    {
-      id: 'testimonial-3',
-      isActive: true,
-      order: 2,
-      quote: "Finally, a tool that makes Google tracking accessible. Our entire team can use it without training.",
-      author: "Emily Rodriguez",
-      role: "Growth Lead",
-      company: "StartupBoost",
-    },
-  ],
-};
-
 export function LandingSocialProof() {
-  const [content, setContent] = useState<SocialProofContent>(defaultContent);
-  const [isActive, setIsActive] = useState(true); // default to true for default content
+  const [content, setContent] = useState<SocialProofContent | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isActive, setIsActive] = useState(false);
   const [ref, inView] = useInView({
     triggerOnce: true,
     threshold: 0.1,
   });
 
   useEffect(() => {
+    let cancelled = false;
+
     async function fetchContent() {
       try {
         const data = await publicService.getLandingSection('social-proof');
-        if (data && data.isActive && data.content) {
-          setContent(data.content as SocialProofContent);
-          setIsActive(true);
-        } else if (data && !data.isActive) {
-          setIsActive(false);
+        if (!cancelled) {
+          if (data && data.isActive && data.content) {
+            setContent(data.content as SocialProofContent);
+            setIsActive(true);
+          } else {
+            setIsActive(false);
+          }
         }
       } catch (error: any) {
-        // If section is inactive, backend returns 404 - hide the section
-        if (error?.response?.status === 404) {
-          console.log('Social Proof section is inactive or not found');
+        if (!cancelled) {
+          // Hide section on any error - no fallback data
+          if (error?.response?.status === 404) {
+            console.log('Social Proof section is inactive or not found');
+          } else {
+            console.error('Failed to fetch Social Proof content:', error);
+          }
           setIsActive(false);
-        } else {
-          console.error('Failed to fetch Social Proof content:', error);
-          // Keep default content and stay active for other errors
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
         }
       }
     }
     fetchContent();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Don't render if section is inactive
-  if (!isActive) {
+  if (loading) {
+    return (
+      <section className="py-20 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="animate-pulse">
+            {/* Stats grid skeleton */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-20">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="text-center">
+                  <div className="w-16 h-16 bg-gray-200 rounded-2xl mx-auto mb-4"></div>
+                  <div className="h-10 bg-gradient-to-r from-blue-200 to-purple-200 rounded w-20 mx-auto mb-2"></div>
+                  <div className="h-5 bg-gray-200 rounded w-24 mx-auto mb-1"></div>
+                  <div className="h-4 bg-gray-200 rounded w-32 mx-auto"></div>
+                </div>
+              ))}
+            </div>
+
+            {/* Trusted by section skeleton */}
+            <div className="text-center">
+              <div className="h-4 bg-gray-200 rounded w-48 mx-auto mb-8"></div>
+              <div className="flex flex-wrap justify-center items-center gap-12">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="w-24 h-12 bg-gray-200 rounded-lg"></div>
+                ))}
+              </div>
+            </div>
+
+            {/* Testimonials skeleton */}
+            <div className="mt-20 grid grid-cols-1 md:grid-cols-3 gap-8">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="bg-gray-50 border border-gray-200 rounded-2xl p-8">
+                  <div className="flex space-x-1 mb-4">
+                    {[1, 2, 3, 4, 5].map((j) => (
+                      <div key={j} className="w-5 h-5 bg-gray-200 rounded"></div>
+                    ))}
+                  </div>
+                  <div className="space-y-2 mb-6">
+                    <div className="h-4 bg-gray-200 rounded w-full"></div>
+                    <div className="h-4 bg-gray-200 rounded w-5/6"></div>
+                    <div className="h-4 bg-gray-200 rounded w-4/6"></div>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-12 h-12 bg-gray-200 rounded-full"></div>
+                    <div>
+                      <div className="h-4 bg-gray-200 rounded w-24 mb-1"></div>
+                      <div className="h-3 bg-gray-200 rounded w-32"></div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // Don't render if section is inactive or no content
+  if (!isActive || !content) {
     return null;
   }
 

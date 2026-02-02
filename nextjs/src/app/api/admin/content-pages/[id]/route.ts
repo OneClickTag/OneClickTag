@@ -88,6 +88,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       },
     });
 
+    // Note: Pages use dynamic = 'force-dynamic' so they always fetch fresh data
+
     return NextResponse.json(updatedPage);
   } catch (error) {
     console.error('Error updating content page:', error);
@@ -121,6 +123,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     await prisma.contentPage.delete({ where: { id } });
+
+    // Note: Pages use dynamic = 'force-dynamic' so they always fetch fresh data
 
     return NextResponse.json({ message: 'Content page deleted successfully' });
   } catch (error) {

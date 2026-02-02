@@ -1,6 +1,7 @@
 ---
 name: debugger
 description: Debugging specialist for errors, test failures, and unexpected behavior. Use PROACTIVELY when encountering issues, analyzing stack traces, or investigating system problems.
+argument-hint: [error or issue to debug]
 tools: Read, Write, Edit, Bash, Grep, Glob, WebFetch, WebSearch, mcp__vercel-oneclicktag-backend__*, mcp__vercel-oneclicktag-frontend__*, mcp__vercel__*, mcp__playwright__*
 model: sonnet
 ---

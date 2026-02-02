@@ -35,6 +35,7 @@ interface ContactContent {
 
 export function ContactPage() {
   const [contactContent, setContactContent] = useState<ContactContent | null>(null);
+  const [contentLoading, setContentLoading] = useState(true);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -70,81 +71,52 @@ export function ContactPage() {
 
   useEffect(() => {
     const loadContent = async () => {
+      setContentLoading(true);
       try {
         const data = await publicService.getContactPageContent();
-        setContactContent(data as ContactContent);
+        if (data) {
+          setContactContent(data as ContactContent);
+        }
       } catch (error) {
         console.error('Failed to load contact content:', error);
-        // Use default content on error
-        setContactContent({
-          email: 'hello@oneclicktag.com',
-          phone: '+1 (555) 123-4567',
-          address: 'San Francisco, CA',
-          businessHours: 'Mon-Fri: 9AM-6PM PST',
-          faqs: [
-            {
-              question: 'What is your response time?',
-              answer: 'We typically respond to all inquiries within 24 hours during business days.',
-            },
-            {
-              question: 'Do you offer phone support?',
-              answer: 'Yes! Phone support is available for all paid plans. Contact us to schedule a call.',
-            },
-            {
-              question: 'Can I schedule a demo?',
-              answer: 'Absolutely! Choose "Sales Question" as your subject and mention demo in your message.',
-            },
-            {
-              question: 'How can I report a technical issue?',
-              answer: 'Select "Technical Support" as your subject and provide as many details as possible about the issue.',
-            },
-          ],
-          formSettings: {
-            enableForm: true,
-            emailTo: 'hello@oneclicktag.com',
-            successMessage: "Thank you for contacting us. We'll get back to you within 24 hours.",
-            subjects: ['General Inquiry', 'Sales Question', 'Technical Support', 'Partnership Opportunity', 'Other'],
-            showEmail: true,
-            showPhone: true,
-            showAddress: true,
-            showBusinessHours: true,
-          },
-          isActive: true,
-        });
+        // Keep contactContent as null - the page will handle empty state gracefully
+        // The backend now always returns a default record via getOrCreateDefaultContactPage
+      } finally {
+        setContentLoading(false);
       }
     };
 
     loadContent();
   }, []);
 
-  // Build contact info array, only including enabled items
+  // Build contact info array, only including enabled items with actual values
   const contactInfo = [
-    // Email - only show if showEmail is true (default to true if not set)
-    ...(contactContent?.formSettings?.showEmail !== false ? [{
+    // Email - only show if showEmail is true AND email has a value
+    ...(contactContent?.formSettings?.showEmail !== false && contactContent?.email ? [{
       icon: Mail,
       title: 'Email',
-      value: contactContent?.email || 'hello@oneclicktag.com',
-      link: `mailto:${contactContent?.email || 'hello@oneclicktag.com'}`,
+      value: contactContent.email,
+      link: `mailto:${contactContent.email}`,
     }] : []),
-    // Phone - only show if showPhone is true (default to true if not set)
-    ...(contactContent?.formSettings?.showPhone !== false ? [{
+    // Phone - only show if showPhone is true AND phone has a value
+    ...(contactContent?.formSettings?.showPhone !== false && contactContent?.phone ? [{
       icon: Phone,
       title: 'Phone',
-      value: contactContent?.phone || '+1 (555) 123-4567',
-      link: `tel:${contactContent?.phone?.replace(/[^0-9+]/g, '') || '+15551234567'}`,
+      value: contactContent.phone,
+      link: `tel:${contactContent.phone.replace(/[^0-9+]/g, '')}`,
     }] : []),
-    // Address - only show if showAddress is true (default to true if not set)
-    ...(contactContent?.formSettings?.showAddress !== false ? [{
+    // Address - only show if showAddress is true AND address has a value
+    ...(contactContent?.formSettings?.showAddress !== false && contactContent?.address ? [{
       icon: MapPin,
       title: 'Office',
-      value: contactContent?.address || 'San Francisco, CA',
+      value: contactContent.address,
       link: null,
     }] : []),
-    // Business Hours - only show if showBusinessHours is true (default to true if not set)
-    ...(contactContent?.formSettings?.showBusinessHours !== false ? [{
+    // Business Hours - only show if showBusinessHours is true AND businessHours has a value
+    ...(contactContent?.formSettings?.showBusinessHours !== false && contactContent?.businessHours ? [{
       icon: Clock,
       title: 'Business Hours',
-      value: contactContent?.businessHours || 'Mon-Fri: 9AM-6PM PST',
+      value: contactContent.businessHours,
       link: null,
     }] : []),
   ];
@@ -181,8 +153,22 @@ export function ContactPage() {
         </div>
       </section>
 
-      {/* Contact Info Cards */}
-      {contactInfo.length > 0 && (
+      {/* Contact Info Cards - show loading skeleton while fetching */}
+      {contentLoading ? (
+        <section className="py-12 -mt-10 relative z-10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="bg-white rounded-xl p-6 shadow-lg border border-gray-100 animate-pulse">
+                  <div className="w-12 h-12 bg-gray-200 rounded-lg mb-4"></div>
+                  <div className="h-3 bg-gray-200 rounded w-1/3 mb-2"></div>
+                  <div className="h-5 bg-gray-200 rounded w-2/3"></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : contactInfo.length > 0 && (
       <section className="py-12 -mt-10 relative z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className={`grid grid-cols-1 gap-6 ${
@@ -289,7 +275,7 @@ export function ContactPage() {
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                     >
                       <option value="">Select a subject</option>
-                      {(contactContent?.formSettings?.subjects || ['General Inquiry', 'Sales Question', 'Technical Support', 'Partnership Opportunity', 'Other']).map((subject) => (
+                      {(contactContent?.formSettings?.subjects ?? []).map((subject) => (
                         <option key={subject} value={subject.toLowerCase().replace(/\s+/g, '-')}>
                           {subject}
                         </option>
@@ -337,26 +323,28 @@ export function ContactPage() {
         </div>
       </section>
 
-      {/* FAQ Section */}
-      <section className="py-20 bg-gray-50">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Frequently Asked Questions</h2>
-            <p className="text-gray-600">
-              Find quick answers to common questions
-            </p>
-          </div>
+      {/* FAQ Section - Only show if there are FAQs configured */}
+      {contactContent?.faqs && contactContent.faqs.length > 0 && (
+        <section className="py-20 bg-gray-50">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl font-bold text-gray-900 mb-4">Frequently Asked Questions</h2>
+              <p className="text-gray-600">
+                Find quick answers to common questions
+              </p>
+            </div>
 
-          <div className="space-y-4">
-            {(contactContent?.faqs || []).map((faq, index) => (
-              <div key={index} className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">{faq.question}</h3>
-                <p className="text-gray-600">{faq.answer}</p>
-              </div>
-            ))}
+            <div className="space-y-4">
+              {contactContent.faqs.map((faq, index) => (
+                <div key={index} className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{faq.question}</h3>
+                  <p className="text-gray-600">{faq.answer}</p>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       <Footer />
     </div>

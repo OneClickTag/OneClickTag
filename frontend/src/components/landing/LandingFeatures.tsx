@@ -97,74 +97,8 @@ export function LandingFeatures() {
             setIsActive(false);
           } else {
             console.error('Failed to load features content:', error);
-            // Use default content on error for other errors
-            setContent({
-              title: 'Everything You Need',
-              titleHighlight: 'In One Platform',
-              subtitle: 'Stop juggling multiple tools. OneClickTag brings all your tracking needs together in one simple interface.',
-              features: [
-                {
-                  id: 'feature-1',
-                  isActive: true,
-                  order: 0,
-                  icon: 'Tag',
-                  title: 'Google Tag Manager',
-                  description: 'Automatically create tags, triggers, and variables in your GTM container. No manual setup needed.',
-                  color: 'from-blue-500 to-blue-600',
-                },
-                {
-                  id: 'feature-2',
-                  isActive: true,
-                  order: 1,
-                  icon: 'Target',
-                  title: 'Google Ads Integration',
-                  description: 'Sync conversion actions to Google Ads instantly. Track ROI and optimize campaigns effortlessly.',
-                  color: 'from-green-500 to-green-600',
-                },
-                {
-                  id: 'feature-3',
-                  isActive: true,
-                  order: 2,
-                  icon: 'BarChart3',
-                  title: 'GA4 Events',
-                  description: 'Create custom GA4 events with proper parameters. Get accurate analytics data from day one.',
-                  color: 'from-purple-500 to-purple-600',
-                },
-                {
-                  id: 'feature-4',
-                  isActive: true,
-                  order: 3,
-                  icon: 'Zap',
-                title: 'Lightning Fast',
-                description: 'What takes 30 minutes manually takes 2 minutes with OneClickTag. Save time, reduce errors.',
-                color: 'from-yellow-500 to-orange-600',
-              },
-              {
-                id: 'feature-5',
-                isActive: true,
-                order: 4,
-                icon: 'Shield',
-                title: 'Secure & Reliable',
-                description: 'OAuth 2.0 authentication, encrypted data storage, and automatic token refresh. Your data is safe.',
-                color: 'from-red-500 to-pink-600',
-              },
-              {
-                id: 'feature-6',
-                isActive: true,
-                order: 5,
-                icon: 'Globe',
-                title: 'Multi-Customer',
-                description: 'Manage tracking for multiple clients from one dashboard. Perfect for agencies and consultants.',
-                color: 'from-indigo-500 to-indigo-600',
-              },
-            ],
-            bottomCTA: {
-              text: 'Ready to simplify your tracking workflow?',
-              linkText: 'Get started for free',
-              linkUrl: '/register',
-            },
-          });
-            setIsActive(true);
+            // Hide section on any error - no fallback data
+            setIsActive(false);
           }
         }
       } finally {
@@ -185,8 +119,35 @@ export function LandingFeatures() {
   if (loading) {
     return (
       <section className="py-20 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="animate-pulse">
+            {/* Header skeleton */}
+            <div className="text-center mb-16">
+              <div className="h-12 bg-gray-200 rounded-lg w-1/2 mx-auto mb-4"></div>
+              <div className="h-8 bg-gradient-to-r from-blue-200 to-purple-200 rounded-lg w-1/3 mx-auto mb-4"></div>
+              <div className="h-6 bg-gray-200 rounded w-2/3 mx-auto"></div>
+            </div>
+
+            {/* Features grid skeleton */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div key={i} className="bg-white border border-gray-200 rounded-2xl p-8">
+                  <div className="w-14 h-14 bg-gray-200 rounded-xl mb-6"></div>
+                  <div className="h-6 bg-gray-200 rounded w-3/4 mb-3"></div>
+                  <div className="space-y-2">
+                    <div className="h-4 bg-gray-200 rounded w-full"></div>
+                    <div className="h-4 bg-gray-200 rounded w-5/6"></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Bottom CTA skeleton */}
+            <div className="text-center mt-16">
+              <div className="h-4 bg-gray-200 rounded w-1/4 mx-auto mb-4"></div>
+              <div className="h-5 bg-blue-200 rounded w-1/5 mx-auto"></div>
+            </div>
+          </div>
         </div>
       </section>
     );

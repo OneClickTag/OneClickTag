@@ -56,26 +56,13 @@ export function LandingHero() {
         }
       } catch (error: any) {
         if (!cancelled) {
-          // If section is inactive, backend returns 404 - hide the section
+          // Hide section on any error - no fallback data
           if (error?.response?.status === 404) {
             console.log('Hero section is inactive or not found');
-            setIsActive(false);
           } else {
             console.error('Failed to load hero content:', error);
-            // Use default content on error for other errors
-            setContent({
-              badge: { icon: 'Zap', text: 'Automated Conversion Tracking' },
-              headline: 'Setup Google Tracking',
-              headlineHighlight: 'In One Click',
-              subtitle: 'Stop wasting hours on manual tag setup. OneClickTag automatically creates GTM tags, Google Ads conversions, and GA4 events in seconds.',
-              benefits: ['No coding required', 'GTM + Google Ads + GA4', 'Setup in 2 minutes'],
-              primaryCTA: { text: 'Start Free Trial', url: '/register' },
-              secondaryCTA: { text: 'View Pricing', url: '/plans' },
-              trustIndicators: 'No credit card required • Cancel anytime • 14-day free trial',
-              demoVideo: { enabled: true, thumbnail: null, stats: [{ label: 'Setup Time', value: '2 min', icon: 'Zap' }] }
-            });
-            setIsActive(true);
           }
+          setIsActive(false);
         }
       } finally {
         if (!cancelled) {
@@ -95,8 +82,36 @@ export function LandingHero() {
   if (loading) {
     return (
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-blue-50 via-white to-purple-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+          <div className="text-center animate-pulse">
+            {/* Badge skeleton */}
+            <div className="inline-flex h-8 w-64 bg-blue-100 rounded-full mb-8"></div>
+
+            {/* Headline skeleton */}
+            <div className="space-y-4 mb-6">
+              <div className="h-12 md:h-16 bg-gray-200 rounded-lg w-3/4 mx-auto"></div>
+              <div className="h-12 md:h-16 bg-gradient-to-r from-blue-200 to-purple-200 rounded-lg w-1/2 mx-auto"></div>
+            </div>
+
+            {/* Subtitle skeleton */}
+            <div className="h-6 bg-gray-200 rounded w-2/3 mx-auto mb-8"></div>
+
+            {/* Benefits skeleton */}
+            <div className="flex flex-wrap justify-center gap-6 mb-10">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-6 w-32 bg-gray-200 rounded"></div>
+              ))}
+            </div>
+
+            {/* CTA buttons skeleton */}
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+              <div className="h-14 w-48 bg-gradient-to-r from-blue-300 to-purple-300 rounded-lg"></div>
+              <div className="h-14 w-36 bg-gray-200 rounded-lg"></div>
+            </div>
+
+            {/* Trust indicators skeleton */}
+            <div className="h-4 w-80 bg-gray-200 rounded mx-auto mt-8"></div>
+          </div>
         </div>
       </section>
     );

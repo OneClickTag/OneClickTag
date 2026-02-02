@@ -108,13 +108,25 @@ export class ContactPageService {
     let page = await this.getActiveContactPage();
 
     if (!page) {
-      // Create a default contact page if none exists
+      // Create a default contact page if none exists with proper formSettings
       page = await this.prisma.contactPageContent.create({
         data: {
           email: 'contact@oneclicktag.com',
           phone: '',
           address: '',
           businessHours: '',
+          socialLinks: [],
+          faqs: [],
+          formSettings: {
+            enableForm: true,
+            emailTo: 'contact@oneclicktag.com',
+            successMessage: 'Thank you for your message! We will get back to you soon.',
+            subjects: ['General Inquiry', 'Technical Support', 'Sales', 'Partnership'],
+            showEmail: true,
+            showPhone: true,
+            showAddress: true,
+            showBusinessHours: true,
+          },
           isActive: true,
         },
       });

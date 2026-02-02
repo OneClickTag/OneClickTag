@@ -1,29 +1,32 @@
-import { notFound } from 'next/navigation';
-import prisma from '@/lib/prisma';
+import { notFound, redirect } from 'next/navigation';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { Metadata } from 'next';
 import { MarkdownContent } from './MarkdownContent';
+import { getContentPage, getSiteSettings } from '@/lib/server/api';
+
+// Revalidate every 5 minutes
+export const revalidate = 300;
+
+// These slugs have dedicated styled pages - redirect to them
+const DEDICATED_PAGE_SLUGS = ['about', 'terms', 'privacy'];
 
 interface PageProps {
   params: Promise<{ slug: string }>;
 }
 
-async function getContentPage(slug: string) {
-  const page = await prisma.contentPage.findUnique({
-    where: { slug },
-  });
-
-  if (!page || !page.isPublished) {
-    return null;
-  }
-
-  return page;
-}
-
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  const page = await getContentPage(slug);
+
+  // Don't generate metadata for slugs that will redirect
+  if (DEDICATED_PAGE_SLUGS.includes(slug)) {
+    return {};
+  }
+
+  const [page, settings] = await Promise.all([
+    getContentPage(slug),
+    getSiteSettings(),
+  ]);
 
   if (!page) {
     return {
@@ -34,11 +37,22 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return {
     title: page.metaTitle || page.title,
     description: page.metaDescription || undefined,
+    openGraph: {
+      title: page.metaTitle || page.title,
+      description: page.metaDescription || undefined,
+      images: settings?.socialImageUrl ? [settings.socialImageUrl] : undefined,
+    },
   };
 }
 
 export default async function ContentPageView({ params }: PageProps) {
   const { slug } = await params;
+
+  // Redirect dedicated page slugs to their styled routes
+  if (DEDICATED_PAGE_SLUGS.includes(slug)) {
+    redirect(`/${slug}`);
+  }
+
   const page = await getContentPage(slug);
 
   if (!page) {

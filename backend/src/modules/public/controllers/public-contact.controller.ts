@@ -13,6 +13,8 @@ export class PublicContactController {
   @ApiOperation({ summary: 'Get active contact page content' })
   @ApiResponse({ status: 200, description: 'Contact page content retrieved successfully' })
   async getContactPage() {
-    return this.contactPageService.getActiveContactPage();
+    // Use getOrCreateDefaultContactPage to ensure a record always exists
+    // This prevents null returns that cause frontend to show hardcoded defaults
+    return this.contactPageService.getOrCreateDefaultContactPage();
   }
 }
