@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
     // Send welcome email with questionnaire link (trigger-based, non-blocking)
     try {
       const siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://oneclicktag.com';
-      const questionnaireUrl = `${siteUrl}/questionnaire/${lead.id}`;
+      const questionnaireUrl = `${siteUrl}/early-access/questionnaire?leadId=${lead.id}`;
       const leadName = lead.name?.split(' ')[0] || lead.email.split('@')[0];
 
       const logoUrl = getEmailLogoUrl();

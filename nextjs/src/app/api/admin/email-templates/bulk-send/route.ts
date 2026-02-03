@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
           siteUrl: siteUrl,
           linkedinUrl: LINKEDIN_URL,
           unsubscribeUrl: getUnsubscribeUrl(lead.id),
-          questionnaireUrl: `${siteUrl}/thank-you?id=${lead.id}`,
+          questionnaireUrl: `${siteUrl}/early-access/questionnaire?leadId=${lead.id}`,
           contactUrl: `${siteUrl}/contact`,
         },
       });
@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
               siteUrl: siteUrl,
               linkedinUrl: LINKEDIN_URL,
               unsubscribeUrl: getUnsubscribeUrl(lead.id),
-              questionnaireUrl: `${siteUrl}/thank-you?id=${lead.id}`,
+              questionnaireUrl: `${siteUrl}/early-access/questionnaire?leadId=${lead.id}`,
               contactUrl: `${siteUrl}/contact`,
             },
           });
