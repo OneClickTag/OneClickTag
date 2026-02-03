@@ -56,6 +56,9 @@ import {
   ToggleRight,
   Eye,
   Code,
+  Send,
+  Users,
+  UserX,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -120,6 +123,13 @@ interface EmailTrigger {
   updatedAt?: string;
 }
 
+interface BulkSendStats {
+  subscribersCount: number;
+  totalLeads: number;
+  unsubscribedCount: number;
+  unsubscribeReasons: Array<{ reason: string; count: number }>;
+}
+
 interface TemplateFormData {
   type: string;
   name: string;
@@ -150,6 +160,16 @@ export default function AdminEmailTemplatesPage() {
   const [previewMode, setPreviewMode] = useState<'html' | 'text' | 'preview'>('preview');
   const [logsPage, setLogsPage] = useState(1);
   const [logsStatusFilter, setLogsStatusFilter] = useState<string>('all');
+  const [bulkSendTemplate, setBulkSendTemplate] = useState<string>('');
+  const [bulkSendSubject, setBulkSendSubject] = useState<string>('');
+  const [testEmail, setTestEmail] = useState<string>('');
+  const [isSendingBulk, setIsSendingBulk] = useState(false);
+  const [bulkSendResult, setBulkSendResult] = useState<{
+    success: boolean;
+    sent: number;
+    failed: number;
+    testMode?: boolean;
+  } | null>(null);
 
   // Fetch templates
   const { data: templates, isLoading: templatesLoading } = useQuery({
@@ -181,6 +201,12 @@ export default function AdminEmailTemplatesPage() {
   const { data: triggers, isLoading: triggersLoading } = useQuery({
     queryKey: ['admin', 'email-triggers'],
     queryFn: () => api.get<EmailTrigger[]>('/api/admin/email-triggers'),
+  });
+
+  // Fetch bulk send stats
+  const { data: bulkStats, isLoading: bulkStatsLoading, refetch: refetchBulkStats } = useQuery({
+    queryKey: ['admin', 'email-templates', 'bulk-stats'],
+    queryFn: () => api.get<BulkSendStats>('/api/admin/email-templates/bulk-send'),
   });
 
   // Upsert mutation
@@ -268,6 +294,52 @@ export default function AdminEmailTemplatesPage() {
     upsertMutation.mutate(formData);
   };
 
+  const handleBulkSend = async (isTest: boolean) => {
+    if (!bulkSendTemplate) {
+      toast.error('Please select a template');
+      return;
+    }
+    if (isTest && !testEmail) {
+      toast.error('Please enter a test email address');
+      return;
+    }
+
+    setIsSendingBulk(true);
+    setBulkSendResult(null);
+
+    try {
+      const response = await api.post<{
+        success: boolean;
+        sent: number;
+        failed: number;
+        testMode?: boolean;
+        error?: string;
+      }>('/api/admin/email-templates/bulk-send', {
+        templateType: bulkSendTemplate,
+        subject: bulkSendSubject || undefined,
+        testEmail: isTest ? testEmail : undefined,
+      });
+
+      setBulkSendResult(response);
+
+      if (response.success) {
+        toast.success(
+          isTest
+            ? 'Test email sent successfully!'
+            : `Bulk email sent: ${response.sent} successful, ${response.failed} failed`
+        );
+        queryClient.invalidateQueries({ queryKey: ['admin', 'email-templates', 'logs'] });
+      } else {
+        toast.error(response.error || 'Failed to send emails');
+      }
+    } catch (error) {
+      toast.error('Failed to send bulk email');
+      console.error(error);
+    } finally {
+      setIsSendingBulk(false);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'SENT':
@@ -353,6 +425,10 @@ export default function AdminEmailTemplatesPage() {
           <TabsTrigger value="triggers">
             <ToggleRight className="h-4 w-4 mr-2" />
             Triggers
+          </TabsTrigger>
+          <TabsTrigger value="marketing">
+            <Send className="h-4 w-4 mr-2" />
+            Marketing
           </TabsTrigger>
           <TabsTrigger value="logs">
             <History className="h-4 w-4 mr-2" />
@@ -534,6 +610,176 @@ export default function AdminEmailTemplatesPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Marketing Tab */}
+        <TabsContent value="marketing">
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* Subscriber Stats */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  Subscriber Statistics
+                </CardTitle>
+                <CardDescription>
+                  Overview of your email subscribers
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {bulkStatsLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                  </div>
+                ) : bulkStats ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-4 bg-green-50 rounded-lg">
+                        <p className="text-2xl font-bold text-green-600">
+                          {bulkStats.subscribersCount}
+                        </p>
+                        <p className="text-sm text-green-700">Active Subscribers</p>
+                      </div>
+                      <div className="p-4 bg-gray-50 rounded-lg">
+                        <p className="text-2xl font-bold text-gray-600">
+                          {bulkStats.totalLeads}
+                        </p>
+                        <p className="text-sm text-gray-700">Total Leads</p>
+                      </div>
+                    </div>
+                    <div className="p-4 bg-red-50 rounded-lg">
+                      <p className="text-lg font-semibold text-red-600">
+                        {bulkStats.unsubscribedCount} Unsubscribed
+                      </p>
+                      {bulkStats.unsubscribeReasons && bulkStats.unsubscribeReasons.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          <p className="text-xs font-medium text-red-800">Unsubscribe Reasons:</p>
+                          {bulkStats.unsubscribeReasons.map((r, i) => (
+                            <div key={i} className="flex justify-between text-xs text-red-700">
+                              <span>{r.reason}</span>
+                              <span className="font-medium">{r.count}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => refetchBulkStats()}
+                      className="w-full"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Refresh Stats
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-center py-4">No data available</p>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Send Bulk Email */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Send className="h-5 w-5" />
+                  Send Marketing Email
+                </CardTitle>
+                <CardDescription>
+                  Send emails to all subscribers who have marketing consent
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Email Template</Label>
+                  <Select
+                    value={bulkSendTemplate}
+                    onValueChange={setBulkSendTemplate}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select template..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {templates?.map((template) => (
+                        <SelectItem key={template.id} value={template.type}>
+                          {template.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Subject Override (Optional)</Label>
+                  <Input
+                    value={bulkSendSubject}
+                    onChange={(e) => setBulkSendSubject(e.target.value)}
+                    placeholder="Leave empty to use template subject"
+                  />
+                </div>
+
+                <div className="border-t pt-4 mt-4">
+                  <Label className="text-sm text-gray-500">Test Before Sending</Label>
+                  <div className="flex gap-2 mt-2">
+                    <Input
+                      value={testEmail}
+                      onChange={(e) => setTestEmail(e.target.value)}
+                      placeholder="Enter test email..."
+                      className="flex-1"
+                    />
+                    <Button
+                      variant="outline"
+                      onClick={() => handleBulkSend(true)}
+                      disabled={isSendingBulk || !bulkSendTemplate || !testEmail}
+                    >
+                      {isSendingBulk ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        'Send Test'
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                {bulkSendResult && (
+                  <div className={`p-3 rounded-lg ${bulkSendResult.success ? 'bg-green-50' : 'bg-red-50'}`}>
+                    <p className={`text-sm font-medium ${bulkSendResult.success ? 'text-green-800' : 'text-red-800'}`}>
+                      {bulkSendResult.testMode ? 'Test email ' : 'Bulk send '}
+                      {bulkSendResult.success ? 'completed' : 'failed'}
+                    </p>
+                    {!bulkSendResult.testMode && (
+                      <p className="text-xs text-gray-600 mt-1">
+                        Sent: {bulkSendResult.sent} | Failed: {bulkSendResult.failed}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <Button
+                  className="w-full"
+                  onClick={() => handleBulkSend(false)}
+                  disabled={isSendingBulk || !bulkSendTemplate || bulkStats?.subscribersCount === 0}
+                >
+                  {isSendingBulk ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4 mr-2" />
+                      Send to {bulkStats?.subscribersCount || 0} Subscribers
+                    </>
+                  )}
+                </Button>
+
+                <p className="text-xs text-gray-500 text-center">
+                  Only sends to leads with marketing consent who have not unsubscribed
+                </p>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* Logs Tab */}

@@ -565,6 +565,11 @@ model Lead {
   questionnaireCompleted Boolean   @default(false)
   completedAt            DateTime?
 
+  // Email preferences
+  unsubscribed       Boolean   @default(false) // User unsubscribed from emails
+  unsubscribedAt     DateTime? // When they unsubscribed
+  unsubscribeReason  String?   // Reason for unsubscribing
+
   // Audit
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -574,6 +579,7 @@ model Lead {
   @@index([createdAt])
   @@index([questionnaireCompleted])
   @@index([acceptedTerms])
+  @@index([unsubscribed])
   @@map("leads")
 }
 
