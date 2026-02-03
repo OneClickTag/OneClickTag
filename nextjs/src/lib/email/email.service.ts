@@ -406,7 +406,7 @@ export async function initializeDefaultTemplates(): Promise<void> {
     {
       type: EmailTemplateType.QUESTIONNAIRE_THANK_YOU,
       name: 'Questionnaire Thank You',
-      subject: 'Thank you for completing the questionnaire!',
+      subject: "🎉 You're awesome! Your questionnaire is in!",
       htmlContent: `
 <!DOCTYPE html>
 <html>
@@ -414,51 +414,178 @@ export async function initializeDefaultTemplates(): Promise<void> {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body style="margin: 0; padding: 0; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: #0f0f23; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
   <table role="presentation" style="width: 100%; border-collapse: collapse;">
     <tr>
       <td style="padding: 40px 20px;">
-        <table role="presentation" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-          <!-- Logo Header -->
+        <table role="presentation" style="max-width: 600px; margin: 0 auto; background-color: #1a1a2e; border-radius: 20px; overflow: hidden; box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);">
+
+          <!-- Confetti Header -->
           <tr>
-            <td style="padding: 30px 30px 20px; text-align: center; border-bottom: 1px solid #f1f5f9;">
-              <img src="{{logoUrl}}" alt="OneClickTag" style="max-width: 180px; height: auto;">
+            <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%); padding: 50px 30px; text-align: center; position: relative;">
+              <!-- Decorative Elements -->
+              <div style="font-size: 60px; margin-bottom: 15px;">🎊</div>
+              <h1 style="color: #ffffff; margin: 0; font-size: 36px; font-weight: 800; text-shadow: 2px 2px 4px rgba(0,0,0,0.2);">
+                Woohoo! You Did It!
+              </h1>
+              <p style="color: rgba(255,255,255,0.95); margin: 15px 0 0; font-size: 18px; font-weight: 500;">
+                Your questionnaire has landed safely in our inbox
+              </p>
+              <!-- Fun decorative stars -->
+              <div style="margin-top: 20px; font-size: 24px; letter-spacing: 10px;">✨ 🚀 ✨</div>
             </td>
           </tr>
-          <!-- Main Header -->
+
+          <!-- Logo -->
           <tr>
-            <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 30px; text-align: center;">
-              <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 700;">Thank You!</h1>
-              <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0; font-size: 16px;">Your questionnaire has been submitted</p>
+            <td style="padding: 30px 30px 20px; text-align: center; background-color: #1a1a2e;">
+              <img src="{{logoUrl}}" alt="OneClickTag" style="max-width: 160px; height: auto;">
             </td>
           </tr>
-          <!-- Content -->
+
+          <!-- Main Content -->
           <tr>
-            <td style="padding: 40px 30px;">
-              <p style="margin: 0 0 20px; font-size: 16px; color: #374151;">Hi {{name}},</p>
-              <p style="margin: 0 0 20px; font-size: 16px; color: #374151;">Thank you for completing the OneClickTag questionnaire! We appreciate you taking the time to share your tracking needs with us.</p>
-              <p style="margin: 0 0 20px; font-size: 16px; color: #374151;">Our team will review your responses and get back to you shortly with personalized recommendations.</p>
-              <p style="margin: 0 0 20px; font-size: 16px; color: #374151;">In the meantime, if you have any questions, feel free to reply to this email.</p>
-              <p style="margin: 30px 0 0; font-size: 16px; color: #374151;">Best regards,<br>The OneClickTag Team</p>
+            <td style="padding: 20px 35px 40px; background-color: #1a1a2e;">
+              <p style="margin: 0 0 25px; font-size: 18px; color: #e2e8f0; line-height: 1.6;">
+                Hey <strong style="color: #a78bfa;">{{name}}</strong>! 👋
+              </p>
+
+              <p style="margin: 0 0 25px; font-size: 16px; color: #94a3b8; line-height: 1.7;">
+                You just took a huge step towards saying goodbye to tracking headaches forever!
+                We're genuinely excited to help you simplify your Google tracking setup.
+              </p>
+
+              <!-- Fun Stats Box -->
+              <table role="presentation" style="width: 100%; background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%); border-radius: 16px; margin: 30px 0; border: 1px solid rgba(167, 139, 250, 0.3);">
+                <tr>
+                  <td style="padding: 25px;">
+                    <p style="margin: 0 0 15px; font-size: 14px; color: #a78bfa; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">
+                      🎯 Fun Fact
+                    </p>
+                    <p style="margin: 0; font-size: 15px; color: #cbd5e1; line-height: 1.6;">
+                      The average marketer spends <strong style="color: #f472b6;">3+ hours</strong> setting up Google tracking manually.
+                      With OneClickTag? <strong style="color: #34d399;">Under 5 minutes.</strong>
+                      That's like getting your weekend back! 🏖️
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- What's Next Section -->
+              <table role="presentation" style="width: 100%; margin: 35px 0;">
+                <tr>
+                  <td>
+                    <p style="margin: 0 0 20px; font-size: 20px; color: #f1f5f9; font-weight: 700;">
+                      What happens next? 🤔
+                    </p>
+                  </td>
+                </tr>
+                <!-- Step 1 -->
+                <tr>
+                  <td style="padding: 12px 0;">
+                    <table role="presentation" style="width: 100%;">
+                      <tr>
+                        <td style="width: 50px; vertical-align: top;">
+                          <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; text-align: center; line-height: 40px; font-size: 18px;">
+                            🔍
+                          </div>
+                        </td>
+                        <td style="vertical-align: middle; padding-left: 15px;">
+                          <p style="margin: 0; font-size: 15px; color: #e2e8f0; font-weight: 600;">We review your answers</p>
+                          <p style="margin: 5px 0 0; font-size: 13px; color: #64748b;">Our team is on it!</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <!-- Step 2 -->
+                <tr>
+                  <td style="padding: 12px 0;">
+                    <table role="presentation" style="width: 100%;">
+                      <tr>
+                        <td style="width: 50px; vertical-align: top;">
+                          <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-radius: 12px; text-align: center; line-height: 40px; font-size: 18px;">
+                            💡
+                          </div>
+                        </td>
+                        <td style="vertical-align: middle; padding-left: 15px;">
+                          <p style="margin: 0; font-size: 15px; color: #e2e8f0; font-weight: 600;">We craft your personalized plan</p>
+                          <p style="margin: 5px 0 0; font-size: 13px; color: #64748b;">Tailored just for you</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <!-- Step 3 -->
+                <tr>
+                  <td style="padding: 12px 0;">
+                    <table role="presentation" style="width: 100%;">
+                      <tr>
+                        <td style="width: 50px; vertical-align: top;">
+                          <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #4ade80 0%, #22d3ee 100%); border-radius: 12px; text-align: center; line-height: 40px; font-size: 18px;">
+                            🚀
+                          </div>
+                        </td>
+                        <td style="vertical-align: middle; padding-left: 15px;">
+                          <p style="margin: 0; font-size: 15px; color: #e2e8f0; font-weight: 600;">You get early access!</p>
+                          <p style="margin: 5px 0 0; font-size: 13px; color: #64748b;">Time to track like a pro</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Motivational Quote -->
+              <table role="presentation" style="width: 100%; margin: 35px 0;">
+                <tr>
+                  <td style="padding: 25px; background: rgba(52, 211, 153, 0.1); border-radius: 16px; border-left: 4px solid #34d399;">
+                    <p style="margin: 0; font-size: 16px; color: #94a3b8; font-style: italic; line-height: 1.6;">
+                      "The best time to set up proper tracking was yesterday. The second best time is with OneClickTag."
+                    </p>
+                    <p style="margin: 10px 0 0; font-size: 13px; color: #64748b;">
+                      — Every marketer who discovered us 😉
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Closing -->
+              <p style="margin: 30px 0 0; font-size: 16px; color: #94a3b8; line-height: 1.7;">
+                Got questions? Just hit reply - we actually read every email! 📬
+              </p>
+
+              <p style="margin: 25px 0 0; font-size: 16px; color: #e2e8f0;">
+                Cheers,<br>
+                <strong style="color: #a78bfa;">The OneClickTag Crew</strong> 🤘
+              </p>
             </td>
           </tr>
+
           <!-- Footer -->
           <tr>
-            <td style="background-color: #f9fafb; padding: 25px 30px; border-top: 1px solid #e5e7eb;">
+            <td style="background-color: #16162a; padding: 30px; border-top: 1px solid #2d2d4a;">
               <table role="presentation" style="width: 100%;">
                 <tr>
                   <td style="text-align: center;">
-                    <p style="margin: 0 0 10px; font-size: 13px; color: #6b7280;">
-                      <a href="{{siteUrl}}" style="color: #667eea; text-decoration: none;">Website</a>
-                      <span style="color: #d1d5db; margin: 0 10px;">|</span>
-                      <a href="{{linkedinUrl}}" style="color: #667eea; text-decoration: none;">LinkedIn</a>
+                    <p style="margin: 0 0 15px; font-size: 24px;">
+                      <a href="{{siteUrl}}" style="text-decoration: none; margin: 0 8px;">🌐</a>
+                      <a href="{{linkedinUrl}}" style="text-decoration: none; margin: 0 8px;">💼</a>
                     </p>
-                    <p style="margin: 0; font-size: 12px; color: #9ca3af;">OneClickTag - Simplifying Google Tracking</p>
+                    <p style="margin: 0 0 8px; font-size: 13px; color: #64748b;">
+                      <a href="{{siteUrl}}" style="color: #a78bfa; text-decoration: none;">Website</a>
+                      <span style="color: #475569; margin: 0 10px;">•</span>
+                      <a href="{{linkedinUrl}}" style="color: #a78bfa; text-decoration: none;">LinkedIn</a>
+                    </p>
+                    <p style="margin: 0; font-size: 12px; color: #475569;">
+                      OneClickTag — Making tracking less painful since 2025 ✌️
+                    </p>
                   </td>
                 </tr>
               </table>
             </td>
           </tr>
+
         </table>
       </td>
     </tr>
@@ -467,22 +594,42 @@ export async function initializeDefaultTemplates(): Promise<void> {
 </html>
       `.trim(),
       textContent: `
-Hi {{name}},
+🎉 WOOHOO! YOU DID IT!
 
-Thank you for completing the OneClickTag questionnaire! We appreciate you taking the time to share your tracking needs with us.
+Hey {{name}}! 👋
 
-Our team will review your responses and get back to you shortly with personalized recommendations.
+You just took a huge step towards saying goodbye to tracking headaches forever! We're genuinely excited to help you simplify your Google tracking setup.
 
-In the meantime, if you have any questions, feel free to reply to this email.
+---
 
-Best regards,
-The OneClickTag Team
+🎯 FUN FACT
+The average marketer spends 3+ hours setting up Google tracking manually. With OneClickTag? Under 5 minutes. That's like getting your weekend back! 🏖️
+
+---
+
+WHAT HAPPENS NEXT? 🤔
+
+🔍 We review your answers — Our team is on it!
+💡 We craft your personalized plan — Tailored just for you
+🚀 You get early access! — Time to track like a pro
+
+---
+
+"The best time to set up proper tracking was yesterday. The second best time is with OneClickTag."
+— Every marketer who discovered us 😉
+
+---
+
+Got questions? Just hit reply - we actually read every email! 📬
+
+Cheers,
+The OneClickTag Crew 🤘
 
 ---
 Website: {{siteUrl}}
 LinkedIn: {{linkedinUrl}}
 
-OneClickTag - Simplifying Google Tracking
+OneClickTag — Making tracking less painful since 2025 ✌️
       `.trim(),
       availableVariables: {
         name: 'Recipient name',
