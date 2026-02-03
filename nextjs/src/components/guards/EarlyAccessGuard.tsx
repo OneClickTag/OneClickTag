@@ -31,7 +31,7 @@ export function EarlyAccessGuard({ children }: EarlyAccessGuardProps) {
 
     // If logged in but not admin, redirect to early access page
     if (!ALLOWED_ROLES.includes(user.role)) {
-      router.replace('/early-access?restricted=true');
+      router.replace('/early-access');
     }
   }, [user, loading, router]);
 
@@ -65,10 +65,7 @@ export function EarlyAccessGuard({ children }: EarlyAccessGuardProps) {
     if (!ALLOWED_ROLES.includes(user.role)) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50">
-          <div className="text-center">
-            <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-600" />
-            <p className="text-gray-600 mt-2">Access restricted...</p>
-          </div>
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
         </div>
       );
     }

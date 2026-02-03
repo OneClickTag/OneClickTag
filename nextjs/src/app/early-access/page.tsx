@@ -1,18 +1,16 @@
 'use client';
 
 import { useState, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Sparkles, Loader2, Lock } from 'lucide-react';
+import { Sparkles, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
 function EarlyAccessContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const isRestricted = searchParams.get('restricted') === 'true';
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -105,16 +103,6 @@ function EarlyAccessContent() {
       {/* Content */}
       <div className="relative z-10 w-full max-w-2xl">
         <div className="bg-white rounded-2xl shadow-2xl p-6 md:p-8">
-          {/* Restricted Access Banner */}
-          {isRestricted && (
-            <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2 rounded-lg mb-4">
-              <Lock className="w-4 h-4 mt-0.5 flex-shrink-0" />
-              <p className="text-sm">
-                Dashboard access is restricted. Join the waitlist to be notified when we launch.
-              </p>
-            </div>
-          )}
-
           {/* Header Section */}
           <div className="text-center mb-6">
             {/* Badge */}

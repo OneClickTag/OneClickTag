@@ -74,7 +74,9 @@ export function PlansContent({ plans, faqs, earlyAccessMode }: PlansContentProps
                 {/* CTA Button */}
                 <Link
                   href={
-                    plan.ctaUrl || (earlyAccessMode ? '/early-access' : '/register')
+                    earlyAccessMode && plan.ctaText !== 'Contact Sales'
+                      ? '/early-access'
+                      : plan.ctaUrl || (plan.ctaText === 'Contact Sales' ? '/contact' : '/register')
                   }
                   className="w-full mb-6"
                 >
