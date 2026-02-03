@@ -30,6 +30,18 @@ export function getEmailLogoUrl(): string {
   return `${getEmailAssetsBaseUrl()}/logo-email.png`;
 }
 
+/**
+ * Get the unsubscribe URL for a lead
+ */
+export function getUnsubscribeUrl(leadId: string): string {
+  return `${getEmailAssetsBaseUrl()}/unsubscribe?token=${leadId}`;
+}
+
+/**
+ * LinkedIn company URL
+ */
+export const LINKEDIN_URL = 'https://www.linkedin.com/company/oneclicktag/';
+
 // Create reusable transporter using Gmail/Google Workspace SMTP
 const createTransporter = () => {
   const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
@@ -298,11 +310,24 @@ export async function getTriggerTemplateType(action: EmailTriggerAction): Promis
 /**
  * Send email based on trigger action
  * Only sends if the trigger is active in admin settings
+ * Also checks if the lead is unsubscribed
  */
 export async function sendTriggeredEmail(
   action: EmailTriggerAction,
   options: SendEmailOptions
 ): Promise<{ success: boolean; messageId?: string; error?: string; skipped?: boolean }> {
+  // Check if lead is unsubscribed (if leadId is provided)
+  if (options.leadId) {
+    const lead = await prisma.lead.findUnique({
+      where: { id: options.leadId },
+      select: { unsubscribed: true },
+    });
+    if (lead?.unsubscribed) {
+      console.log(`Lead ${options.leadId} is unsubscribed. Skipping email.`);
+      return { success: true, skipped: true };
+    }
+  }
+
   // Check if trigger is active
   const templateType = await getTriggerTemplateType(action);
 
@@ -600,8 +625,11 @@ export async function initializeDefaultTemplates(): Promise<void> {
                       <span style="color: #475569; margin: 0 10px;">•</span>
                       <a href="{{linkedinUrl}}" style="color: #a78bfa; text-decoration: none;">LinkedIn</a>
                     </p>
-                    <p style="margin: 0; font-size: 12px; color: #475569;">
+                    <p style="margin: 0 0 10px; font-size: 12px; color: #475569;">
                       OneClickTag — Making tracking less painful since 2025 ✌️
+                    </p>
+                    <p style="margin: 0; font-size: 11px; color: #3f3f5a;">
+                      <a href="{{unsubscribeUrl}}" style="color: #64748b; text-decoration: underline;">Unsubscribe</a> from future emails
                     </p>
                   </td>
                 </tr>
@@ -653,6 +681,8 @@ Website: {{siteUrl}}
 LinkedIn: {{linkedinUrl}}
 
 OneClickTag — Making tracking less painful since 2025 ✌️
+
+Unsubscribe: {{unsubscribeUrl}}
       `.trim(),
       availableVariables: {
         name: 'Recipient name',
@@ -660,6 +690,7 @@ OneClickTag — Making tracking less painful since 2025 ✌️
         logoUrl: 'Logo image URL',
         siteUrl: 'Website URL',
         linkedinUrl: 'LinkedIn page URL',
+        unsubscribeUrl: 'Unsubscribe link',
       },
     },
     {

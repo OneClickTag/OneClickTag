@@ -95,8 +95,8 @@ export async function POST(request: NextRequest) {
           siteUrl,
           logoUrl,
           contactUrl: `${siteUrl}/contact`,
-          linkedinUrl: 'https://www.linkedin.com/company/oneclicktag',
-          unsubscribeUrl: `${siteUrl}/unsubscribe?email=${encodeURIComponent(lead.email)}`,
+          linkedinUrl: 'https://www.linkedin.com/company/oneclicktag/',
+          unsubscribeUrl: `${siteUrl}/unsubscribe?token=${lead.id}`,
         },
       });
       if (result.skipped) {
