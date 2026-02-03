@@ -41,6 +41,7 @@ const navigation: NavigationItem[] = [
     items: [
       { name: 'Users', href: '/admin/users', icon: Users },
       { name: 'Leads', href: '/admin/leads', icon: BarChart3 },
+      { name: 'Questionnaire', href: '/admin/questionnaire', icon: FileCheck },
     ],
   },
   {
@@ -59,6 +60,7 @@ const navigation: NavigationItem[] = [
     items: [
       { name: 'Site Settings', href: '/admin/site-settings', icon: Settings },
       { name: 'Plans', href: '/admin/plans', icon: CreditCard },
+      { name: 'Email Templates', href: '/admin/email-templates', icon: Mail },
     ],
   },
   {

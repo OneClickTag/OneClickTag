@@ -3,10 +3,10 @@ import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { Metadata } from 'next';
 import { MarkdownContent } from './MarkdownContent';
-import { getContentPage, getSiteSettings } from '@/lib/server/api';
+import { getContentPage, buildPageMetadata } from '@/lib/server/api';
 
-// Revalidate every 5 minutes
-export const revalidate = 300;
+// Force dynamic rendering to always fetch fresh data from database
+export const dynamic = 'force-dynamic';
 
 // These slugs have dedicated styled pages - redirect to them
 const DEDICATED_PAGE_SLUGS = ['about', 'terms', 'privacy'];
@@ -23,10 +23,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     return {};
   }
 
-  const [page, settings] = await Promise.all([
-    getContentPage(slug),
-    getSiteSettings(),
-  ]);
+  const page = await getContentPage(slug);
 
   if (!page) {
     return {
@@ -34,14 +31,20 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     };
   }
 
+  // Use page-level content as defaults, then apply any SEO overrides from admin
+  const metadata = await buildPageMetadata(
+    `/content/${slug}`,
+    page.metaTitle || page.title,
+    page.metaDescription || `Read more about ${page.title}`
+  );
+
   return {
-    title: page.metaTitle || page.title,
-    description: page.metaDescription || undefined,
-    openGraph: {
-      title: page.metaTitle || page.title,
-      description: page.metaDescription || undefined,
-      images: settings?.socialImageUrl ? [settings.socialImageUrl] : undefined,
-    },
+    title: metadata.title,
+    description: metadata.description,
+    robots: metadata.robots,
+    alternates: metadata.canonical ? { canonical: metadata.canonical } : undefined,
+    openGraph: metadata.openGraph,
+    twitter: metadata.twitter,
   };
 }
 

@@ -8,10 +8,10 @@ import {
   LandingSocialProof,
   LandingCTA,
 } from '@/components/landing';
-import { getLandingPageContent, getSiteSettings, getFooterContent } from '@/lib/server/api';
+import { getLandingPageContent, getFooterContent, buildPageMetadata } from '@/lib/server/api';
 
-// Revalidate every 5 minutes
-export const revalidate = 300;
+// Force dynamic rendering to always fetch fresh data from database
+export const dynamic = 'force-dynamic';
 
 // Default content for fallback
 const defaultHero = {
@@ -137,28 +137,19 @@ const defaultCta = {
 };
 
 export async function generateMetadata(): Promise<Metadata> {
-  const settings = await getSiteSettings();
+  const metadata = await buildPageMetadata(
+    '/',
+    'OneClickTag - Automated Conversion Tracking',
+    'Simplify your Google Tag Manager, Google Ads, and GA4 setup. Create conversion tracking in minutes, not hours.'
+  );
 
   return {
-    title: settings?.metaTitle || 'OneClickTag - Automated Conversion Tracking',
-    description:
-      settings?.metaDescription ||
-      'Simplify your Google Tag Manager, Google Ads, and GA4 setup. Create conversion tracking in minutes, not hours.',
-    openGraph: {
-      title: settings?.metaTitle || 'OneClickTag - Automated Conversion Tracking',
-      description:
-        settings?.metaDescription ||
-        'Simplify your Google Tag Manager, Google Ads, and GA4 setup.',
-      images: settings?.socialImageUrl ? [settings.socialImageUrl] : undefined,
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title: settings?.metaTitle || 'OneClickTag - Automated Conversion Tracking',
-      description:
-        settings?.metaDescription ||
-        'Simplify your Google Tag Manager, Google Ads, and GA4 setup.',
-      images: settings?.socialImageUrl ? [settings.socialImageUrl] : undefined,
-    },
+    title: metadata.title,
+    description: metadata.description,
+    robots: metadata.robots,
+    alternates: metadata.canonical ? { canonical: metadata.canonical } : undefined,
+    openGraph: metadata.openGraph,
+    twitter: metadata.twitter,
   };
 }
 

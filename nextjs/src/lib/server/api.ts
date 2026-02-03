@@ -407,3 +407,109 @@ export async function getPrivacyPageContent() {
 
   return null;
 }
+
+/**
+ * Page-level SEO settings interface
+ */
+export interface PageSeoSettings {
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+  canonicalUrl?: string | null;
+  noIndex: boolean;
+  noFollow: boolean;
+  structuredData?: string | null;
+  sitemapPriority: number;
+  sitemapFreq: string;
+  excludeFromSitemap: boolean;
+}
+
+/**
+ * Fetch page-level SEO settings by slug
+ * Returns null if no custom settings exist for this page
+ */
+export async function getPageSeoSettings(pageSlug: string): Promise<PageSeoSettings | null> {
+  const settings = await prisma.pageSeoSettings.findUnique({
+    where: { pageSlug },
+  });
+
+  if (!settings) return null;
+
+  return {
+    metaTitle: settings.metaTitle,
+    metaDescription: settings.metaDescription,
+    canonicalUrl: settings.canonicalUrl,
+    noIndex: settings.noIndex,
+    noFollow: settings.noFollow,
+    structuredData: settings.structuredData,
+    sitemapPriority: settings.sitemapPriority,
+    sitemapFreq: settings.sitemapFreq,
+    excludeFromSitemap: settings.excludeFromSitemap,
+  };
+}
+
+/**
+ * Helper to build metadata for a page using site settings and page-level overrides
+ * This should be used in generateMetadata() for all public pages
+ */
+export async function buildPageMetadata(
+  pageSlug: string,
+  defaultTitle: string,
+  defaultDescription: string
+): Promise<{
+  title: string;
+  description: string;
+  robots: string;
+  canonical?: string;
+  openGraph: {
+    title: string;
+    description: string;
+    images?: string[];
+  };
+  twitter: {
+    card: 'summary' | 'summary_large_image';
+    title: string;
+    description: string;
+    images?: string[];
+  };
+}> {
+  const [siteSettings, pageSeo] = await Promise.all([
+    getSiteSettings(),
+    getPageSeoSettings(pageSlug),
+  ]);
+
+  const seoSettings = (siteSettings?.seoSettings as Record<string, unknown>) || {};
+
+  // Page-level overrides take precedence, then site settings, then defaults
+  const title = pageSeo?.metaTitle || defaultTitle;
+  const description = pageSeo?.metaDescription || defaultDescription;
+
+  // Build robots directive - page-level overrides site-level
+  const noIndex = pageSeo?.noIndex ?? seoSettings.robotsNoIndex ?? false;
+  const noFollow = pageSeo?.noFollow ?? seoSettings.robotsNoFollow ?? false;
+  const robotsDirectives: string[] = [];
+  if (noIndex) robotsDirectives.push('noindex');
+  else robotsDirectives.push('index');
+  if (noFollow) robotsDirectives.push('nofollow');
+  else robotsDirectives.push('follow');
+
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://oneclicktag.com';
+  const canonical = pageSeo?.canonicalUrl || (seoSettings.canonicalUrl as string) || baseUrl;
+
+  return {
+    title,
+    description,
+    robots: robotsDirectives.join(', '),
+    canonical: pageSeo?.canonicalUrl || undefined,
+    openGraph: {
+      title,
+      description,
+      images: siteSettings?.socialImageUrl ? [siteSettings.socialImageUrl] : undefined,
+    },
+    twitter: {
+      card: (seoSettings.twitterCardType as 'summary' | 'summary_large_image') || 'summary_large_image',
+      title,
+      description,
+      images: siteSettings?.socialImageUrl ? [siteSettings.socialImageUrl] : undefined,
+    },
+  };
+}

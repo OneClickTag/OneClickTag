@@ -24,6 +24,8 @@ import {
   Database,
   FileCheck,
   Eye,
+  Search,
+  MapPin,
   LucideIcon
 } from "lucide-react"
 
@@ -52,6 +54,7 @@ const navigation: NavigationItem[] = [
     items: [
       { name: "Users", href: "/admin/users", icon: Users },
       { name: "Leads", href: "/admin/leads", icon: BarChart3 },
+      { name: "Questionnaire", href: "/admin/questionnaire", icon: FileCheck },
     ],
   },
   {
@@ -70,7 +73,9 @@ const navigation: NavigationItem[] = [
     icon: Settings,
     items: [
       { name: "Site Settings", href: "/admin/site-settings", icon: Settings },
+      { name: "SEO & Sitemap", href: "/admin/seo", icon: Search },
       { name: "Plans", href: "/admin/plans", icon: CreditCard },
+      { name: "Email Templates", href: "/admin/email-templates", icon: Mail },
     ],
   },
   {

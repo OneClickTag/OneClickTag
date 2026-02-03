@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { Prisma } from '@prisma/client';
+import { Prisma, EmailTriggerAction } from '@prisma/client';
 import { z } from 'zod';
+import { sendTriggeredEmail } from '@/lib/email/email.service';
 
 // Validation schema for questionnaire response
 const questionnaireAnswerSchema = z.object({
@@ -89,6 +90,33 @@ export async function POST(
     });
 
     console.log(`Questionnaire completed for lead: ${leadId}`);
+
+    // Send thank you email (trigger-based, non-blocking)
+    try {
+      const siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://oneclicktag.com';
+      const logoUrl = process.env.EMAIL_LOGO_URL || `${siteUrl}/logo-email.png`;
+      const leadName = lead.name?.split(' ')[0] || lead.email.split('@')[0];
+      const result = await sendTriggeredEmail(EmailTriggerAction.QUESTIONNAIRE_COMPLETE, {
+        to: lead.email,
+        toName: leadName,
+        leadId: lead.id,
+        variables: {
+          name: leadName,
+          email: lead.email,
+          logoUrl,
+          siteUrl,
+          linkedinUrl: 'https://www.linkedin.com/company/oneclicktag',
+        },
+      });
+      if (result.skipped) {
+        console.log(`Thank you email skipped for ${lead.email} (trigger not active)`);
+      } else if (result.success) {
+        console.log(`Thank you email sent to ${lead.email}`);
+      }
+    } catch (emailError) {
+      // Log but don't fail the request if email fails
+      console.error(`Failed to send thank you email: ${emailError instanceof Error ? emailError.message : 'Unknown error'}`);
+    }
 
     // Return the updated lead with responses
     const updatedLead = await prisma.lead.findUnique({

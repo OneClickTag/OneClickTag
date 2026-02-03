@@ -1,11 +1,11 @@
 import { Metadata } from 'next';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
-import { getPlans, getSiteSettings } from '@/lib/server/api';
+import { getPlans, buildPageMetadata } from '@/lib/server/api';
 import { PlansContent } from './PlansContent';
 
-// Revalidate every 5 minutes
-export const revalidate = 300;
+// Force dynamic rendering to always fetch fresh data from database
+export const dynamic = 'force-dynamic';
 
 // Default plans for fallback
 const defaultPlans = [
@@ -61,17 +61,19 @@ const defaultPlans = [
 ];
 
 export async function generateMetadata(): Promise<Metadata> {
-  const settings = await getSiteSettings();
+  const metadata = await buildPageMetadata(
+    '/plans',
+    'Pricing Plans | OneClickTag',
+    'Choose the perfect plan for your conversion tracking needs. Simple, transparent pricing.'
+  );
 
   return {
-    title: 'Pricing Plans | OneClickTag',
-    description:
-      'Choose the perfect plan for your conversion tracking needs. Simple, transparent pricing.',
-    openGraph: {
-      title: 'Pricing Plans | OneClickTag',
-      description: 'Simple, transparent pricing for automated conversion tracking.',
-      images: settings?.socialImageUrl ? [settings.socialImageUrl] : undefined,
-    },
+    title: metadata.title,
+    description: metadata.description,
+    robots: metadata.robots,
+    alternates: metadata.canonical ? { canonical: metadata.canonical } : undefined,
+    openGraph: metadata.openGraph,
+    twitter: metadata.twitter,
   };
 }
 

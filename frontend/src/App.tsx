@@ -38,6 +38,7 @@ const AdminLeadsPage = lazy(() => import('./pages/admin/AdminLeadsPage').then(m 
 const AdminLeadDetailPage = lazy(() => import('./pages/admin/AdminLeadDetailPage').then(m => ({ default: m.AdminLeadDetailPage })))
 const AdminLeadsAnalyticsPage = lazy(() => import('./pages/admin/AdminLeadsAnalyticsPage').then(m => ({ default: m.AdminLeadsAnalyticsPage })))
 const AdminQuestionnairePage = lazy(() => import('./pages/admin/AdminQuestionnairePage').then(m => ({ default: m.AdminQuestionnairePage })))
+const AdminEmailTemplatesPage = lazy(() => import('./pages/admin/AdminEmailTemplatesPage').then(m => ({ default: m.AdminEmailTemplatesPage })))
 const AdminRoute = lazy(() => import('./components/AdminRoute').then(m => ({ default: m.AdminRoute })))
 const EarlyAccessGuard = lazy(() => import('./components/EarlyAccessGuard').then(m => ({ default: m.EarlyAccessGuard })))
 
@@ -106,6 +107,7 @@ function App() {
           <Route path="/admin/leads/:id" element={<AdminRoute><AdminLeadDetailPage /></AdminRoute>} />
           <Route path="/admin/leads/analytics" element={<AdminRoute><AdminLeadsAnalyticsPage /></AdminRoute>} />
           <Route path="/admin/questionnaire" element={<AdminRoute><AdminQuestionnairePage /></AdminRoute>} />
+          <Route path="/admin/email-templates" element={<AdminRoute><AdminEmailTemplatesPage /></AdminRoute>} />
 
           {/* Compliance Routes - Protected */}
           <Route path="/admin/compliance/settings" element={<AdminRoute><ComplianceSettingsPage /></AdminRoute>} />

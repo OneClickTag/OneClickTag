@@ -240,4 +240,84 @@ export class LeadAnalyticsService {
       throw error;
     }
   }
+
+  /**
+   * Get response statistics for all questions
+   */
+  async getAllQuestionResponseStats() {
+    try {
+      const questions = await this.prisma.questionnaireQuestion.findMany({
+        where: { isActive: true },
+        orderBy: { order: 'asc' },
+        include: {
+          responses: {
+            select: {
+              answer: true,
+            },
+          },
+        },
+      });
+
+      return questions.map(question => {
+        const responses = question.responses;
+        const totalResponses = responses.length;
+
+        // Calculate distribution for choice-based questions
+        let distribution: { answer: string; count: number; percentage: number }[] = [];
+
+        if (['RADIO', 'CHECKBOX', 'RATING', 'SCALE'].includes(question.type)) {
+          const counts = responses.reduce((acc, r) => {
+            // Handle arrays (checkbox) and single values
+            const answers = Array.isArray(r.answer) ? r.answer : [r.answer];
+            answers.forEach(answer => {
+              const key = String(answer);
+              acc[key] = (acc[key] || 0) + 1;
+            });
+            return acc;
+          }, {} as Record<string, number>);
+
+          distribution = Object.entries(counts)
+            .map(([answer, count]) => ({
+              answer,
+              count,
+              percentage: totalResponses > 0 ? Math.round((count / totalResponses) * 100) : 0,
+            }))
+            .sort((a, b) => b.count - a.count);
+        } else {
+          // For text questions, show recent samples
+          distribution = responses
+            .slice(0, 10)
+            .map(r => ({
+              answer: String(r.answer).substring(0, 100),
+              count: 1,
+              percentage: 0,
+            }));
+        }
+
+        // Calculate average for RATING and SCALE
+        let average: number | null = null;
+        if (['RATING', 'SCALE'].includes(question.type) && totalResponses > 0) {
+          const sum = responses.reduce((acc, r) => {
+            const num = parseFloat(String(r.answer));
+            return acc + (isNaN(num) ? 0 : num);
+          }, 0);
+          average = Math.round((sum / totalResponses) * 10) / 10;
+        }
+
+        return {
+          id: question.id,
+          question: question.question,
+          type: question.type,
+          category: question.category,
+          totalResponses,
+          distribution,
+          average,
+        };
+      });
+    } catch (error) {
+      const errorMessage = error?.message || String(error) || 'Unknown error';
+      this.logger.error(`Failed to get all question stats: ${errorMessage}`, error?.stack);
+      throw error;
+    }
+  }
 }

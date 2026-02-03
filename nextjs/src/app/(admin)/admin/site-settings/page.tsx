@@ -36,7 +36,10 @@ import {
   AlertCircle,
   CheckCircle2,
   Info,
+  ExternalLink,
+  MapPin,
 } from 'lucide-react';
+import Link from 'next/link';
 
 interface SeoSettings {
   googleAnalyticsId?: string;
@@ -248,6 +251,29 @@ export default function AdminSiteSettingsPage() {
 
             {/* SEO Tab */}
             <TabsContent value="seo" className="space-y-6">
+              {/* Link to Page-Level SEO */}
+              <Card className="bg-blue-50 border-blue-200">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <MapPin className="w-5 h-5 text-blue-600" />
+                      <div>
+                        <p className="font-medium text-blue-900">Page-Level SEO & Sitemap</p>
+                        <p className="text-sm text-blue-700">
+                          Manage SEO settings for individual pages and configure your sitemap
+                        </p>
+                      </div>
+                    </div>
+                    <Link href="/admin/seo">
+                      <Button variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-100">
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        Go to SEO Manager
+                      </Button>
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+
               {/* Basic Meta Tags */}
               <Card>
                 <CardHeader>

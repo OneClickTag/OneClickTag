@@ -4,12 +4,16 @@ import { CreateLeadDto } from '../dto/create-lead.dto';
 import { SubmitQuestionnaireDto } from '../dto/submit-questionnaire.dto';
 import { LeadQueryDto } from '../dto/lead-query.dto';
 import { CreatePageViewDto } from '../dto/page-view.dto';
+import { EmailService } from './email.service';
 
 @Injectable()
 export class LeadsService {
   private readonly logger = new Logger(LeadsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly emailService: EmailService,
+  ) {}
 
   /**
    * Create a new lead
@@ -86,6 +90,15 @@ export class LeadsService {
       });
 
       this.logger.log(`Questionnaire completed for lead: ${leadId}`);
+
+      // Send thank you email (non-blocking)
+      this.emailService.sendQuestionnaireThankYou(leadId, lead.email, lead.name)
+        .then(() => {
+          this.logger.log(`Thank you email sent to: ${lead.email}`);
+        })
+        .catch((error) => {
+          this.logger.warn(`Failed to send thank you email to ${lead.email}: ${error?.message || error}`);
+        });
 
       return this.findOne(leadId);
     } catch (error) {

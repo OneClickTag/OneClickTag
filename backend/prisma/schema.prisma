@@ -587,6 +587,7 @@ model Lead {
   // Relations
   responses QuestionnaireResponse[]
   pageViews LeadPageView[]
+  emailLogs EmailLog[]
 
   // Status
   questionnaireCompleted Boolean   @default(false)
@@ -961,4 +962,63 @@ model PrivacyPolicySection {
   @@unique([tenantId, order])
   @@index([tenantId])
   @@map("privacy_policy_sections")
+}
+
+// ========================================
+// EMAIL TEMPLATE MODELS
+// ========================================
+
+enum EmailTemplateType {
+  QUESTIONNAIRE_THANK_YOU // Sent after questionnaire submission
+  LEAD_WELCOME           // Sent when lead registers
+  CUSTOM                 // Custom email template
+}
+
+model EmailTemplate {
+  id String @id @default(cuid())
+
+  type        EmailTemplateType @unique
+  name        String // Display name
+  subject     String
+  htmlContent String            @db.Text
+  textContent String?           @db.Text // Plain text fallback
+
+  // Template variables description (for admin UI)
+  // e.g., {{name}}, {{email}}, {{responses}}
+  availableVariables Json? // ["name", "email", "responses"]
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String?
+  updatedBy String?
+
+  @@index([type])
+  @@index([isActive])
+  @@map("email_templates")
+}
+
+model EmailLog {
+  id String @id @default(cuid())
+
+  templateType EmailTemplateType
+  recipientEmail String
+  recipientName String?
+  subject String
+  status String @default("PENDING") // PENDING, SENT, FAILED
+  errorMessage String? @db.Text
+
+  // Reference to lead if applicable
+  leadId String?
+  lead   Lead?  @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  sentAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([recipientEmail])
+  @@index([status])
+  @@index([leadId])
+  @@index([createdAt])
+  @@map("email_logs")
 }

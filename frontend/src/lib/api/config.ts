@@ -148,6 +148,17 @@ export const apiEndpoints = {
       toggleActive: (id: string) => `/v1/admin/questionnaire/questions/${id}/toggle-active`,
       reorder: '/v1/admin/questionnaire/questions/reorder',
       responses: (id: string) => `/v1/admin/questionnaire/questions/${id}/responses`,
+      allStats: '/v1/admin/questionnaire/questions/stats/all',
+    },
+    emailTemplates: {
+      list: '/v1/admin/email-templates',
+      create: '/v1/admin/email-templates',
+      get: (id: string) => `/v1/admin/email-templates/${id}`,
+      update: (id: string) => `/v1/admin/email-templates/${id}`,
+      toggleActive: (id: string) => `/v1/admin/email-templates/${id}/toggle-active`,
+      types: '/v1/admin/email-templates/types',
+      logs: '/v1/admin/email-templates/logs',
+      initDefaults: '/v1/admin/email-templates/init-defaults',
     },
     compliance: {
       settings: '/compliance/settings',

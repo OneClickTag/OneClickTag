@@ -54,6 +54,17 @@ export interface QuestionReorder {
 export interface ResponseDistribution {
   answer: string;
   count: number;
+  percentage?: number;
+}
+
+export interface QuestionStats {
+  id: string;
+  question: string;
+  type: QuestionType;
+  category?: string;
+  totalResponses: number;
+  distribution: ResponseDistribution[];
+  average?: number | null;
 }
 
 export const adminQuestionnaireService = {
@@ -128,6 +139,16 @@ export const adminQuestionnaireService = {
   async getQuestionResponses(id: string): Promise<ResponseDistribution[]> {
     const response = await apiClient.get<ResponseDistribution[]>(
       apiEndpoints.admin.questionnaire.responses(id)
+    );
+    return response.data;
+  },
+
+  /**
+   * Get all response statistics for all questions
+   */
+  async getAllStats(): Promise<QuestionStats[]> {
+    const response = await apiClient.get<QuestionStats[]>(
+      apiEndpoints.admin.questionnaire.allStats
     );
     return response.data;
   },

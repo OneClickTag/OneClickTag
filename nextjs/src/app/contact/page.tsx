@@ -1,11 +1,11 @@
 import { Metadata } from 'next';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
-import { getContactPageData, getSiteSettings } from '@/lib/server/api';
+import { getContactPageData, buildPageMetadata } from '@/lib/server/api';
 import { ContactContent } from './ContactContent';
 
-// Revalidate every 5 minutes
-export const revalidate = 300;
+// Force dynamic rendering to always fetch fresh data from database
+export const dynamic = 'force-dynamic';
 
 // Default values
 const defaultContactInfo = {
@@ -47,17 +47,19 @@ const defaultSubjects = [
 ];
 
 export async function generateMetadata(): Promise<Metadata> {
-  const settings = await getSiteSettings();
+  const metadata = await buildPageMetadata(
+    '/contact',
+    'Contact Us | OneClickTag',
+    'Get in touch with our team. We are here to help with any questions about OneClickTag.'
+  );
 
   return {
-    title: 'Contact Us | OneClickTag',
-    description:
-      'Get in touch with our team. We are here to help with any questions about OneClickTag.',
-    openGraph: {
-      title: 'Contact Us | OneClickTag',
-      description: 'Get in touch with our team.',
-      images: settings?.socialImageUrl ? [settings.socialImageUrl] : undefined,
-    },
+    title: metadata.title,
+    description: metadata.description,
+    robots: metadata.robots,
+    alternates: metadata.canonical ? { canonical: metadata.canonical } : undefined,
+    openGraph: metadata.openGraph,
+    twitter: metadata.twitter,
   };
 }
 

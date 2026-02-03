@@ -553,6 +553,7 @@ model Lead {
   // Relations
   responses QuestionnaireResponse[]
   pageViews LeadPageView[]
+  emailLogs EmailLog[]
 
   // GDPR Compliance
   acceptedTerms    Boolean   @default(false) // User accepted terms of service
@@ -636,6 +637,82 @@ enum QuestionType {
   CHECKBOX // Multiple choice
   RATING // 1-5 stars
   SCALE // 1-10 scale
+}
+
+// ========================================
+// EMAIL TEMPLATES & TRIGGERS
+// ========================================
+
+enum EmailTemplateType {
+  QUESTIONNAIRE_THANK_YOU
+  LEAD_WELCOME
+  CUSTOM
+}
+
+// Actions that can trigger emails
+enum EmailTriggerAction {
+  LEAD_SIGNUP              // When a new lead signs up for early access
+  QUESTIONNAIRE_COMPLETE   // When a lead completes the questionnaire
+  // Future actions can be added here:
+  // USER_SIGNUP
+  // PASSWORD_RESET
+  // CUSTOMER_CREATED
+}
+
+model EmailTrigger {
+  id           String             @id @default(cuid())
+  action       EmailTriggerAction @unique
+  templateType EmailTemplateType
+  isActive     Boolean            @default(true)
+  description  String?            @db.Text
+
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  createdBy    String?
+  updatedBy    String?
+
+  @@index([action])
+  @@index([isActive])
+  @@map("email_triggers")
+}
+
+model EmailTemplate {
+  id                 String            @id @default(cuid())
+  type               EmailTemplateType @unique
+  name               String
+  subject            String
+  htmlContent        String            @db.Text
+  textContent        String?           @db.Text
+  availableVariables Json? // {name: 'Recipient name', email: 'Email'}
+  isActive           Boolean           @default(true)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  createdBy          String?
+  updatedBy          String?
+
+  @@index([type])
+  @@index([isActive])
+  @@map("email_templates")
+}
+
+model EmailLog {
+  id             String            @id @default(cuid())
+  templateType   EmailTemplateType
+  recipientEmail String
+  recipientName  String?
+  subject        String
+  status         String            @default("PENDING") // PENDING, SENT, FAILED
+  errorMessage   String?           @db.Text
+  leadId         String?
+  lead           Lead?             @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  sentAt         DateTime?
+  createdAt      DateTime          @default(now())
+
+  @@index([recipientEmail])
+  @@index([status])
+  @@index([leadId])
+  @@index([createdAt])
+  @@map("email_logs")
 }
 
 // ========================================
@@ -933,4 +1010,40 @@ model PrivacyPolicySection {
   @@unique([tenantId, order])
   @@index([tenantId])
   @@map("privacy_policy_sections")
+}
+
+// ========================================
+// SEO & SITEMAP MANAGEMENT
+// ========================================
+
+model PageSeoSettings {
+  id              String   @id @default(cuid())
+  pageSlug        String   @unique // e.g., "/", "/early-access", "/content/about"
+
+  // Meta overrides
+  metaTitle       String?
+  metaDescription String?
+  canonicalUrl    String?
+
+  // Robots directives
+  noIndex         Boolean  @default(false)
+  noFollow        Boolean  @default(false)
+
+  // Structured data for this specific page
+  structuredData  String?  @db.Text
+
+  // Sitemap settings
+  sitemapPriority Float    @default(0.5)
+  sitemapFreq     String   @default("monthly") // daily, weekly, monthly, yearly
+  excludeFromSitemap Boolean @default(false)
+
+  // Audit fields
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  createdBy       String?
+  updatedBy       String?
+
+  @@index([pageSlug])
+  @@index([excludeFromSitemap])
+  @@map("page_seo_settings")
 }

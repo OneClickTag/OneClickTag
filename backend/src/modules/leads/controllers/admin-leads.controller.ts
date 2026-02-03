@@ -17,9 +17,11 @@ import { AdminOnly } from '../../auth/decorators/roles.decorator';
 import { LeadsService } from '../services/leads.service';
 import { QuestionnaireService } from '../services/questionnaire.service';
 import { LeadAnalyticsService } from '../services/lead-analytics.service';
+import { EmailTemplateService, CreateEmailTemplateDto, UpdateEmailTemplateDto } from '../services/email-template.service';
 import { LeadQueryDto } from '../dto/lead-query.dto';
 import { CreateQuestionDto } from '../dto/create-question.dto';
 import { UpdateQuestionDto } from '../dto/update-question.dto';
+import { EmailTemplateType } from '@prisma/client';
 
 @ApiTags('Admin - Leads')
 @Controller('v1/admin/leads')
@@ -153,5 +155,94 @@ export class AdminQuestionnaireController {
   @ApiResponse({ status: 200, description: 'Questions reordered successfully' })
   reorder(@Body() body: { questionOrders: { id: string; order: number }[] }) {
     return this.questionnaireService.reorder(body.questionOrders);
+  }
+
+  @Get('stats/all')
+  @ApiOperation({ summary: 'Get all response statistics for all questions' })
+  @ApiResponse({ status: 200, description: 'Stats retrieved successfully' })
+  getAllResponseStats() {
+    return this.analyticsService.getAllQuestionResponseStats();
+  }
+}
+
+@ApiTags('Admin - Email Templates')
+@Controller('v1/admin/email-templates')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@AdminOnly()
+@ApiBearerAuth()
+export class AdminEmailTemplateController {
+  constructor(private readonly emailTemplateService: EmailTemplateService) {}
+
+  @Get()
+  @ApiOperation({ summary: 'Get all email templates' })
+  @ApiResponse({ status: 200, description: 'Templates retrieved successfully' })
+  findAll(@Query('activeOnly') activeOnly?: string) {
+    return this.emailTemplateService.findAll(activeOnly === 'true');
+  }
+
+  @Get('types')
+  @ApiOperation({ summary: 'Get available template types' })
+  @ApiResponse({ status: 200, description: 'Types retrieved successfully' })
+  getTypes() {
+    return Object.values(EmailTemplateType).map((type) => ({
+      value: type,
+      label: type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+    }));
+  }
+
+  @Get('logs')
+  @ApiOperation({ summary: 'Get email send logs' })
+  @ApiResponse({ status: 200, description: 'Logs retrieved successfully' })
+  getLogs(
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+    @Query('status') status?: string,
+    @Query('templateType') templateType?: EmailTemplateType,
+    @Query('leadId') leadId?: string,
+  ) {
+    return this.emailTemplateService.getEmailLogs({
+      page: page ? parseInt(page.toString()) : 1,
+      limit: limit ? parseInt(limit.toString()) : 20,
+      status,
+      templateType,
+      leadId,
+    });
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get template by ID' })
+  @ApiResponse({ status: 200, description: 'Template retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Template not found' })
+  findOne(@Param('id') id: string) {
+    return this.emailTemplateService.findById(id);
+  }
+
+  @Post()
+  @ApiOperation({ summary: 'Create or update email template' })
+  @ApiResponse({ status: 201, description: 'Template saved successfully' })
+  upsert(@Body() dto: CreateEmailTemplateDto) {
+    return this.emailTemplateService.upsert(dto);
+  }
+
+  @Put(':id')
+  @ApiOperation({ summary: 'Update email template' })
+  @ApiResponse({ status: 200, description: 'Template updated successfully' })
+  @ApiResponse({ status: 404, description: 'Template not found' })
+  update(@Param('id') id: string, @Body() dto: UpdateEmailTemplateDto) {
+    return this.emailTemplateService.update(id, dto);
+  }
+
+  @Patch(':id/toggle-active')
+  @ApiOperation({ summary: 'Toggle template active status' })
+  @ApiResponse({ status: 200, description: 'Status toggled successfully' })
+  toggleActive(@Param('id') id: string) {
+    return this.emailTemplateService.toggleActive(id);
+  }
+
+  @Post('init-defaults')
+  @ApiOperation({ summary: 'Initialize default templates' })
+  @ApiResponse({ status: 200, description: 'Default templates initialized' })
+  initDefaults() {
+    return this.emailTemplateService.initializeDefaults();
   }
 }

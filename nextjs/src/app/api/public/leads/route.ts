@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { EmailTriggerAction } from '@prisma/client';
 import { z } from 'zod';
+import { sendTriggeredEmail } from '@/lib/email/email.service';
 
 // Validation schema for creating a lead
 const createLeadSchema = z.object({
@@ -74,6 +76,38 @@ export async function POST(request: NextRequest) {
     });
 
     console.log(`New lead created: ${lead.email}`);
+
+    // Send welcome email with questionnaire link (trigger-based, non-blocking)
+    try {
+      const siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://oneclicktag.com';
+      const questionnaireUrl = `${siteUrl}/questionnaire/${lead.id}`;
+      const leadName = lead.name?.split(' ')[0] || lead.email.split('@')[0];
+
+      const logoUrl = process.env.EMAIL_LOGO_URL || `${siteUrl}/logo-email.png`;
+      const result = await sendTriggeredEmail(EmailTriggerAction.LEAD_SIGNUP, {
+        to: lead.email,
+        toName: leadName,
+        leadId: lead.id,
+        variables: {
+          name: leadName,
+          email: lead.email,
+          questionnaireUrl,
+          siteUrl,
+          logoUrl,
+          contactUrl: `${siteUrl}/contact`,
+          linkedinUrl: 'https://www.linkedin.com/company/oneclicktag',
+          unsubscribeUrl: `${siteUrl}/unsubscribe?email=${encodeURIComponent(lead.email)}`,
+        },
+      });
+      if (result.skipped) {
+        console.log(`Welcome email skipped for ${lead.email} (trigger not active)`);
+      } else if (result.success) {
+        console.log(`Welcome email sent to ${lead.email}`);
+      }
+    } catch (emailError) {
+      // Log but don't fail the request if email fails
+      console.error(`Failed to send welcome email: ${emailError instanceof Error ? emailError.message : 'Unknown error'}`);
+    }
 
     return NextResponse.json(lead, { status: 201 });
   } catch (error) {

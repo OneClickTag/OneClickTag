@@ -2,26 +2,29 @@ import { Metadata } from 'next';
 import { Footer } from '@/components/layout/Footer';
 import { Navbar } from '@/components/layout/Navbar';
 import { FileText, AlertCircle } from 'lucide-react';
-import { getTermsPageContent, getSiteSettings } from '@/lib/server/api';
+import { getTermsPageContent, buildPageMetadata } from '@/lib/server/api';
 import { LegalPageContent } from './LegalPageContent';
 
 // Force dynamic rendering to always fetch fresh data from database
 export const dynamic = 'force-dynamic';
 
 export async function generateMetadata(): Promise<Metadata> {
-  const [pageData, settings] = await Promise.all([
-    getTermsPageContent(),
-    getSiteSettings(),
-  ]);
+  const pageData = await getTermsPageContent();
+
+  // Use page-level content as defaults, then apply any SEO overrides from admin
+  const metadata = await buildPageMetadata(
+    '/terms',
+    pageData?.metaTitle || pageData?.title || 'Terms of Service | OneClickTag',
+    pageData?.metaDescription || 'Read our Terms of Service.'
+  );
 
   return {
-    title: pageData?.metaTitle || pageData?.title || 'Terms of Service | OneClickTag',
-    description: pageData?.metaDescription || 'Read our Terms of Service.',
-    openGraph: {
-      title: pageData?.metaTitle || pageData?.title || 'Terms of Service | OneClickTag',
-      description: pageData?.metaDescription || 'Read our Terms of Service.',
-      images: settings?.socialImageUrl ? [settings.socialImageUrl] : undefined,
-    },
+    title: metadata.title,
+    description: metadata.description,
+    robots: metadata.robots,
+    alternates: metadata.canonical ? { canonical: metadata.canonical } : undefined,
+    openGraph: metadata.openGraph,
+    twitter: metadata.twitter,
   };
 }
 
