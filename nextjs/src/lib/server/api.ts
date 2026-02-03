@@ -210,202 +210,247 @@ export interface SiteSettings {
  * Fetch all landing page sections
  */
 export async function getLandingPageContent(): Promise<LandingPageContent> {
-  const sections = await prisma.landingPageContent.findMany({
-    where: { isActive: true },
-  });
+  try {
+    const sections = await prisma.landingPageContent.findMany({
+      where: { isActive: true },
+    });
 
-  const content: LandingPageContent = {};
-  for (const section of sections) {
-    const key = section.key;
-    // Use type assertion to handle dynamic key assignment
-    if (key === 'hero') {
-      content.hero = section.content as unknown as HeroContent;
-    } else if (key === 'features') {
-      content.features = section.content as unknown as FeaturesContent;
-    } else if (key === 'how-it-works') {
-      content['how-it-works'] = section.content as unknown as HowItWorksContent;
-    } else if (key === 'social-proof') {
-      content['social-proof'] = section.content as unknown as SocialProofContent;
-    } else if (key === 'cta') {
-      content.cta = section.content as unknown as CtaContent;
+    const content: LandingPageContent = {};
+    for (const section of sections) {
+      const key = section.key;
+      // Use type assertion to handle dynamic key assignment
+      if (key === 'hero') {
+        content.hero = section.content as unknown as HeroContent;
+      } else if (key === 'features') {
+        content.features = section.content as unknown as FeaturesContent;
+      } else if (key === 'how-it-works') {
+        content['how-it-works'] = section.content as unknown as HowItWorksContent;
+      } else if (key === 'social-proof') {
+        content['social-proof'] = section.content as unknown as SocialProofContent;
+      } else if (key === 'cta') {
+        content.cta = section.content as unknown as CtaContent;
+      }
     }
-  }
 
-  return content;
+    return content;
+  } catch (error) {
+    console.error('Error fetching landing page content:', error);
+    return {};
+  }
 }
 
 /**
  * Fetch all active plans
  */
 export async function getPlans(): Promise<Plan[]> {
-  const plans = await prisma.plan.findMany({
-    where: { isActive: true },
-    orderBy: { order: 'asc' },
-  });
+  try {
+    const plans = await prisma.plan.findMany({
+      where: { isActive: true },
+      orderBy: { order: 'asc' },
+    });
 
-  return plans.map((plan) => ({
-    id: plan.id,
-    name: plan.name,
-    description: plan.description,
-    price: Number(plan.price),
-    billingPeriod: plan.billingPeriod,
-    features: Array.isArray(plan.features)
-      ? (plan.features as string[])
-      : typeof plan.features === 'string'
-      ? JSON.parse(plan.features)
-      : [],
-    isFeatured: plan.isFeatured,
-    ctaText: plan.ctaText,
-    ctaUrl: plan.ctaUrl,
-    order: plan.order,
-  }));
+    return plans.map((plan) => ({
+      id: plan.id,
+      name: plan.name,
+      description: plan.description,
+      price: Number(plan.price),
+      billingPeriod: plan.billingPeriod,
+      features: Array.isArray(plan.features)
+        ? (plan.features as string[])
+        : typeof plan.features === 'string'
+        ? JSON.parse(plan.features)
+        : [],
+      isFeatured: plan.isFeatured,
+      ctaText: plan.ctaText,
+      ctaUrl: plan.ctaUrl,
+      order: plan.order,
+    }));
+  } catch (error) {
+    console.error('Error fetching plans:', error);
+    return [];
+  }
 }
 
 /**
  * Fetch footer content
  */
 export async function getFooterContent(): Promise<FooterContent | null> {
-  const footer = await prisma.footerContent.findFirst({
-    where: { isActive: true },
-  });
+  try {
+    const footer = await prisma.footerContent.findFirst({
+      where: { isActive: true },
+    });
 
-  if (!footer) return null;
+    if (!footer) return null;
 
-  return {
-    brandName: footer.brandName || undefined,
-    brandDescription: footer.brandDescription || undefined,
-    socialLinks: footer.socialLinks as unknown as FooterSocialLink[] | undefined,
-    sections: footer.sections as unknown as FooterSection[] | undefined,
-    copyrightText: footer.copyrightText || undefined,
-  };
+    return {
+      brandName: footer.brandName || undefined,
+      brandDescription: footer.brandDescription || undefined,
+      socialLinks: footer.socialLinks as unknown as FooterSocialLink[] | undefined,
+      sections: footer.sections as unknown as FooterSection[] | undefined,
+      copyrightText: footer.copyrightText || undefined,
+    };
+  } catch (error) {
+    console.error('Error fetching footer content:', error);
+    return null;
+  }
 }
 
 /**
  * Fetch contact page data
  */
 export async function getContactPageData(): Promise<ContactPageData | null> {
-  const contact = await prisma.contactPageContent.findFirst({
-    where: { isActive: true },
-  });
+  try {
+    const contact = await prisma.contactPageContent.findFirst({
+      where: { isActive: true },
+    });
 
-  if (!contact) return null;
+    if (!contact) return null;
 
-  const customContent = contact.customContent as unknown as Record<string, unknown> | undefined;
+    const customContent = contact.customContent as unknown as Record<string, unknown> | undefined;
 
-  return {
-    email: contact.email || undefined,
-    phone: contact.phone || undefined,
-    address: contact.address || undefined,
-    businessHours: contact.businessHours || undefined,
-    socialLinks: contact.socialLinks as unknown as ContactPageData['socialLinks'],
-    faqs: contact.faqs as unknown as FAQ[] | undefined,
-    formSettings: contact.formSettings as unknown as FormSettings | undefined,
-    customContent: customContent,
-    // Parse contentBlocks and contactFields from customContent if present
-    contentBlocks: customContent?.contentBlocks as ContentBlock[] | undefined,
-    contactFields: customContent?.contactFields as ContactInfoField[] | undefined,
-  };
+    return {
+      email: contact.email || undefined,
+      phone: contact.phone || undefined,
+      address: contact.address || undefined,
+      businessHours: contact.businessHours || undefined,
+      socialLinks: contact.socialLinks as unknown as ContactPageData['socialLinks'],
+      faqs: contact.faqs as unknown as FAQ[] | undefined,
+      formSettings: contact.formSettings as unknown as FormSettings | undefined,
+      customContent: customContent,
+      // Parse contentBlocks and contactFields from customContent if present
+      contentBlocks: customContent?.contentBlocks as ContentBlock[] | undefined,
+      contactFields: customContent?.contactFields as ContactInfoField[] | undefined,
+    };
+  } catch (error) {
+    console.error('Error fetching contact page data:', error);
+    return null;
+  }
 }
 
 /**
  * Fetch site settings
  */
 export async function getSiteSettings(): Promise<SiteSettings | null> {
-  const settings = await prisma.siteSettings.findUnique({
-    where: { key: 'global' },
-  });
+  try {
+    const settings = await prisma.siteSettings.findUnique({
+      where: { key: 'global' },
+    });
 
-  if (!settings) return null;
+    if (!settings) return null;
 
-  return {
-    logoUrl: settings.logoUrl,
-    faviconUrl: settings.faviconUrl,
-    brandName: settings.brandName,
-    brandColors: settings.brandColors as unknown as Record<string, string> | null,
-    heroBackgroundUrl: settings.heroBackgroundUrl,
-    metaTitle: settings.metaTitle,
-    metaDescription: settings.metaDescription,
-    socialImageUrl: settings.socialImageUrl,
-    customCSS: settings.customCSS,
-    customJS: settings.customJS,
-    seoSettings: settings.seoSettings as unknown as Record<string, unknown> | null,
-  };
+    return {
+      logoUrl: settings.logoUrl,
+      faviconUrl: settings.faviconUrl,
+      brandName: settings.brandName,
+      brandColors: settings.brandColors as unknown as Record<string, string> | null,
+      heroBackgroundUrl: settings.heroBackgroundUrl,
+      metaTitle: settings.metaTitle,
+      metaDescription: settings.metaDescription,
+      socialImageUrl: settings.socialImageUrl,
+      customCSS: settings.customCSS,
+      customJS: settings.customJS,
+      seoSettings: settings.seoSettings as unknown as Record<string, unknown> | null,
+    };
+  } catch (error) {
+    console.error('Error fetching site settings:', error);
+    return null;
+  }
 }
 
 /**
  * Fetch content page by slug
  */
 export async function getContentPage(slug: string) {
-  const page = await prisma.contentPage.findUnique({
-    where: { slug },
-  });
+  try {
+    const page = await prisma.contentPage.findUnique({
+      where: { slug },
+    });
 
-  if (!page || !page.isPublished) {
+    if (!page || !page.isPublished) {
+      return null;
+    }
+
+    return page;
+  } catch (error) {
+    console.error('Error fetching content page:', error);
     return null;
   }
-
-  return page;
 }
 
 /**
  * Fetch about page content (stored as content page with slug 'about')
  */
 export async function getAboutPageContent() {
-  // Try to get from content pages first
-  const page = await prisma.contentPage.findUnique({
-    where: { slug: 'about' },
-  });
+  try {
+    // Try to get from content pages first
+    const page = await prisma.contentPage.findUnique({
+      where: { slug: 'about' },
+    });
 
-  if (page && page.isPublished) {
-    return {
-      title: page.title,
-      content: page.content,
-      metaTitle: page.metaTitle,
-      metaDescription: page.metaDescription,
-    };
+    if (page && page.isPublished) {
+      return {
+        title: page.title,
+        content: page.content,
+        metaTitle: page.metaTitle,
+        metaDescription: page.metaDescription,
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error fetching about page content:', error);
+    return null;
   }
-
-  return null;
 }
 
 /**
  * Fetch terms page content
  */
 export async function getTermsPageContent() {
-  const page = await prisma.contentPage.findUnique({
-    where: { slug: 'terms' },
-  });
+  try {
+    const page = await prisma.contentPage.findUnique({
+      where: { slug: 'terms' },
+    });
 
-  if (page && page.isPublished) {
-    return {
-      title: page.title,
-      content: page.content,
-      metaTitle: page.metaTitle,
-      metaDescription: page.metaDescription,
-    };
+    if (page && page.isPublished) {
+      return {
+        title: page.title,
+        content: page.content,
+        metaTitle: page.metaTitle,
+        metaDescription: page.metaDescription,
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error fetching terms page content:', error);
+    return null;
   }
-
-  return null;
 }
 
 /**
  * Fetch privacy page content
  */
 export async function getPrivacyPageContent() {
-  const page = await prisma.contentPage.findUnique({
-    where: { slug: 'privacy' },
-  });
+  try {
+    const page = await prisma.contentPage.findUnique({
+      where: { slug: 'privacy' },
+    });
 
-  if (page && page.isPublished) {
-    return {
-      title: page.title,
-      content: page.content,
-      metaTitle: page.metaTitle,
-      metaDescription: page.metaDescription,
-    };
+    if (page && page.isPublished) {
+      return {
+        title: page.title,
+        content: page.content,
+        metaTitle: page.metaTitle,
+        metaDescription: page.metaDescription,
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error fetching privacy page content:', error);
+    return null;
   }
-
-  return null;
 }
 
 /**
@@ -428,23 +473,28 @@ export interface PageSeoSettings {
  * Returns null if no custom settings exist for this page
  */
 export async function getPageSeoSettings(pageSlug: string): Promise<PageSeoSettings | null> {
-  const settings = await prisma.pageSeoSettings.findUnique({
-    where: { pageSlug },
-  });
+  try {
+    const settings = await prisma.pageSeoSettings.findUnique({
+      where: { pageSlug },
+    });
 
-  if (!settings) return null;
+    if (!settings) return null;
 
-  return {
-    metaTitle: settings.metaTitle,
-    metaDescription: settings.metaDescription,
-    canonicalUrl: settings.canonicalUrl,
-    noIndex: settings.noIndex,
-    noFollow: settings.noFollow,
-    structuredData: settings.structuredData,
-    sitemapPriority: settings.sitemapPriority,
-    sitemapFreq: settings.sitemapFreq,
-    excludeFromSitemap: settings.excludeFromSitemap,
-  };
+    return {
+      metaTitle: settings.metaTitle,
+      metaDescription: settings.metaDescription,
+      canonicalUrl: settings.canonicalUrl,
+      noIndex: settings.noIndex,
+      noFollow: settings.noFollow,
+      structuredData: settings.structuredData,
+      sitemapPriority: settings.sitemapPriority,
+      sitemapFreq: settings.sitemapFreq,
+      excludeFromSitemap: settings.excludeFromSitemap,
+    };
+  } catch (error) {
+    console.error('Error fetching page SEO settings:', error);
+    return null;
+  }
 }
 
 /**
@@ -472,44 +522,62 @@ export async function buildPageMetadata(
     images?: string[];
   };
 }> {
-  const [siteSettings, pageSeo] = await Promise.all([
-    getSiteSettings(),
-    getPageSeoSettings(pageSlug),
-  ]);
+  try {
+    const [siteSettings, pageSeo] = await Promise.all([
+      getSiteSettings(),
+      getPageSeoSettings(pageSlug),
+    ]);
 
-  const seoSettings = (siteSettings?.seoSettings as Record<string, unknown>) || {};
+    const seoSettings = (siteSettings?.seoSettings as Record<string, unknown>) || {};
 
-  // Page-level overrides take precedence, then site settings, then defaults
-  const title = pageSeo?.metaTitle || defaultTitle;
-  const description = pageSeo?.metaDescription || defaultDescription;
+    // Page-level overrides take precedence, then site settings, then defaults
+    const title = pageSeo?.metaTitle || defaultTitle;
+    const description = pageSeo?.metaDescription || defaultDescription;
 
-  // Build robots directive - page-level overrides site-level
-  const noIndex = pageSeo?.noIndex ?? seoSettings.robotsNoIndex ?? false;
-  const noFollow = pageSeo?.noFollow ?? seoSettings.robotsNoFollow ?? false;
-  const robotsDirectives: string[] = [];
-  if (noIndex) robotsDirectives.push('noindex');
-  else robotsDirectives.push('index');
-  if (noFollow) robotsDirectives.push('nofollow');
-  else robotsDirectives.push('follow');
+    // Build robots directive - page-level overrides site-level
+    const noIndex = pageSeo?.noIndex ?? seoSettings.robotsNoIndex ?? false;
+    const noFollow = pageSeo?.noFollow ?? seoSettings.robotsNoFollow ?? false;
+    const robotsDirectives: string[] = [];
+    if (noIndex) robotsDirectives.push('noindex');
+    else robotsDirectives.push('index');
+    if (noFollow) robotsDirectives.push('nofollow');
+    else robotsDirectives.push('follow');
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://oneclicktag.com';
-  const canonical = pageSeo?.canonicalUrl || (seoSettings.canonicalUrl as string) || baseUrl;
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://oneclicktag.com';
 
-  return {
-    title,
-    description,
-    robots: robotsDirectives.join(', '),
-    canonical: pageSeo?.canonicalUrl || undefined,
-    openGraph: {
+    return {
       title,
       description,
-      images: siteSettings?.socialImageUrl ? [siteSettings.socialImageUrl] : undefined,
-    },
-    twitter: {
-      card: (seoSettings.twitterCardType as 'summary' | 'summary_large_image') || 'summary_large_image',
-      title,
-      description,
-      images: siteSettings?.socialImageUrl ? [siteSettings.socialImageUrl] : undefined,
-    },
-  };
+      robots: robotsDirectives.join(', '),
+      canonical: pageSeo?.canonicalUrl || undefined,
+      openGraph: {
+        title,
+        description,
+        images: siteSettings?.socialImageUrl ? [siteSettings.socialImageUrl] : undefined,
+      },
+      twitter: {
+        card: (seoSettings.twitterCardType as 'summary' | 'summary_large_image') || 'summary_large_image',
+        title,
+        description,
+        images: siteSettings?.socialImageUrl ? [siteSettings.socialImageUrl] : undefined,
+      },
+    };
+  } catch (error) {
+    console.error('Error building page metadata:', error);
+    // Return defaults on error
+    return {
+      title: defaultTitle,
+      description: defaultDescription,
+      robots: 'index, follow',
+      openGraph: {
+        title: defaultTitle,
+        description: defaultDescription,
+      },
+      twitter: {
+        card: 'summary_large_image',
+        title: defaultTitle,
+        description: defaultDescription,
+      },
+    };
+  }
 }

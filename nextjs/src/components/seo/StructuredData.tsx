@@ -5,26 +5,31 @@ import { getSiteSettings } from '@/lib/server/api';
  * Validates JSON before rendering to prevent errors
  */
 export async function StructuredData() {
-  const settings = await getSiteSettings();
-  const seoSettings = settings?.seoSettings as Record<string, unknown> | null;
-  const jsonLd = seoSettings?.structuredData as string | undefined;
-
-  if (!jsonLd || jsonLd.trim() === '') {
-    return null;
-  }
-
-  // Validate JSON before rendering
   try {
-    JSON.parse(jsonLd);
-    return (
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: jsonLd }}
-      />
-    );
-  } catch {
-    // Invalid JSON - don't render
-    console.warn('Invalid JSON-LD structured data in site settings');
+    const settings = await getSiteSettings();
+    const seoSettings = settings?.seoSettings as Record<string, unknown> | null;
+    const jsonLd = seoSettings?.structuredData as string | undefined;
+
+    if (!jsonLd || jsonLd.trim() === '') {
+      return null;
+    }
+
+    // Validate JSON before rendering
+    try {
+      JSON.parse(jsonLd);
+      return (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: jsonLd }}
+        />
+      );
+    } catch {
+      // Invalid JSON - don't render
+      console.warn('Invalid JSON-LD structured data in site settings');
+      return null;
+    }
+  } catch (error) {
+    console.error('Error loading structured data:', error);
     return null;
   }
 }
