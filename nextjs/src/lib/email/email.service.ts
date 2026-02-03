@@ -7,6 +7,29 @@ import nodemailer from 'nodemailer';
 import prisma from '@/lib/prisma';
 import { EmailTemplateType, EmailTriggerAction } from '@prisma/client';
 
+// Production domain for email assets (email clients can't access localhost)
+const PRODUCTION_DOMAIN = 'https://oneclicktag.com';
+
+/**
+ * Get the base URL for email assets
+ * Always uses production domain since email clients can't access localhost
+ */
+export function getEmailAssetsBaseUrl(): string {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || PRODUCTION_DOMAIN;
+  // If it's localhost, use production domain for email assets
+  if (appUrl.includes('localhost') || appUrl.includes('127.0.0.1')) {
+    return PRODUCTION_DOMAIN;
+  }
+  return appUrl;
+}
+
+/**
+ * Get the logo URL for emails
+ */
+export function getEmailLogoUrl(): string {
+  return `${getEmailAssetsBaseUrl()}/logo-email.png`;
+}
+
 // Create reusable transporter using Gmail/Google Workspace SMTP
 const createTransporter = () => {
   const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';

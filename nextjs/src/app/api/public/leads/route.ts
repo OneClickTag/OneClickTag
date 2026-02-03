@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { EmailTriggerAction } from '@prisma/client';
 import { z } from 'zod';
-import { sendTriggeredEmail } from '@/lib/email/email.service';
+import { sendTriggeredEmail, getEmailLogoUrl } from '@/lib/email/email.service';
 
 // Validation schema for creating a lead
 const createLeadSchema = z.object({
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
       const questionnaireUrl = `${siteUrl}/questionnaire/${lead.id}`;
       const leadName = lead.name?.split(' ')[0] || lead.email.split('@')[0];
 
-      const logoUrl = process.env.EMAIL_LOGO_URL || `${siteUrl}/logo-email.png`;
+      const logoUrl = getEmailLogoUrl();
       const result = await sendTriggeredEmail(EmailTriggerAction.LEAD_SIGNUP, {
         to: lead.email,
         toName: leadName,

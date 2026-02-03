@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { Prisma, EmailTriggerAction } from '@prisma/client';
 import { z } from 'zod';
-import { sendTriggeredEmail } from '@/lib/email/email.service';
+import { sendTriggeredEmail, getEmailLogoUrl } from '@/lib/email/email.service';
 
 // Validation schema for questionnaire response
 const questionnaireAnswerSchema = z.object({
@@ -94,7 +94,7 @@ export async function POST(
     // Send thank you email (trigger-based, non-blocking)
     try {
       const siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://oneclicktag.com';
-      const logoUrl = process.env.EMAIL_LOGO_URL || `${siteUrl}/logo-email.png`;
+      const logoUrl = getEmailLogoUrl();
       const leadName = lead.name?.split(' ')[0] || lead.email.split('@')[0];
       const result = await sendTriggeredEmail(EmailTriggerAction.QUESTIONNAIRE_COMPLETE, {
         to: lead.email,
