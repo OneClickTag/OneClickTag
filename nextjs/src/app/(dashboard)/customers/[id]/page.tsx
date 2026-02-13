@@ -1,6 +1,5 @@
 'use client';
 
-import { use } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useApi } from '@/hooks/use-api';
 import { useCustomerTrackings, useCreateTracking } from '@/hooks/use-trackings';
@@ -18,11 +17,13 @@ import {
   CheckCircle,
   XCircle,
   RefreshCw,
+  Radar,
 } from 'lucide-react';
 import { Customer } from '@/types/customer';
+import { AutoTrack } from '@/components/autotrack/AutoTrack';
 
-export default function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function CustomerDetailPage({ params }: { params: { id: string } }) {
+  const { id } = params;
   const api = useApi();
 
   const { data: customer, isLoading: customerLoading } = useQuery({
@@ -93,6 +94,10 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
           <TabsTrigger value="trackings">
             <Activity className="mr-2 h-4 w-4" />
             Trackings
+          </TabsTrigger>
+          <TabsTrigger value="autotrack">
+            <Radar className="mr-2 h-4 w-4" />
+            AutoTrack
           </TabsTrigger>
           <TabsTrigger value="settings">
             <Settings className="mr-2 h-4 w-4" />
@@ -166,6 +171,13 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        <TabsContent value="autotrack">
+          <AutoTrack
+            customerId={id}
+            customerWebsiteUrl={customer?.websiteUrl ?? undefined}
+          />
         </TabsContent>
 
         <TabsContent value="settings">

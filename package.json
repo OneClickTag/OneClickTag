@@ -3,11 +3,7 @@
   "version": "1.0.0",
   "description": "OneClickTag SaaS Application",
   "private": true,
-  "workspaces": [
-    "backend",
-    "frontend",
-    "shared"
-  ],
+  "workspaces": [],
   "packageManager": "pnpm@8.15.1",
   "scripts": {
     "dev": "turbo dev",

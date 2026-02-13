@@ -1,0 +1,577 @@
+'use client';
+
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useApi } from '@/hooks/use-api';
+import { useAuth } from '@/components/providers/auth-provider';
+import {
+  StartScanRequest,
+  ConfirmNicheRequest,
+  RecommendationFilters,
+  BulkAcceptRequest,
+  ScanProgressData,
+  ScanNicheData,
+  ScanCompletedData,
+  SiteScanStatus,
+  ScanSummary,
+  ScanHistory,
+  TrackingRecommendation,
+  LiveDiscovery,
+  ChunkResult,
+  Phase2ChunkResult,
+  SiteCredential,
+  SaveCredentialRequest,
+} from '@/types/site-scanner';
+
+const SCANS_QUERY_KEY = 'site-scans';
+const SCAN_DETAIL_KEY = 'site-scan-detail';
+const RECOMMENDATIONS_KEY = 'scan-recommendations';
+
+// ========================================
+// Queries
+// ========================================
+
+export const useScanHistory = (customerId: string) => {
+  const api = useApi();
+  return useQuery({
+    queryKey: [SCANS_QUERY_KEY, customerId],
+    queryFn: () => api.get<ScanHistory[]>(`/api/customers/${customerId}/scans`),
+    enabled: !!customerId,
+    staleTime: 30 * 1000,
+  });
+};
+
+export const useScanDetail = (customerId: string, scanId: string | null, poll = false) => {
+  const api = useApi();
+  return useQuery({
+    queryKey: [SCAN_DETAIL_KEY, customerId, scanId],
+    queryFn: () => api.get<ScanSummary>(`/api/customers/${customerId}/scans/${scanId}`),
+    enabled: !!customerId && !!scanId,
+    staleTime: poll ? 2000 : 10 * 1000,
+    refetchInterval: poll ? 3000 : false,
+  });
+};
+
+export const useRecommendations = (
+  customerId: string,
+  scanId: string | null,
+  filters?: RecommendationFilters,
+) => {
+  const api = useApi();
+  return useQuery({
+    queryKey: [RECOMMENDATIONS_KEY, customerId, scanId, filters],
+    queryFn: () =>
+      api.get<TrackingRecommendation[]>(`/api/customers/${customerId}/scans/${scanId}/recommendations`, {
+        params: filters as any,
+      }),
+    enabled: !!customerId && !!scanId,
+    staleTime: 30 * 1000,
+  });
+};
+
+// ========================================
+// Mutations
+// ========================================
+
+export const useStartScan = () => {
+  const queryClient = useQueryClient();
+  const api = useApi();
+  return useMutation({
+    mutationFn: ({ customerId, data }: { customerId: string; data?: StartScanRequest }) =>
+      api.post<ScanSummary>(`/api/customers/${customerId}/scans`, data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [SCANS_QUERY_KEY, variables.customerId] });
+    },
+  });
+};
+
+export const useConfirmNiche = () => {
+  const queryClient = useQueryClient();
+  const api = useApi();
+  return useMutation({
+    mutationFn: ({
+      customerId,
+      scanId,
+      data,
+    }: {
+      customerId: string;
+      scanId: string;
+      data: ConfirmNicheRequest;
+    }) => api.post<ScanSummary>(`/api/customers/${customerId}/scans/${scanId}/confirm-niche`, data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [SCAN_DETAIL_KEY, variables.customerId, variables.scanId] });
+    },
+  });
+};
+
+export const useCancelScan = () => {
+  const queryClient = useQueryClient();
+  const api = useApi();
+  return useMutation({
+    mutationFn: ({ customerId, scanId }: { customerId: string; scanId: string }) =>
+      api.post<void>(`/api/customers/${customerId}/scans/${scanId}/cancel`),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [SCANS_QUERY_KEY, variables.customerId] });
+      queryClient.invalidateQueries({ queryKey: [SCAN_DETAIL_KEY, variables.customerId, variables.scanId] });
+    },
+  });
+};
+
+export const useAcceptRecommendation = () => {
+  const queryClient = useQueryClient();
+  const api = useApi();
+  return useMutation({
+    mutationFn: ({
+      customerId,
+      scanId,
+      recommendationId,
+    }: {
+      customerId: string;
+      scanId: string;
+      recommendationId: string;
+    }) =>
+      api.post<TrackingRecommendation>(
+        `/api/customers/${customerId}/scans/${scanId}/recommendations/${recommendationId}/accept`
+      ),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [RECOMMENDATIONS_KEY, variables.customerId, variables.scanId] });
+    },
+  });
+};
+
+export const useRejectRecommendation = () => {
+  const queryClient = useQueryClient();
+  const api = useApi();
+  return useMutation({
+    mutationFn: ({
+      customerId,
+      scanId,
+      recommendationId,
+    }: {
+      customerId: string;
+      scanId: string;
+      recommendationId: string;
+    }) =>
+      api.post<TrackingRecommendation>(
+        `/api/customers/${customerId}/scans/${scanId}/recommendations/${recommendationId}/reject`
+      ),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [RECOMMENDATIONS_KEY, variables.customerId, variables.scanId] });
+    },
+  });
+};
+
+export const useBulkAcceptRecommendations = () => {
+  const queryClient = useQueryClient();
+  const api = useApi();
+  return useMutation({
+    mutationFn: ({
+      customerId,
+      scanId,
+      data,
+    }: {
+      customerId: string;
+      scanId: string;
+      data: BulkAcceptRequest;
+    }) => api.post<void>(`/api/customers/${customerId}/scans/${scanId}/recommendations/bulk-accept`, data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [RECOMMENDATIONS_KEY, variables.customerId, variables.scanId] });
+    },
+  });
+};
+
+export const useProcessChunk = () => {
+  const api = useApi();
+  return useMutation({
+    mutationFn: ({
+      customerId,
+      scanId,
+      phase,
+      chunkSize,
+    }: {
+      customerId: string;
+      scanId: string;
+      phase: 'phase1' | 'phase2';
+      chunkSize?: number;
+    }) =>
+      api.post<ChunkResult | Phase2ChunkResult>(
+        `/api/customers/${customerId}/scans/${scanId}/process-chunk`,
+        { phase, chunkSize },
+      ),
+  });
+};
+
+export const useDetectNiche = () => {
+  const queryClient = useQueryClient();
+  const api = useApi();
+  return useMutation({
+    mutationFn: ({ customerId, scanId }: { customerId: string; scanId: string }) =>
+      api.post<ScanSummary>(`/api/customers/${customerId}/scans/${scanId}/detect-niche`),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [SCAN_DETAIL_KEY, variables.customerId, variables.scanId] });
+    },
+  });
+};
+
+export const useFinalizeScan = () => {
+  const queryClient = useQueryClient();
+  const api = useApi();
+  return useMutation({
+    mutationFn: ({ customerId, scanId }: { customerId: string; scanId: string }) =>
+      api.post<ScanSummary>(`/api/customers/${customerId}/scans/${scanId}/finalize`),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [SCAN_DETAIL_KEY, variables.customerId, variables.scanId] });
+      queryClient.invalidateQueries({ queryKey: [SCANS_QUERY_KEY, variables.customerId] });
+      queryClient.invalidateQueries({ queryKey: [RECOMMENDATIONS_KEY, variables.customerId, variables.scanId] });
+    },
+  });
+};
+
+const CREDENTIALS_KEY = 'site-credentials';
+
+export const useCredentials = (customerId: string) => {
+  const api = useApi();
+  return useQuery({
+    queryKey: [CREDENTIALS_KEY, customerId],
+    queryFn: () => api.get<SiteCredential[]>(`/api/customers/${customerId}/credentials`),
+    enabled: !!customerId,
+  });
+};
+
+export const useSaveCredential = () => {
+  const queryClient = useQueryClient();
+  const api = useApi();
+  return useMutation({
+    mutationFn: ({ customerId, data }: { customerId: string; data: SaveCredentialRequest }) =>
+      api.post<SiteCredential>(`/api/customers/${customerId}/credentials`, data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [CREDENTIALS_KEY, variables.customerId] });
+    },
+  });
+};
+
+export const useDeleteCredential = () => {
+  const queryClient = useQueryClient();
+  const api = useApi();
+  return useMutation({
+    mutationFn: ({ customerId, credentialId }: { customerId: string; credentialId: string }) =>
+      api.delete<void>(`/api/customers/${customerId}/credentials/${credentialId}`),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [CREDENTIALS_KEY, variables.customerId] });
+    },
+  });
+};
+
+// ========================================
+// Chunked Scan Orchestration Hook
+// ========================================
+
+interface ChunkedScanState {
+  isProcessing: boolean;
+  phase: 'idle' | 'phase1' | 'detecting_niche' | 'phase2' | 'finalizing' | 'done';
+  pagesProcessed: number;
+  totalPages: number;
+  discovery: LiveDiscovery | null;
+  error: string | null;
+  loginDetected: boolean;
+  loginUrl: string | null;
+}
+
+export const useChunkedScan = (customerId: string, scanId: string | null) => {
+  const [state, setState] = useState<ChunkedScanState>({
+    isProcessing: false,
+    phase: 'idle',
+    pagesProcessed: 0,
+    totalPages: 0,
+    discovery: null,
+    error: null,
+    loginDetected: false,
+    loginUrl: null,
+  });
+  const abortRef = useRef(false);
+  const queryClient = useQueryClient();
+  const api = useApi();
+
+  const stopProcessing = useCallback(() => {
+    abortRef.current = true;
+  }, []);
+
+  const startPhase1 = useCallback(async () => {
+    if (!customerId || !scanId) return;
+    abortRef.current = false;
+
+    setState(prev => ({
+      ...prev,
+      isProcessing: true,
+      phase: 'phase1',
+      pagesProcessed: 0,
+      error: null,
+    }));
+
+    try {
+      let hasMore = true;
+      let totalProcessed = 0;
+
+      while (hasMore && !abortRef.current) {
+        const result = await api.post<ChunkResult>(
+          `/api/customers/${customerId}/scans/${scanId}/process-chunk`,
+          { phase: 'phase1', chunkSize: 10 },
+        );
+
+        totalProcessed += result.pagesProcessed;
+        hasMore = result.hasMore;
+
+        setState(prev => ({
+          ...prev,
+          pagesProcessed: totalProcessed,
+          totalPages: result.discovery.totalUrlsDiscovered,
+          discovery: result.discovery,
+          loginDetected: prev.loginDetected || !!result.loginDetected,
+          loginUrl: result.loginUrl || prev.loginUrl,
+        }));
+      }
+
+      if (abortRef.current) return;
+
+      // Phase 1 chunks done — run niche detection
+      setState(prev => ({ ...prev, phase: 'detecting_niche' }));
+      await api.post(`/api/customers/${customerId}/scans/${scanId}/detect-niche`);
+
+      queryClient.invalidateQueries({ queryKey: [SCAN_DETAIL_KEY, customerId, scanId] });
+      setState(prev => ({ ...prev, isProcessing: false, phase: 'done' }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Scan failed';
+      setState(prev => ({ ...prev, isProcessing: false, error: message }));
+    }
+  }, [customerId, scanId, api, queryClient]);
+
+  const startPhase2 = useCallback(async () => {
+    if (!customerId || !scanId) return;
+    abortRef.current = false;
+
+    setState(prev => ({
+      ...prev,
+      isProcessing: true,
+      phase: 'phase2',
+      pagesProcessed: 0,
+      error: null,
+    }));
+
+    try {
+      let hasMore = true;
+      let totalProcessed = 0;
+
+      while (hasMore && !abortRef.current) {
+        const result = await api.post<Phase2ChunkResult>(
+          `/api/customers/${customerId}/scans/${scanId}/process-chunk`,
+          { phase: 'phase2', chunkSize: 5 },
+        );
+
+        totalProcessed += result.pagesProcessed;
+        hasMore = result.hasMore;
+
+        setState(prev => ({
+          ...prev,
+          pagesProcessed: totalProcessed,
+        }));
+      }
+
+      if (abortRef.current) return;
+
+      // Phase 2 chunks done — finalize
+      setState(prev => ({ ...prev, phase: 'finalizing' }));
+      await api.post(`/api/customers/${customerId}/scans/${scanId}/finalize`);
+
+      queryClient.invalidateQueries({ queryKey: [SCAN_DETAIL_KEY, customerId, scanId] });
+      queryClient.invalidateQueries({ queryKey: [SCANS_QUERY_KEY, customerId] });
+      queryClient.invalidateQueries({ queryKey: [RECOMMENDATIONS_KEY, customerId, scanId] });
+      setState(prev => ({ ...prev, isProcessing: false, phase: 'done' }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Analysis failed';
+      setState(prev => ({ ...prev, isProcessing: false, error: message }));
+    }
+  }, [customerId, scanId, api, queryClient]);
+
+  const reset = useCallback(() => {
+    abortRef.current = true;
+    setState({
+      isProcessing: false,
+      phase: 'idle',
+      pagesProcessed: 0,
+      totalPages: 0,
+      discovery: null,
+      error: null,
+      loginDetected: false,
+      loginUrl: null,
+    });
+  }, []);
+
+  return {
+    ...state,
+    startPhase1,
+    startPhase2,
+    stopProcessing,
+    reset,
+  };
+};
+
+// ========================================
+// SSE Hook for Scan Progress (legacy/fallback)
+// ========================================
+
+interface ScanSSEState {
+  status: SiteScanStatus | null;
+  progress: ScanProgressData | null;
+  nicheData: ScanNicheData | null;
+  completedData: ScanCompletedData | null;
+  error: string | null;
+}
+
+export const useScanSSE = (
+  customerId: string | undefined,
+  scanId: string | null,
+  enabled = true,
+) => {
+  const [state, setState] = useState<ScanSSEState>({
+    status: null,
+    progress: null,
+    nicheData: null,
+    completedData: null,
+    error: null,
+  });
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const queryClient = useQueryClient();
+  const { getToken } = useAuth();
+
+  const disconnect = useCallback(() => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!enabled || !customerId || !scanId) {
+      disconnect();
+      return;
+    }
+
+    const setupSSE = async () => {
+      const token = await getToken();
+      if (!token) return;
+
+      const url = `/api/customers/${customerId}/scans/${scanId}/events?token=${encodeURIComponent(token)}`;
+      const eventSource = new EventSource(url);
+      eventSourceRef.current = eventSource;
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+
+          // Only process events for our scan
+          if (data.data?.scanId && data.data.scanId !== scanId) return;
+
+          const eventType = data.type || data.event;
+          const eventData = data.data || data;
+
+          switch (eventType) {
+            case 'scan.started':
+              setState(prev => ({
+                ...prev,
+                status: 'CRAWLING',
+                progress: eventData,
+              }));
+              break;
+
+            case 'scan.page_crawled':
+              setState(prev => ({
+                ...prev,
+                // Only set status to CRAWLING if not already past that phase
+                status: prev.status && !['CRAWLING', 'QUEUED'].includes(prev.status)
+                  ? prev.status : 'CRAWLING',
+                progress: eventData,
+              }));
+              break;
+
+            case 'scan.ai_analyzing':
+              setState(prev => ({
+                ...prev,
+                status: 'ANALYZING',
+                progress: eventData,
+              }));
+              break;
+
+            case 'scan.niche_detected':
+              setState(prev => ({
+                ...prev,
+                status: 'NICHE_DETECTED',
+                nicheData: eventData,
+              }));
+              queryClient.invalidateQueries({
+                queryKey: [SCAN_DETAIL_KEY, customerId, scanId],
+              });
+              break;
+
+            case 'scan.deep_crawl.progress':
+              setState(prev => ({
+                ...prev,
+                status: 'DEEP_CRAWLING',
+                progress: eventData,
+              }));
+              break;
+
+            case 'scan.completed':
+              setState(prev => ({
+                ...prev,
+                status: 'COMPLETED',
+                completedData: eventData,
+              }));
+              queryClient.invalidateQueries({
+                queryKey: [SCAN_DETAIL_KEY, customerId, scanId],
+              });
+              queryClient.invalidateQueries({
+                queryKey: [SCANS_QUERY_KEY, customerId],
+              });
+              queryClient.invalidateQueries({
+                queryKey: [RECOMMENDATIONS_KEY, customerId, scanId],
+              });
+              break;
+
+            case 'scan.failed':
+              setState(prev => ({
+                ...prev,
+                status: 'FAILED',
+                error: eventData.error || 'Scan failed',
+              }));
+              queryClient.invalidateQueries({
+                queryKey: [SCAN_DETAIL_KEY, customerId, scanId],
+              });
+              break;
+          }
+        } catch {
+          // Ignore parse errors for heartbeat/other events
+        }
+      };
+
+      eventSource.onerror = () => {
+        // Will auto-reconnect
+      };
+    };
+
+    setupSSE();
+
+    return () => disconnect();
+  }, [enabled, customerId, scanId, disconnect, queryClient, getToken]);
+
+  const reset = useCallback(() => {
+    setState({
+      status: null,
+      progress: null,
+      nicheData: null,
+      completedData: null,
+      error: null,
+    });
+  }, []);
+
+  return { ...state, disconnect, reset };
+};

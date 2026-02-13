@@ -100,6 +100,9 @@ model Customer {
   // Tracking Settings
   trackingSettings Json? // {defaultDestinations: ['GA4', 'GOOGLE_ADS'], defaultGA4Property: 'xxx', defaultAdsAccount: 'yyy'}
 
+  // Website
+  websiteUrl String?
+
   // Google Account Connection
   googleAccountId   String?
   googleEmail       String?
@@ -108,6 +111,8 @@ model Customer {
   campaigns         Campaign[]
   conversionActions ConversionAction[]
   trackings         Tracking[]
+  siteScans         SiteScan[]
+  siteCredentials   SiteCredential[]
 
   // Tenant relation
   tenantId String
@@ -1019,6 +1024,28 @@ model PrivacyPolicySection {
 }
 
 // ========================================
+// SITE CREDENTIALS (for authenticated crawling)
+// ========================================
+
+model SiteCredential {
+  id         String   @id @default(cuid())
+  customerId String
+  tenantId   String
+  domain     String
+  username   String   // encrypted
+  password   String   // encrypted
+  loginUrl   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, domain, tenantId])
+  @@index([tenantId])
+  @@map("site_credentials")
+}
+
+// ========================================
 // SEO & SITEMAP MANAGEMENT
 // ========================================
 
@@ -1052,4 +1079,169 @@ model PageSeoSettings {
   @@index([pageSlug])
   @@index([excludeFromSitemap])
   @@map("page_seo_settings")
+}
+
+// ========================================
+// SITE SCANNER / AUTOTRACK
+// ========================================
+
+enum SiteScanStatus {
+  QUEUED
+  DISCOVERING
+  CRAWLING
+  NICHE_DETECTED
+  AWAITING_CONFIRMATION
+  DEEP_CRAWLING
+  ANALYZING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum RecommendationSeverity {
+  CRITICAL
+  IMPORTANT
+  RECOMMENDED
+  OPTIONAL
+}
+
+enum RecommendationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CREATED
+}
+
+model SiteScan {
+  id         String         @id @default(cuid())
+  customerId String
+  customer   Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  tenantId   String
+  status     SiteScanStatus @default(QUEUED)
+
+  // Scan configuration
+  websiteUrl String
+  maxPages   Int    @default(50)
+  maxDepth   Int    @default(3)
+
+  // Phase 1 results: Niche detection
+  detectedNiche    String?
+  nicheConfidence  Float?
+  nicheSignals     Json?
+  nicheSubCategory String?
+  confirmedNiche   String?
+
+  // Technology detection
+  detectedTechnologies Json?
+  existingTracking     Json?
+
+  // Phase 2 results
+  totalPagesScanned      Int?
+  totalRecommendations   Int?
+  trackingReadinessScore Int?
+  readinessNarrative     String? @db.Text
+  recommendationCounts   Json?
+
+  // Site map
+  siteMap Json?
+
+  // Live discovery state (accumulated during chunked processing)
+  liveDiscovery  Json?
+  totalUrlsFound Int      @default(0)
+  urlQueue       Json?    // [{url, depth, source}]
+  crawledUrls    Json?    // URLs already crawled (array)
+
+  // Login detection
+  loginDetected Boolean  @default(false)
+  loginUrl      String?
+  credentialId  String?
+
+  // Job tracking
+  jobId        String?
+  errorMessage String? @db.Text
+
+  // AI usage tracking
+  aiAnalysisUsed Boolean @default(false)
+
+  // Relations
+  pages           ScanPage[]
+  recommendations TrackingRecommendation[]
+
+  // Audit fields
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, customerId])
+  @@index([tenantId, status])
+  @@index([customerId, createdAt])
+  @@map("site_scans")
+}
+
+model ScanPage {
+  id     String   @id @default(cuid())
+  scanId String
+  scan   SiteScan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  url      String
+  title    String?
+  depth    Int      @default(0)
+  pageType String?
+
+  hasForm         Boolean @default(false)
+  hasCTA          Boolean @default(false)
+  hasVideo        Boolean @default(false)
+  hasPhoneLink    Boolean @default(false)
+  hasEmailLink    Boolean @default(false)
+  hasDownloadLink Boolean @default(false)
+
+  importanceScore Float?
+  metaTags        Json?
+  headings        Json?
+  contentSummary  String? @db.Text
+
+  createdAt DateTime @default(now())
+
+  @@index([scanId])
+  @@index([scanId, pageType])
+  @@map("scan_pages")
+}
+
+model TrackingRecommendation {
+  id     String   @id @default(cuid())
+  scanId String
+  scan   SiteScan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  name         String
+  description  String?    @db.Text
+  trackingType TrackingType
+
+  severity       RecommendationSeverity @default(RECOMMENDED)
+  severityReason String?                @db.Text
+
+  selector           String?
+  selectorConfig     Json?
+  selectorConfidence Float?
+
+  urlPattern  String?
+  pageUrl     String?
+  funnelStage String?
+
+  elementContext Json?
+
+  suggestedConfig       Json?
+  suggestedGA4EventName String?
+  suggestedDestinations Json?
+
+  status     RecommendationStatus @default(PENDING)
+  trackingId String?
+
+  aiGenerated Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([scanId])
+  @@index([scanId, severity])
+  @@index([scanId, status])
+  @@map("tracking_recommendations")
 }

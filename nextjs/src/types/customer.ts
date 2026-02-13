@@ -9,6 +9,7 @@ export interface Customer {
   fullName: string;
   company?: string | null;
   phone?: string | null;
+  websiteUrl?: string | null;
   status: CustomerStatus;
   tags: string[];
   notes?: string | null;
