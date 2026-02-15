@@ -30,6 +30,7 @@ export interface CreateCustomerInput {
   lastName: string;
   company?: string;
   phone?: string;
+  websiteUrl?: string;
   status?: CustomerStatus;
   tags?: string[];
   notes?: string;
@@ -42,6 +43,7 @@ export interface UpdateCustomerInput {
   lastName?: string;
   company?: string;
   phone?: string;
+  websiteUrl?: string;
   status?: CustomerStatus;
   tags?: string[];
   notes?: string;
@@ -97,6 +99,33 @@ export interface GoogleAccountInfo {
   adsAccountCount?: number;
 }
 
+export interface GA4PropertyResponse {
+  id: string;
+  googleAccountId: string;
+  propertyId: string;
+  propertyName: string;
+  displayName?: string | null;
+  measurementId?: string | null;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface StapeContainerResponse {
+  id: string;
+  customerId: string;
+  stapeContainerId: string;
+  containerName: string;
+  serverDomain: string;
+  stapeDefaultDomain: string;
+  status: string;
+  domainStatus: string;
+  gtmServerContainerId?: string | null;
+  tenantId: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface CustomerResponse {
   id: string;
   slug: string;
@@ -106,14 +135,21 @@ export interface CustomerResponse {
   fullName: string;
   company?: string | null;
   phone?: string | null;
+  websiteUrl?: string | null;
   status: CustomerStatus;
   tags: string[];
   notes?: string | null;
   customFields?: Record<string, unknown> | null;
   googleAccountId?: string | null;
   googleEmail?: string | null;
+  gtmContainerId?: string | null;
+  gtmWorkspaceId?: string | null;
+  gtmContainerName?: string | null;
+  serverSideEnabled?: boolean;
+  stapeContainer?: StapeContainerResponse | null;
   googleAccount?: GoogleAccountInfo;
   googleAdsAccounts?: GoogleAdsAccountResponse[];
+  ga4Properties?: GA4PropertyResponse[];
   createdAt: Date;
   updatedAt: Date;
   createdBy?: string | null;
