@@ -13,11 +13,11 @@ export interface CrawlOptions {
 }
 
 export const DEFAULT_CRAWL_OPTIONS: CrawlOptions = {
-  maxPages: 50,
-  maxDepth: 3,
+  maxPages: 200,
+  maxDepth: 8,
   pageTimeout: 30000,
   crawlDelay: 1000,
-  jobTimeout: 10 * 60 * 1000, // 10 minutes
+  jobTimeout: 20 * 60 * 1000,
 };
 
 export const SKIP_PATTERNS = [
@@ -60,6 +60,11 @@ export interface CrawledPage {
   metaTags: PageMetaTags | null;
   headings: PageHeading[] | null;
   contentSummary: string | null;
+  isAuthenticated?: boolean;
+  templateGroup?: string;
+  scrollableHeight?: number;
+  interactiveElementCount?: number;
+  obstaclesEncountered?: Array<{ type: string; selector: string; action: string }>;
   links: string[];
   elements: ExtractedElement[];
 }
@@ -178,6 +183,9 @@ export interface TrackingOpportunity {
   suggestedDestinations: string[];
   suggestedConfig: Record<string, any> | null;
   aiGenerated: boolean;
+  businessValue?: string;
+  implementationNotes?: string;
+  affectedRoutes?: string[];
 }
 
 export interface SelectorConfig {
