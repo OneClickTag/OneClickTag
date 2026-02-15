@@ -188,16 +188,42 @@ export const useProcessChunk = () => {
       scanId,
       phase,
       chunkSize,
+      credentials,
     }: {
       customerId: string;
       scanId: string;
       phase: 'phase1' | 'phase2';
       chunkSize?: number;
+      credentials?: { username: string; password: string };
     }) =>
       api.post<ChunkResult | Phase2ChunkResult>(
         `/api/customers/${customerId}/scans/${scanId}/process-chunk`,
-        { phase, chunkSize },
+        { phase, chunkSize, credentials },
       ),
+  });
+};
+
+export const useProvideCredentials = () => {
+  const api = useApi();
+  return useMutation({
+    mutationFn: async ({
+      customerId,
+      scanId,
+      username,
+      password,
+      saveForFuture,
+    }: {
+      customerId: string;
+      scanId: string;
+      username: string;
+      password: string;
+      saveForFuture: boolean;
+    }) => {
+      return api.post<void>(
+        `/api/customers/${customerId}/scans/${scanId}/provide-credentials`,
+        { username, password, saveForFuture },
+      );
+    },
   });
 };
 
@@ -275,6 +301,11 @@ interface ChunkedScanState {
   error: string | null;
   loginDetected: boolean;
   loginUrl: string | null;
+  accumulatedPages: ChunkResult['newPages'];
+  obstaclesDismissed: number;
+  totalInteractions: number;
+  authenticatedPagesCount: number;
+  credentials: { username: string; password: string } | null;
 }
 
 export const useChunkedScan = (customerId: string, scanId: string | null) => {
@@ -287,6 +318,11 @@ export const useChunkedScan = (customerId: string, scanId: string | null) => {
     error: null,
     loginDetected: false,
     loginUrl: null,
+    accumulatedPages: [],
+    obstaclesDismissed: 0,
+    totalInteractions: 0,
+    authenticatedPagesCount: 0,
+    credentials: null,
   });
   const abortRef = useRef(false);
   const queryClient = useQueryClient();
@@ -306,6 +342,10 @@ export const useChunkedScan = (customerId: string, scanId: string | null) => {
       phase: 'phase1',
       pagesProcessed: 0,
       error: null,
+      accumulatedPages: [],
+      obstaclesDismissed: 0,
+      totalInteractions: 0,
+      authenticatedPagesCount: 0,
     }));
 
     try {
@@ -315,7 +355,11 @@ export const useChunkedScan = (customerId: string, scanId: string | null) => {
       while (hasMore && !abortRef.current) {
         const result = await api.post<ChunkResult>(
           `/api/customers/${customerId}/scans/${scanId}/process-chunk`,
-          { phase: 'phase1', chunkSize: 10 },
+          {
+            phase: 'phase1',
+            chunkSize: 10,
+            ...(state.credentials && { credentials: state.credentials }),
+          },
         );
 
         totalProcessed += result.pagesProcessed;
@@ -328,6 +372,12 @@ export const useChunkedScan = (customerId: string, scanId: string | null) => {
           discovery: result.discovery,
           loginDetected: prev.loginDetected || !!result.loginDetected,
           loginUrl: result.loginUrl || prev.loginUrl,
+          // Accumulate new pages - prepend so newest appear first
+          accumulatedPages: [...result.newPages, ...prev.accumulatedPages],
+          // Accumulate V2 stats if present in result
+          obstaclesDismissed: prev.obstaclesDismissed + ((result as any).obstaclesDismissed || 0),
+          totalInteractions: prev.totalInteractions + ((result as any).totalInteractions || 0),
+          authenticatedPagesCount: prev.authenticatedPagesCount + ((result as any).authenticatedPagesCount || 0),
         }));
       }
 
@@ -343,7 +393,7 @@ export const useChunkedScan = (customerId: string, scanId: string | null) => {
       const message = err instanceof Error ? err.message : 'Scan failed';
       setState(prev => ({ ...prev, isProcessing: false, error: message }));
     }
-  }, [customerId, scanId, api, queryClient]);
+  }, [customerId, scanId, api, queryClient, state.credentials]);
 
   const startPhase2 = useCallback(async () => {
     if (!customerId || !scanId) return;
@@ -403,7 +453,16 @@ export const useChunkedScan = (customerId: string, scanId: string | null) => {
       error: null,
       loginDetected: false,
       loginUrl: null,
+      accumulatedPages: [],
+      obstaclesDismissed: 0,
+      totalInteractions: 0,
+      authenticatedPagesCount: 0,
+      credentials: null,
     });
+  }, []);
+
+  const setCredentials = useCallback((credentials: { username: string; password: string } | null) => {
+    setState(prev => ({ ...prev, credentials }));
   }, []);
 
   return {
@@ -412,6 +471,7 @@ export const useChunkedScan = (customerId: string, scanId: string | null) => {
     startPhase2,
     stopProcessing,
     reset,
+    setCredentials,
   };
 };
 
