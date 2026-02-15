@@ -106,6 +106,7 @@ model Customer {
   // Google Account Connection
   googleAccountId   String?
   googleEmail       String?
+  gtmAccountId      String?
   gtmContainerId    String?
   gtmWorkspaceId    String?
   gtmContainerName  String?
@@ -116,6 +117,10 @@ model Customer {
   trackings         Tracking[]
   siteScans         SiteScan[]
   siteCredentials   SiteCredential[]
+
+  // Server-Side Tracking (Stape)
+  serverSideEnabled Boolean         @default(false)
+  stapeContainer    StapeContainer?
 
   // Tenant relation
   tenantId String
@@ -136,6 +141,28 @@ model Customer {
   @@index([tenantId, firstName, lastName])
   @@index([tenantId, company])
   @@map("customers")
+}
+
+model StapeContainer {
+  id                   String               @id @default(cuid())
+  customerId           String               @unique
+  customer             Customer             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  stapeContainerId     String
+  containerName        String
+  serverDomain         String
+  stapeDefaultDomain   String
+  status               StapeContainerStatus @default(PENDING)
+  domainStatus         StapeDomainStatus    @default(PENDING)
+  gtmServerContainerId String?
+  gtmServerAccountId   String?
+  gtmServerWorkspaceId String?
+  tenantId             String
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  @@index([tenantId])
+  @@index([customerId])
+  @@map("stape_containers")
 }
 
 model GoogleAdsAccount {
@@ -332,6 +359,12 @@ model Tracking {
   crawlMetadata      Json? // {detectedAt, pageUrl, elementContext, etc.}
   selectorConfidence Float? // 0-1 confidence score for auto-detected selectors
 
+  // Server-side GTM fields (Stape)
+  trackingMode  TrackingMode @default(CLIENT_SIDE)
+  sgtmTriggerId String?
+  sgtmTagId     String?
+  sgtmTagIdAds  String?
+
   // Error tracking & sync
   lastError    String?
   lastSyncAt   DateTime?
@@ -447,6 +480,24 @@ enum TrackingDestination {
   GA4 // Google Analytics 4 only
   GOOGLE_ADS // Google Ads conversion only
   BOTH // Both GA4 and Google Ads (deprecated - use array)
+}
+
+enum StapeContainerStatus {
+  PENDING
+  PROVISIONING
+  ACTIVE
+  FAILED
+}
+
+enum StapeDomainStatus {
+  PENDING
+  VALIDATED
+  FAILED
+}
+
+enum TrackingMode {
+  CLIENT_SIDE
+  SERVER_SIDE
 }
 
 enum UserRole {
@@ -585,9 +636,9 @@ model Lead {
   emailLogs EmailLog[]
 
   // GDPR Compliance
-  acceptedTerms    Boolean   @default(false) // User accepted terms of service
-  acceptedTermsAt  DateTime? // When terms were accepted
-  marketingConsent Boolean   @default(false) // User consented to marketing communications
+  acceptedTerms      Boolean   @default(false) // User accepted terms of service
+  acceptedTermsAt    DateTime? // When terms were accepted
+  marketingConsent   Boolean   @default(false) // User consented to marketing communications
   marketingConsentAt DateTime? // When marketing consent was given
 
   // Status
@@ -595,9 +646,9 @@ model Lead {
   completedAt            DateTime?
 
   // Email preferences
-  unsubscribed       Boolean   @default(false) // User unsubscribed from emails
-  unsubscribedAt     DateTime? // When they unsubscribed
-  unsubscribeReason  String?   // Reason for unsubscribing
+  unsubscribed      Boolean   @default(false) // User unsubscribed from emails
+  unsubscribedAt    DateTime? // When they unsubscribed
+  unsubscribeReason String? // Reason for unsubscribing
 
   // Audit
   createdAt DateTime @default(now())
@@ -686,8 +737,8 @@ enum EmailTemplateType {
 
 // Actions that can trigger emails
 enum EmailTriggerAction {
-  LEAD_SIGNUP              // When a new lead signs up for early access
-  QUESTIONNAIRE_COMPLETE   // When a lead completes the questionnaire
+  LEAD_SIGNUP // When a new lead signs up for early access
+  QUESTIONNAIRE_COMPLETE // When a lead completes the questionnaire
   // Future actions can be added here:
   // USER_SIGNUP
   // PASSWORD_RESET
@@ -701,10 +752,10 @@ model EmailTrigger {
   isActive     Boolean            @default(true)
   description  String?            @db.Text
 
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
-  createdBy    String?
-  updatedBy    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String?
+  updatedBy String?
 
   @@index([action])
   @@index([isActive])
@@ -1056,8 +1107,8 @@ model SiteCredential {
   customerId String
   tenantId   String
   domain     String
-  username   String   // encrypted
-  password   String   // encrypted
+  username   String // encrypted
+  password   String // encrypted
   loginUrl   String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -1074,8 +1125,8 @@ model SiteCredential {
 // ========================================
 
 model PageSeoSettings {
-  id              String   @id @default(cuid())
-  pageSlug        String   @unique // e.g., "/", "/early-access", "/content/about"
+  id       String @id @default(cuid())
+  pageSlug String @unique // e.g., "/", "/early-access", "/content/about"
 
   // Meta overrides
   metaTitle       String?
@@ -1083,22 +1134,22 @@ model PageSeoSettings {
   canonicalUrl    String?
 
   // Robots directives
-  noIndex         Boolean  @default(false)
-  noFollow        Boolean  @default(false)
+  noIndex  Boolean @default(false)
+  noFollow Boolean @default(false)
 
   // Structured data for this specific page
-  structuredData  String?  @db.Text
+  structuredData String? @db.Text
 
   // Sitemap settings
-  sitemapPriority Float    @default(0.5)
-  sitemapFreq     String   @default("monthly") // daily, weekly, monthly, yearly
+  sitemapPriority    Float   @default(0.5)
+  sitemapFreq        String  @default("monthly") // daily, weekly, monthly, yearly
   excludeFromSitemap Boolean @default(false)
 
   // Audit fields
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  createdBy       String?
-  updatedBy       String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String?
+  updatedBy String?
 
   @@index([pageSlug])
   @@index([excludeFromSitemap])
@@ -1172,12 +1223,12 @@ model SiteScan {
 
   // Live discovery state (accumulated during chunked processing)
   liveDiscovery  Json?
-  totalUrlsFound Int      @default(0)
-  urlQueue       Json?    // [{url, depth, source}]
-  crawledUrls    Json?    // URLs already crawled (array)
+  totalUrlsFound Int   @default(0)
+  urlQueue       Json? // [{url, depth, source}]
+  crawledUrls    Json? // URLs already crawled (array)
 
   // Login detection
-  loginDetected Boolean  @default(false)
+  loginDetected Boolean @default(false)
   loginUrl      String?
   credentialId  String?
 
@@ -1189,9 +1240,9 @@ model SiteScan {
   aiAnalysisUsed Boolean @default(false)
 
   // V2: Deep Explorer
-  authenticatedPagesCount Int     @default(0)
-  obstaclesDismissed      Int     @default(0)
-  totalInteractions       Int     @default(0)
+  authenticatedPagesCount Int   @default(0)
+  obstaclesDismissed      Int   @default(0)
+  totalInteractions       Int   @default(0)
   sessionCookies          Json?
 
   // Relations
@@ -1215,7 +1266,7 @@ model ScanPage {
 
   url      String
   title    String?
-  depth    Int      @default(0)
+  depth    Int     @default(0)
   pageType String?
 
   hasForm         Boolean @default(false)
@@ -1225,15 +1276,15 @@ model ScanPage {
   hasEmailLink    Boolean @default(false)
   hasDownloadLink Boolean @default(false)
 
-  importanceScore Float?
-  metaTags        Json?
-  headings        Json?
-  contentSummary  String? @db.Text
-  isAuthenticated       Boolean @default(false)
-  templateGroup         String?
-  scrollableHeight      Int?
+  importanceScore         Float?
+  metaTags                Json?
+  headings                Json?
+  contentSummary          String? @db.Text
+  isAuthenticated         Boolean @default(false)
+  templateGroup           String?
+  scrollableHeight        Int?
   interactiveElementCount Int?
-  obstaclesEncountered  Json?
+  obstaclesEncountered    Json?
 
   createdAt DateTime @default(now())
 
@@ -1248,7 +1299,7 @@ model TrackingRecommendation {
   scan   SiteScan @relation(fields: [scanId], references: [id], onDelete: Cascade)
 
   name         String
-  description  String?    @db.Text
+  description  String?      @db.Text
   trackingType TrackingType
 
   severity       RecommendationSeverity @default(RECOMMENDED)
@@ -1271,7 +1322,7 @@ model TrackingRecommendation {
   status     RecommendationStatus @default(PENDING)
   trackingId String?
 
-  aiGenerated Boolean @default(false)
+  aiGenerated         Boolean @default(false)
   businessValue       String? @db.Text
   implementationNotes String? @db.Text
   affectedRoutes      Json?
