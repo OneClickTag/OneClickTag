@@ -21,6 +21,12 @@ export interface Customer {
   } | null;
   googleAccountId?: string | null;
   googleEmail?: string | null;
+  gtmAccountId?: string | null;
+  gtmContainerId?: string | null;
+  gtmWorkspaceId?: string | null;
+  gtmContainerName?: string | null;
+  serverSideEnabled?: boolean;
+  stapeContainer?: StapeContainer | null;
   tenantId: string;
   createdAt: string;
   updatedAt: string;
@@ -64,6 +70,21 @@ export interface GA4Property {
   updatedAt: string;
 }
 
+export interface StapeContainer {
+  id: string;
+  customerId: string;
+  stapeContainerId: string;
+  containerName: string;
+  serverDomain: string;
+  stapeDefaultDomain: string;
+  status: 'PENDING' | 'PROVISIONING' | 'ACTIVE' | 'FAILED';
+  domainStatus: 'PENDING' | 'VALIDATED' | 'FAILED';
+  gtmServerContainerId?: string | null;
+  tenantId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CreateCustomerInput {
   email: string;
   firstName: string;
@@ -80,6 +101,7 @@ export interface UpdateCustomerInput {
   lastName?: string;
   company?: string | null;
   phone?: string | null;
+  websiteUrl?: string | null;
   status?: CustomerStatus;
   tags?: string[];
   notes?: string | null;
