@@ -11,8 +11,9 @@ import {
   useCancelScan,
   useChunkedScan,
   useSaveCredential,
+  useProvideCredentials,
 } from '@/hooks/use-site-scanner';
-import { SiteScanStatus, TrackingRecommendation, ChunkResult } from '@/types/site-scanner';
+import { SiteScanStatus, TrackingRecommendation } from '@/types/site-scanner';
 import { ScanLauncher } from './ScanLauncher';
 import { ScanDiscoveryDashboard } from './ScanDiscoveryDashboard';
 import { ScanProgress } from './ScanProgress';
@@ -33,7 +34,6 @@ const ACTIVE_STATUSES: SiteScanStatus[] = [
 export function AutoTrack({ customerId, customerWebsiteUrl, onCreateTracking }: AutoTrackProps) {
   const [activeScanId, setActiveScanId] = useState<string | null>(null);
   const [showCredentialPrompt, setShowCredentialPrompt] = useState(false);
-  const [newPages, setNewPages] = useState<ChunkResult['newPages']>([]);
   const phase1StartedRef = useRef(false);
 
   // Queries
@@ -46,6 +46,7 @@ export function AutoTrack({ customerId, customerWebsiteUrl, onCreateTracking }: 
   const confirmNiche = useConfirmNiche();
   const cancelScan = useCancelScan();
   const saveCredential = useSaveCredential();
+  const provideCredentials = useProvideCredentials();
 
   // Chunked scan orchestration
   const chunkedScan = useChunkedScan(customerId, activeScanId);
@@ -62,12 +63,16 @@ export function AutoTrack({ customerId, customerWebsiteUrl, onCreateTracking }: 
     }
   }, [scanHistory, activeScanId]);
 
-  // Show credential prompt when login is detected
+  // Show credential prompt and pause processing when login is detected
   useEffect(() => {
     if (chunkedScan.loginDetected && !showCredentialPrompt) {
       setShowCredentialPrompt(true);
+      // Pause chunk processing to wait for credentials
+      if (chunkedScan.isProcessing) {
+        chunkedScan.stopProcessing();
+      }
     }
-  }, [chunkedScan.loginDetected, showCredentialPrompt]);
+  }, [chunkedScan.loginDetected, showCredentialPrompt, chunkedScan]);
 
   // Determine current display state from scan detail + chunked state
   const dbStatus = scanDetail?.status as SiteScanStatus | undefined;
@@ -93,7 +98,6 @@ export function AutoTrack({ customerId, customerWebsiteUrl, onCreateTracking }: 
   const handleStartScan = async (websiteUrl?: string, maxPages?: number, maxDepth?: number) => {
     try {
       phase1StartedRef.current = false;
-      setNewPages([]);
       setShowCredentialPrompt(false);
       const result = await startScan.mutateAsync({
         customerId,
@@ -159,7 +163,6 @@ export function AutoTrack({ customerId, customerWebsiteUrl, onCreateTracking }: 
     chunkedScan.reset();
     phase1StartedRef.current = false;
     setActiveScanId(scanId);
-    setNewPages([]);
     setShowCredentialPrompt(false);
   };
 
@@ -167,25 +170,36 @@ export function AutoTrack({ customerId, customerWebsiteUrl, onCreateTracking }: 
     setActiveScanId(null);
     chunkedScan.reset();
     phase1StartedRef.current = false;
-    setNewPages([]);
     setShowCredentialPrompt(false);
   };
 
-  const handleSaveCredential = async (username: string, password: string) => {
-    let domain = '';
+  const handleSaveCredential = async (username: string, password: string, saveForFuture = true, mfaCode?: string) => {
+    if (!activeScanId) return;
+
     try {
-      domain = new URL(scanDetail?.websiteUrl || '').hostname;
-    } catch {
-      domain = scanDetail?.websiteUrl || '';
-    }
-    try {
-      await saveCredential.mutateAsync({
+      // Provide credentials to the current scan to resume processing
+      await provideCredentials.mutateAsync({
         customerId,
-        data: { domain, username, password, loginUrl: chunkedScan.loginUrl || undefined },
+        scanId: activeScanId,
+        username,
+        password,
+        saveForFuture,
       });
+
+      // Store credentials in chunked scan state for subsequent chunk requests
+      chunkedScan.setCredentials({ username, password });
+
+      // Hide the credential prompt
       setShowCredentialPrompt(false);
+
+      // Resume processing - restart phase 1 with credentials, preserving progress
+      if (!chunkedScan.isProcessing) {
+        // Continue from where we left off by resuming phase 1
+        // The credentials are now stored in state and will be included in subsequent chunks
+        chunkedScan.startPhase1(true); // resume=true
+      }
     } catch (error) {
-      console.error('Failed to save credential:', error);
+      console.error('Failed to provide credentials:', error);
     }
   };
 
@@ -222,13 +236,16 @@ export function AutoTrack({ customerId, customerWebsiteUrl, onCreateTracking }: 
           isDetectingNiche={chunkPhase === 'detecting_niche'}
           loginDetected={chunkedScan.loginDetected}
           loginUrl={chunkedScan.loginUrl}
-          newPages={newPages}
+          newPages={chunkedScan.accumulatedPages}
           onCancel={handleCancelScan}
           isCancelling={cancelScan.isPending}
           onSaveCredential={handleSaveCredential}
           onSkipCredential={() => setShowCredentialPrompt(false)}
-          isSavingCredential={saveCredential.isPending}
+          isSavingCredential={provideCredentials.isPending}
           showCredentialPrompt={showCredentialPrompt}
+          obstaclesDismissed={chunkedScan.obstaclesDismissed}
+          totalInteractions={chunkedScan.totalInteractions}
+          authenticatedPagesCount={chunkedScan.authenticatedPagesCount}
         />
       )}
 

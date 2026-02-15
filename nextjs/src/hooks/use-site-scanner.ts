@@ -332,25 +332,34 @@ export const useChunkedScan = (customerId: string, scanId: string | null) => {
     abortRef.current = true;
   }, []);
 
-  const startPhase1 = useCallback(async () => {
+  const startPhase1 = useCallback(async (resume = false) => {
     if (!customerId || !scanId) return;
     abortRef.current = false;
 
-    setState(prev => ({
-      ...prev,
-      isProcessing: true,
-      phase: 'phase1',
-      pagesProcessed: 0,
-      error: null,
-      accumulatedPages: [],
-      obstaclesDismissed: 0,
-      totalInteractions: 0,
-      authenticatedPagesCount: 0,
-    }));
+    let currentCredentials: { username: string; password: string } | null = null;
+    let startingPageCount = 0;
+
+    setState(prev => {
+      currentCredentials = prev.credentials;
+      startingPageCount = resume ? prev.pagesProcessed : 0;
+      return {
+        ...prev,
+        isProcessing: true,
+        phase: 'phase1',
+        // Only reset stats if not resuming
+        pagesProcessed: resume ? prev.pagesProcessed : 0,
+        error: null,
+        accumulatedPages: resume ? prev.accumulatedPages : [],
+        obstaclesDismissed: resume ? prev.obstaclesDismissed : 0,
+        totalInteractions: resume ? prev.totalInteractions : 0,
+        authenticatedPagesCount: resume ? prev.authenticatedPagesCount : 0,
+      };
+    });
 
     try {
       let hasMore = true;
-      let totalProcessed = 0;
+      // Start from current pagesProcessed if resuming
+      let totalProcessed = startingPageCount;
 
       while (hasMore && !abortRef.current) {
         const result = await api.post<ChunkResult>(
@@ -358,7 +367,7 @@ export const useChunkedScan = (customerId: string, scanId: string | null) => {
           {
             phase: 'phase1',
             chunkSize: 10,
-            ...(state.credentials && { credentials: state.credentials }),
+            ...(currentCredentials && { credentials: currentCredentials }),
           },
         );
 
@@ -393,7 +402,7 @@ export const useChunkedScan = (customerId: string, scanId: string | null) => {
       const message = err instanceof Error ? err.message : 'Scan failed';
       setState(prev => ({ ...prev, isProcessing: false, error: message }));
     }
-  }, [customerId, scanId, api, queryClient, state.credentials]);
+  }, [customerId, scanId, api, queryClient]);
 
   const startPhase2 = useCallback(async () => {
     if (!customerId || !scanId) return;

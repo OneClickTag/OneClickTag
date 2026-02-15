@@ -21,7 +21,7 @@ interface ScanDiscoveryDashboardProps {
   newPages?: Array<{ url: string; title: string | null; pageType: string | null; hasForm: boolean; hasCTA: boolean }>;
   onCancel: () => void;
   isCancelling: boolean;
-  onSaveCredential?: (username: string, password: string) => void;
+  onSaveCredential?: (username: string, password: string, saveForFuture?: boolean, mfaCode?: string) => void;
   onSkipCredential?: () => void;
   isSavingCredential?: boolean;
   showCredentialPrompt?: boolean;
