@@ -1,14 +1,36 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { useSearchParams } from 'next/navigation';
 import { useApi } from '@/hooks/use-api';
-import { useCustomerTrackings, useCreateTracking } from '@/hooks/use-trackings';
-import { useConnectGoogleAccount } from '@/hooks/use-customers';
+import { useCustomerTrackings, useCreateTracking, type TrackingType, type TrackingDestination, type CreateTrackingInput } from '@/hooks/use-trackings';
+import { useConnectGoogleAccount, useUpdateCustomer } from '@/hooks/use-customers';
+import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Settings,
   Activity,
@@ -18,21 +40,213 @@ import {
   XCircle,
   RefreshCw,
   Radar,
+  Loader2,
+  Globe,
+  Save,
+  BarChart3,
+  Tag,
+  MonitorSmartphone,
+  Server,
 } from 'lucide-react';
 import { Customer } from '@/types/customer';
 import { AutoTrack } from '@/components/autotrack/AutoTrack';
 
+const TRACKING_TYPES: { value: TrackingType; label: string }[] = [
+  { value: 'BUTTON_CLICK', label: 'Button Click' },
+  { value: 'LINK_CLICK', label: 'Link Click' },
+  { value: 'PAGE_VIEW', label: 'Page View' },
+  { value: 'FORM_SUBMIT', label: 'Form Submit' },
+  { value: 'ADD_TO_CART', label: 'Add to Cart' },
+  { value: 'PURCHASE', label: 'Purchase' },
+  { value: 'SIGNUP', label: 'Sign Up' },
+  { value: 'PHONE_CALL_CLICK', label: 'Phone Call Click' },
+  { value: 'EMAIL_CLICK', label: 'Email Click' },
+  { value: 'DOWNLOAD', label: 'Download' },
+  { value: 'SCROLL_DEPTH', label: 'Scroll Depth' },
+  { value: 'CUSTOM_EVENT', label: 'Custom Event' },
+];
+
+const DESTINATION_OPTIONS: { value: TrackingDestination; label: string }[] = [
+  { value: 'BOTH', label: 'GA4 + Google Ads' },
+  { value: 'GA4', label: 'GA4 Only' },
+  { value: 'GOOGLE_ADS', label: 'Google Ads Only' },
+];
+
 export default function CustomerDetailPage({ params }: { params: { id: string } }) {
   const { id } = params;
   const api = useApi();
+  const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [trackingName, setTrackingName] = useState('');
+  const [trackingType, setTrackingType] = useState<TrackingType>('BUTTON_CLICK');
+  const [trackingSelector, setTrackingSelector] = useState('');
+  const [trackingUrlPattern, setTrackingUrlPattern] = useState('');
+  const [trackingDestination, setTrackingDestination] = useState<TrackingDestination>('BOTH');
+
+  // Handle OAuth redirect query params
+  useEffect(() => {
+    const success = searchParams.get('success');
+    const error = searchParams.get('error');
+    const errorDescription = searchParams.get('error_description');
+
+    if (success === 'true') {
+      toast.success('Google account connected successfully');
+      queryClient.invalidateQueries({ queryKey: ['customer', id] });
+      // Clean URL params
+      window.history.replaceState({}, '', `/customers/${id}`);
+    } else if (error) {
+      toast.error('Failed to connect Google account', {
+        description: errorDescription || error,
+      });
+      window.history.replaceState({}, '', `/customers/${id}`);
+    }
+  }, [searchParams, id, queryClient]);
 
   const { data: customer, isLoading: customerLoading } = useQuery({
     queryKey: ['customer', id],
-    queryFn: () => api.get<Customer>(`/api/customers/${id}`),
+    queryFn: () => api.get<Customer>(`/api/customers/${id}?includeGoogleAds=true`),
   });
 
   const { data: trackings, isLoading: trackingsLoading } = useCustomerTrackings(id);
   const connectGoogle = useConnectGoogleAccount();
+  const createTracking = useCreateTracking();
+  const updateCustomer = useUpdateCustomer();
+
+  // Server-side tracking mutations
+  const enableStape = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`/api/customers/${id}/stape`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serverDomain }),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to enable server-side tracking');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customer', id] });
+      toast.success('Server-side tracking enabled', { description: 'Follow the DNS setup instructions.' });
+    },
+    onError: (error: Error) => {
+      toast.error('Error', { description: error.message });
+    },
+  });
+
+  const validateDomain = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`/api/customers/${id}/stape/validate-domain`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Domain validation failed');
+      }
+      return response.json();
+    },
+    onSuccess: (data: { isValid: boolean }) => {
+      queryClient.invalidateQueries({ queryKey: ['customer', id] });
+      toast.success(
+        data.isValid ? 'Domain verified!' : 'Domain not yet verified',
+        {
+          description: data.isValid
+            ? 'Server-side tracking is now fully active.'
+            : 'CNAME record not found. Please check your DNS settings and try again.',
+        }
+      );
+    },
+    onError: (error: Error) => {
+      toast.error('Error', { description: error.message });
+    },
+  });
+
+  const disableStape = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`/api/customers/${id}/stape`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to disable server-side tracking');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customer', id] });
+      toast.success('Server-side tracking disabled');
+    },
+    onError: (error: Error) => {
+      toast.error('Error', { description: error.message });
+    },
+  });
+
+  const handleEnableServerSide = () => enableStape.mutate();
+  const handleValidateDomain = () => validateDomain.mutate();
+  const handleDisableServerSide = () => disableStape.mutate();
+
+  // Settings form state
+  const [settingsForm, setSettingsForm] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    company: '',
+    phone: '',
+    websiteUrl: '',
+    notes: '',
+  });
+  const [settingsInitialized, setSettingsInitialized] = useState(false);
+  const [serverDomain, setServerDomain] = useState('');
+
+  // Populate form when customer data loads
+  useEffect(() => {
+    if (customer && !settingsInitialized) {
+      setSettingsForm({
+        firstName: customer.firstName || '',
+        lastName: customer.lastName || '',
+        email: customer.email || '',
+        company: customer.company || '',
+        phone: customer.phone || '',
+        websiteUrl: customer.websiteUrl || '',
+        notes: customer.notes || '',
+      });
+      setSettingsInitialized(true);
+    }
+  }, [customer, settingsInitialized]);
+
+  const handleSaveSettings = async () => {
+    try {
+      await updateCustomer.mutateAsync({
+        id,
+        data: {
+          firstName: settingsForm.firstName,
+          lastName: settingsForm.lastName,
+          email: settingsForm.email,
+          company: settingsForm.company || undefined,
+          phone: settingsForm.phone || undefined,
+          websiteUrl: settingsForm.websiteUrl || undefined,
+          notes: settingsForm.notes || undefined,
+        },
+      });
+      toast.success('Customer settings saved');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to save';
+      toast.error('Failed to save settings', { description: message });
+    }
+  };
+
+  const settingsChanged = customer && (
+    settingsForm.firstName !== (customer.firstName || '') ||
+    settingsForm.lastName !== (customer.lastName || '') ||
+    settingsForm.email !== (customer.email || '') ||
+    settingsForm.company !== (customer.company || '') ||
+    settingsForm.phone !== (customer.phone || '') ||
+    settingsForm.websiteUrl !== (customer.websiteUrl || '') ||
+    settingsForm.notes !== (customer.notes || '')
+  );
 
   const handleConnectGoogle = async () => {
     try {
@@ -41,7 +255,39 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
         window.location.href = result.authUrl;
       }
     } catch (error) {
-      console.error('Failed to connect Google:', error);
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast.error('Failed to connect Google account', { description: message });
+    }
+  };
+
+  const handleCreateTracking = async () => {
+    if (!trackingName.trim()) {
+      toast.error('Tracking name is required');
+      return;
+    }
+
+    try {
+      const input: CreateTrackingInput = {
+        name: trackingName,
+        type: trackingType,
+        customerId: id,
+        destinations: [trackingDestination],
+        ...(trackingSelector && { selector: trackingSelector }),
+        ...(trackingUrlPattern && { urlPattern: trackingUrlPattern }),
+      };
+
+      await createTracking.mutateAsync(input);
+      toast.success('Tracking created successfully');
+      setCreateDialogOpen(false);
+      // Reset form
+      setTrackingName('');
+      setTrackingType('BUTTON_CLICK');
+      setTrackingSelector('');
+      setTrackingUrlPattern('');
+      setTrackingDestination('BOTH');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create tracking';
+      toast.error('Failed to create tracking', { description: message });
     }
   };
 
@@ -107,10 +353,92 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
 
         <TabsContent value="trackings" className="space-y-4">
           <div className="flex justify-end">
-            <Button disabled={!customer.googleAccountId}>
-              <Plus className="mr-2 h-4 w-4" />
-              Create Tracking
-            </Button>
+            <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+              <DialogTrigger asChild>
+                <Button disabled={!customer.googleAccountId}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create Tracking
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Create New Tracking</DialogTitle>
+                  <DialogDescription>
+                    Set up a new conversion tracking for this customer.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="tracking-name">Name *</Label>
+                    <Input
+                      id="tracking-name"
+                      placeholder="e.g., Homepage CTA Click"
+                      value={trackingName}
+                      onChange={(e) => setTrackingName(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Type</Label>
+                    <Select value={trackingType} onValueChange={(v) => setTrackingType(v as TrackingType)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TRACKING_TYPES.map((t) => (
+                          <SelectItem key={t.value} value={t.value}>
+                            {t.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="tracking-selector">CSS Selector</Label>
+                    <Input
+                      id="tracking-selector"
+                      placeholder="e.g., #buy-now-btn, .cta-button"
+                      value={trackingSelector}
+                      onChange={(e) => setTrackingSelector(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="tracking-url">URL Pattern</Label>
+                    <Input
+                      id="tracking-url"
+                      placeholder="e.g., /thank-you, /checkout/*"
+                      value={trackingUrlPattern}
+                      onChange={(e) => setTrackingUrlPattern(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Destination</Label>
+                    <Select value={trackingDestination} onValueChange={(v) => setTrackingDestination(v as TrackingDestination)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DESTINATION_OPTIONS.map((d) => (
+                          <SelectItem key={d.value} value={d.value}>
+                            {d.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleCreateTracking} disabled={createTracking.isPending}>
+                    {createTracking.isPending && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    Create
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
 
           {trackingsLoading ? (
@@ -180,48 +508,405 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
           />
         </TabsContent>
 
-        <TabsContent value="settings">
+        <TabsContent value="settings" className="space-y-6">
+          {/* Customer Details Form */}
           <Card>
             <CardHeader>
-              <CardTitle>Customer Information</CardTitle>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Customer Details</CardTitle>
+                  <CardDescription>Update customer information</CardDescription>
+                </div>
+                <Button
+                  onClick={handleSaveSettings}
+                  disabled={!settingsChanged || updateCustomer.isPending}
+                >
+                  {updateCustomer.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="mr-2 h-4 w-4" />
+                  )}
+                  Save Changes
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Full Name</label>
-                  <p className="mt-1">{customer.fullName}</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="settings-firstName">First Name</Label>
+                  <Input
+                    id="settings-firstName"
+                    value={settingsForm.firstName}
+                    onChange={(e) => setSettingsForm(prev => ({ ...prev, firstName: e.target.value }))}
+                    placeholder="First name"
+                  />
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Email</label>
-                  <p className="mt-1">{customer.email}</p>
+                <div className="space-y-2">
+                  <Label htmlFor="settings-lastName">Last Name</Label>
+                  <Input
+                    id="settings-lastName"
+                    value={settingsForm.lastName}
+                    onChange={(e) => setSettingsForm(prev => ({ ...prev, lastName: e.target.value }))}
+                    placeholder="Last name"
+                  />
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Company</label>
-                  <p className="mt-1">{customer.company || '-'}</p>
+                <div className="space-y-2">
+                  <Label htmlFor="settings-email">Email</Label>
+                  <Input
+                    id="settings-email"
+                    type="email"
+                    value={settingsForm.email}
+                    onChange={(e) => setSettingsForm(prev => ({ ...prev, email: e.target.value }))}
+                    placeholder="email@example.com"
+                  />
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Phone</label>
-                  <p className="mt-1">{customer.phone || '-'}</p>
+                <div className="space-y-2">
+                  <Label htmlFor="settings-company">Company</Label>
+                  <Input
+                    id="settings-company"
+                    value={settingsForm.company}
+                    onChange={(e) => setSettingsForm(prev => ({ ...prev, company: e.target.value }))}
+                    placeholder="Company name"
+                  />
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Status</label>
-                  <p className="mt-1">
-                    <Badge>{customer.status}</Badge>
-                  </p>
+                <div className="space-y-2">
+                  <Label htmlFor="settings-phone">Phone</Label>
+                  <Input
+                    id="settings-phone"
+                    value={settingsForm.phone}
+                    onChange={(e) => setSettingsForm(prev => ({ ...prev, phone: e.target.value }))}
+                    placeholder="+1 (555) 000-0000"
+                  />
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Google Email</label>
-                  <p className="mt-1">{customer.googleEmail || 'Not connected'}</p>
+                <div className="space-y-2">
+                  <Label htmlFor="settings-websiteUrl">Website URL</Label>
+                  <Input
+                    id="settings-websiteUrl"
+                    value={settingsForm.websiteUrl}
+                    onChange={(e) => setSettingsForm(prev => ({ ...prev, websiteUrl: e.target.value }))}
+                    placeholder="https://example.com"
+                  />
                 </div>
               </div>
-              {customer.notes && (
+              <div className="space-y-2">
+                <Label htmlFor="settings-notes">Notes</Label>
+                <Textarea
+                  id="settings-notes"
+                  value={settingsForm.notes}
+                  onChange={(e) => setSettingsForm(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Internal notes about this customer..."
+                  rows={3}
+                />
+              </div>
+              <div className="flex items-center gap-4 pt-2 text-sm text-muted-foreground">
+                <span>Status: <Badge variant="outline">{customer.status}</Badge></span>
+                <span>Created: {new Date(customer.createdAt).toLocaleDateString()}</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Google Connection Status */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Notes</label>
-                  <p className="mt-1 whitespace-pre-wrap">{customer.notes}</p>
+                  <CardTitle>Google Connection Status</CardTitle>
+                  <CardDescription>Connection status to Google services</CardDescription>
+                </div>
+                {!customer.googleAccountId && (
+                  <Button onClick={handleConnectGoogle} disabled={connectGoogle.isPending}>
+                    {connectGoogle.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <LinkIcon className="mr-2 h-4 w-4" />
+                    )}
+                    Connect Google
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Google Account */}
+                <div className={`rounded-lg border p-4 ${customer.googleAccountId ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'}`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    {customer.googleAccountId ? (
+                      <CheckCircle className="h-5 w-5 text-green-600" />
+                    ) : (
+                      <XCircle className="h-5 w-5 text-gray-400" />
+                    )}
+                    <span className="font-medium text-sm">Google Account</span>
+                  </div>
+                  {customer.googleAccountId ? (
+                    <p className="text-xs text-muted-foreground truncate">{customer.googleEmail || 'Connected'}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Not connected</p>
+                  )}
+                </div>
+
+                {/* GTM */}
+                <div className={`rounded-lg border p-4 ${
+                  customer.gtmContainerId
+                    ? 'border-green-200 bg-green-50'
+                    : customer.googleAccountId
+                      ? 'border-yellow-200 bg-yellow-50'
+                      : 'border-gray-200 bg-gray-50'
+                }`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    {customer.gtmContainerId ? (
+                      <CheckCircle className="h-5 w-5 text-green-600" />
+                    ) : customer.googleAccountId ? (
+                      <XCircle className="h-5 w-5 text-yellow-500" />
+                    ) : (
+                      <XCircle className="h-5 w-5 text-gray-400" />
+                    )}
+                    <span className="font-medium text-sm">Google Tag Manager</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Tag className="h-3 w-3 text-muted-foreground" />
+                    <p className="text-xs text-muted-foreground">
+                      {customer.gtmContainerId
+                        ? `OneClickTag workspace ready`
+                        : customer.googleAccountId
+                          ? 'No containers found'
+                          : 'Not connected'}
+                    </p>
+                  </div>
+                  {customer.gtmContainerName && (
+                    <p className="text-xs text-muted-foreground mt-1 truncate">
+                      Container: {customer.gtmContainerName}
+                    </p>
+                  )}
+                </div>
+
+                {/* Google Ads */}
+                <div className={`rounded-lg border p-4 ${
+                  customer.googleAdsAccounts && customer.googleAdsAccounts.length > 0
+                    ? 'border-green-200 bg-green-50'
+                    : customer.googleAccountId
+                      ? 'border-yellow-200 bg-yellow-50'
+                      : 'border-gray-200 bg-gray-50'
+                }`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    {customer.googleAdsAccounts && customer.googleAdsAccounts.length > 0 ? (
+                      <CheckCircle className="h-5 w-5 text-green-600" />
+                    ) : customer.googleAccountId ? (
+                      <XCircle className="h-5 w-5 text-yellow-500" />
+                    ) : (
+                      <XCircle className="h-5 w-5 text-gray-400" />
+                    )}
+                    <span className="font-medium text-sm">Google Ads</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <MonitorSmartphone className="h-3 w-3 text-muted-foreground" />
+                    <p className="text-xs text-muted-foreground">
+                      {customer.googleAdsAccounts && customer.googleAdsAccounts.length > 0
+                        ? `${customer.googleAdsAccounts.length} account${customer.googleAdsAccounts.length > 1 ? 's' : ''}`
+                        : customer.googleAccountId
+                          ? 'No accounts found'
+                          : 'Not connected'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* GA4 */}
+                <div className={`rounded-lg border p-4 ${
+                  customer.ga4Properties && customer.ga4Properties.length > 0
+                    ? 'border-green-200 bg-green-50'
+                    : customer.googleAccountId
+                      ? 'border-yellow-200 bg-yellow-50'
+                      : 'border-gray-200 bg-gray-50'
+                }`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    {customer.ga4Properties && customer.ga4Properties.length > 0 ? (
+                      <CheckCircle className="h-5 w-5 text-green-600" />
+                    ) : customer.googleAccountId ? (
+                      <XCircle className="h-5 w-5 text-yellow-500" />
+                    ) : (
+                      <XCircle className="h-5 w-5 text-gray-400" />
+                    )}
+                    <span className="font-medium text-sm">Google Analytics 4</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <BarChart3 className="h-3 w-3 text-muted-foreground" />
+                    <p className="text-xs text-muted-foreground">
+                      {customer.ga4Properties && customer.ga4Properties.length > 0
+                        ? `${customer.ga4Properties.length} propert${customer.ga4Properties.length > 1 ? 'ies' : 'y'}`
+                        : customer.googleAccountId
+                          ? 'No properties found'
+                          : 'Not connected'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Google Ads Accounts Detail */}
+              {customer.googleAdsAccounts && customer.googleAdsAccounts.length > 0 && (
+                <div className="mt-4">
+                  <h4 className="text-sm font-medium mb-2">Google Ads Accounts</h4>
+                  <div className="space-y-2">
+                    {customer.googleAdsAccounts.map((account) => (
+                      <div key={account.id} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
+                        <div>
+                          <span className="font-medium">{account.accountName}</span>
+                          <span className="text-muted-foreground ml-2">({account.accountId})</span>
+                        </div>
+                        <Badge variant={account.isActive ? 'default' : 'secondary'}>
+                          {account.isActive ? 'Active' : 'Inactive'}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* GA4 Properties Detail */}
+              {customer.ga4Properties && customer.ga4Properties.length > 0 && (
+                <div className="mt-4">
+                  <h4 className="text-sm font-medium mb-2">GA4 Properties</h4>
+                  <div className="space-y-2">
+                    {customer.ga4Properties.map((property) => (
+                      <div key={property.id} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
+                        <div>
+                          <span className="font-medium">{property.propertyName}</span>
+                          {property.measurementId && (
+                            <span className="text-muted-foreground ml-2">({property.measurementId})</span>
+                          )}
+                        </div>
+                        <Badge variant={property.isActive ? 'default' : 'secondary'}>
+                          {property.isActive ? 'Active' : 'Inactive'}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </CardContent>
           </Card>
+
+          {/* Server-Side Tracking (Stape) */}
+          {customer.googleAccountId && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Server-Side Tracking</CardTitle>
+                    <CardDescription>
+                      Route tracking through a server for better accuracy and ad-blocker bypass
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {!customer.serverSideEnabled && !customer.stapeContainer ? (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="serverDomain">Custom Tracking Domain</Label>
+                      <Input
+                        id="serverDomain"
+                        value={serverDomain}
+                        onChange={(e) => setServerDomain(e.target.value)}
+                        placeholder="track.yoursite.com"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Enter a subdomain of your customer&apos;s website (e.g., track.acme.com)
+                      </p>
+                    </div>
+                    <Button
+                      onClick={handleEnableServerSide}
+                      disabled={!serverDomain || enableStape.isPending}
+                    >
+                      {enableStape.isPending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Server className="mr-2 h-4 w-4" />
+                      )}
+                      Enable Server-Side Tracking
+                    </Button>
+                  </div>
+                ) : customer.stapeContainer ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className={`rounded-lg border p-4 ${
+                        customer.stapeContainer.status === 'ACTIVE'
+                          ? 'border-green-200 bg-green-50'
+                          : customer.stapeContainer.status === 'FAILED'
+                            ? 'border-red-200 bg-red-50'
+                            : 'border-yellow-200 bg-yellow-50'
+                      }`}>
+                        <div className="flex items-center gap-2 mb-2">
+                          {customer.stapeContainer.status === 'ACTIVE' ? (
+                            <CheckCircle className="h-5 w-5 text-green-600" />
+                          ) : customer.stapeContainer.status === 'FAILED' ? (
+                            <XCircle className="h-5 w-5 text-red-500" />
+                          ) : (
+                            <Loader2 className="h-5 w-5 text-yellow-500 animate-spin" />
+                          )}
+                          <span className="font-medium text-sm">sGTM Container</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">{customer.stapeContainer.containerName}</p>
+                        <p className="text-xs text-muted-foreground">Status: {customer.stapeContainer.status}</p>
+                      </div>
+
+                      <div className={`rounded-lg border p-4 ${
+                        customer.stapeContainer.domainStatus === 'VALIDATED'
+                          ? 'border-green-200 bg-green-50'
+                          : customer.stapeContainer.domainStatus === 'FAILED'
+                            ? 'border-red-200 bg-red-50'
+                            : 'border-yellow-200 bg-yellow-50'
+                      }`}>
+                        <div className="flex items-center gap-2 mb-2">
+                          {customer.stapeContainer.domainStatus === 'VALIDATED' ? (
+                            <CheckCircle className="h-5 w-5 text-green-600" />
+                          ) : customer.stapeContainer.domainStatus === 'FAILED' ? (
+                            <XCircle className="h-5 w-5 text-red-500" />
+                          ) : (
+                            <Loader2 className="h-5 w-5 text-yellow-500 animate-spin" />
+                          )}
+                          <span className="font-medium text-sm">Custom Domain</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">{customer.stapeContainer.serverDomain}</p>
+                        <p className="text-xs text-muted-foreground">Status: {customer.stapeContainer.domainStatus}</p>
+                      </div>
+                    </div>
+
+                    {customer.stapeContainer.domainStatus === 'PENDING' && (
+                      <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+                        <h4 className="text-sm font-medium mb-2">DNS Setup Required</h4>
+                        <p className="text-sm text-muted-foreground mb-2">
+                          Add this CNAME record in your DNS provider:
+                        </p>
+                        <div className="bg-white rounded border p-3 font-mono text-sm">
+                          <p>{customer.stapeContainer.serverDomain} CNAME {customer.stapeContainer.stapeDefaultDomain}</p>
+                        </div>
+                        <Button
+                          className="mt-3"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleValidateDomain}
+                          disabled={validateDomain.isPending}
+                        >
+                          {validateDomain.isPending ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : null}
+                          Verify Domain
+                        </Button>
+                      </div>
+                    )}
+
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleDisableServerSide}
+                      disabled={disableStape.isPending}
+                    >
+                      Disable Server-Side Tracking
+                    </Button>
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
     </div>
