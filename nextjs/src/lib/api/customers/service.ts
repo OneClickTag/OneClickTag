@@ -59,29 +59,35 @@ function mapToResponseDto(customer: Record<string, unknown>): CustomerResponse {
     fullName: customer.fullName as string,
     company: customer.company as string | null,
     phone: customer.phone as string | null,
+    websiteUrl: customer.websiteUrl as string | null,
     status: customer.status as CustomerStatus,
     tags: customer.tags as string[],
     notes: customer.notes as string | null,
     customFields: customer.customFields as Record<string, unknown> | null,
     googleAccountId: customer.googleAccountId as string | null,
     googleEmail: customer.googleEmail as string | null,
+    gtmContainerId: customer.gtmContainerId as string | null,
+    gtmWorkspaceId: customer.gtmWorkspaceId as string | null,
+    gtmContainerName: customer.gtmContainerName as string | null,
     googleAdsAccounts: customer.googleAdsAccounts as CustomerResponse['googleAdsAccounts'],
+    ga4Properties: customer.ga4Properties as CustomerResponse['ga4Properties'],
+    serverSideEnabled: customer.serverSideEnabled as boolean | undefined,
+    stapeContainer: customer.stapeContainer as CustomerResponse['stapeContainer'],
     googleAccount: connected
       ? {
           connected: true,
           email: customer.googleEmail as string | undefined,
           connectedAt: (customer.updatedAt as Date)?.toISOString(),
-          // These flags are unreliable here - frontend must call getConnectionStatus for accurate info
-          hasGTMAccess: false,
-          hasGA4Access: false,
-          hasAdsAccess: false,
-          gtmError: 'Use getConnectionStatus endpoint for accurate status',
-          ga4Error: 'Use getConnectionStatus endpoint for accurate status',
-          adsError: 'Use getConnectionStatus endpoint for accurate status',
+          hasGTMAccess: !!(customer.gtmContainerId),
+          hasGA4Access: !!((customer.ga4Properties as unknown[])?.length),
+          hasAdsAccess: !!((customer.googleAdsAccounts as unknown[])?.length),
+          gtmError: null,
+          ga4Error: null,
+          adsError: null,
           gtmAccountId: null,
-          gtmContainerId: null,
-          ga4PropertyCount: 0,
-          adsAccountCount: 0,
+          gtmContainerId: customer.gtmContainerId as string | null,
+          ga4PropertyCount: (customer.ga4Properties as unknown[])?.length || 0,
+          adsAccountCount: (customer.googleAdsAccounts as unknown[])?.length || 0,
         }
       : undefined,
     createdAt: customer.createdAt as Date,
@@ -208,6 +214,7 @@ export async function createCustomer(
     include: {
       googleAdsAccounts: true,
       ga4Properties: true,
+      stapeContainer: true,
     },
   });
 
@@ -233,6 +240,7 @@ export async function findAllCustomers(
       include: {
         googleAdsAccounts: includeGoogleAds,
         ga4Properties: true,
+        stapeContainer: true,
       },
     }),
     prisma.customer.count({ where }),
@@ -278,6 +286,7 @@ export async function findCustomerById(
     include: {
       googleAdsAccounts: includeGoogleAds,
       ga4Properties: true,
+      stapeContainer: true,
     },
   });
 
@@ -298,6 +307,7 @@ export async function findCustomerBySlug(
     include: {
       googleAdsAccounts: includeGoogleAds,
       ga4Properties: true,
+      stapeContainer: true,
     },
   });
 
@@ -360,6 +370,7 @@ export async function updateCustomer(
     include: {
       googleAdsAccounts: true,
       ga4Properties: true,
+      stapeContainer: true,
     },
   });
 
