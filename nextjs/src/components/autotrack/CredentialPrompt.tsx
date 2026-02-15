@@ -148,9 +148,9 @@ export function CredentialPrompt({ loginUrl, domain, onSave, onSkip, isSaving }:
                   type="button"
                   size="sm"
                   onClick={handleMfaSubmit}
-                  disabled={!mfaCode || loginStatus === 'submitting'}
+                  disabled={!mfaCode || isSaving}
                 >
-                  {loginStatus === 'submitting' ? (
+                  {isSaving ? (
                     <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                   ) : null}
                   Submit Code

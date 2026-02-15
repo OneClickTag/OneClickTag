@@ -192,7 +192,7 @@ export function ScanResults({ customerId, scan, onCreateTracking }: ScanResultsP
         <TabsContent value="routes" className="mt-4">
           <ExploredRoutes
             scanPages={scanPages}
-            recommendations={recommendations || []}
+            recommendations={(recommendations || []).map(r => ({ pageUrl: r.pageUrl || '', severity: r.severity }))}
           />
         </TabsContent>
       </Tabs>

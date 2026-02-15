@@ -236,7 +236,7 @@ async function collectNewUrls(page: Page, result: InteractionResult): Promise<vo
         })
         .filter((href): href is string => href !== null && href.startsWith('http'));
     });
-    result.discoveredUrls = [...new Set(urls)];
+    result.discoveredUrls = Array.from(new Set(urls));
   } catch {
     // URL collection failed
   }

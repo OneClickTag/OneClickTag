@@ -367,7 +367,7 @@ export const useChunkedScan = (customerId: string, scanId: string | null) => {
           {
             phase: 'phase1',
             chunkSize: 10,
-            ...(currentCredentials && { credentials: currentCredentials }),
+            credentials: currentCredentials || undefined,
           },
         );
 

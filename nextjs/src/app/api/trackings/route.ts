@@ -122,14 +122,11 @@ export async function GET(request: NextRequest) {
     const totalPages = Math.ceil(total / limit);
 
     return NextResponse.json({
-      data: trackings,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages,
-        hasMore: page < totalPages,
-      },
+      trackings,
+      total,
+      page,
+      pageSize: limit,
+      totalPages,
     });
   } catch (error) {
     console.error('Error listing trackings:', error);
@@ -345,6 +342,25 @@ function getDefaultGA4EventName(type: TrackingType): string {
     FILE_DOWNLOAD: 'file_download',
     NEWSLETTER_SIGNUP: 'newsletter_signup',
     CUSTOM_EVENT: 'custom_event',
+    // Behavioral tracking
+    RAGE_CLICK: 'rage_click',
+    DEAD_CLICK: 'dead_click',
+    TAB_VISIBILITY: 'tab_visibility',
+    SESSION_DURATION: 'session_duration',
+    EXIT_INTENT: 'exit_intent',
+    TEXT_COPY: 'text_copy',
+    PAGE_PRINT: 'page_print',
+    FORM_FIELD_INTERACTION: 'form_field_interaction',
+    ERROR_PAGE_VIEW: 'error_page_view',
+    RETURN_VISITOR: 'return_visitor',
+    OUTBOUND_CLICK: 'outbound_click',
+    PAGE_ENGAGEMENT: 'engagement_score',
+    // Niche-specific tracking
+    PRODUCT_IMAGE_INTERACTION: 'product_image_interaction',
+    CART_ABANDONMENT: 'cart_abandonment',
+    PRICE_COMPARISON: 'price_comparison',
+    REVIEW_INTERACTION: 'review_interaction',
+    CONTENT_READ_THROUGH: 'content_read_through',
   };
 
   return eventNameMap[type] || 'custom_event';

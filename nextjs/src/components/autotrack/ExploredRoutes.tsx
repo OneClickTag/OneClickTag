@@ -27,7 +27,7 @@ interface ExploredRoutesProps {
 interface TreeNode {
   segment: string;
   fullPath: string;
-  pages: typeof ExploredRoutesProps['scanPages'][0][];
+  pages: ExploredRoutesProps['scanPages'];
   children: Map<string, TreeNode>;
   isTemplate: boolean;
   templateCount: number;
