@@ -250,6 +250,72 @@ function buildSuggestedConfig(rec: EnhancedRecommendation): Record<string, any> 
     case 'ADD_TO_CART':
       config.value = 0;
       break;
+    case 'RAGE_CLICK':
+      config.clickThreshold = 3;
+      config.timeWindowMs = 500;
+      break;
+    case 'DEAD_CLICK':
+      config.excludeTags = ['a', 'button', 'input', 'select', 'textarea'];
+      break;
+    case 'TAB_VISIBILITY':
+      config.trackHiddenDuration = true;
+      break;
+    case 'SESSION_DURATION':
+      config.heartbeatInterval = 30;
+      config.milestones = [120, 300, 600, 900];
+      break;
+    case 'EXIT_INTENT':
+      config.triggerOnce = true;
+      config.sensitivity = 20;
+      config.excludeMobile = true;
+      break;
+    case 'TEXT_COPY':
+      config.minLength = 10;
+      config.captureSelector = true;
+      break;
+    case 'PAGE_PRINT':
+      config.capturePageType = true;
+      break;
+    case 'FORM_FIELD_INTERACTION':
+      config.trackFocus = true;
+      config.trackBlur = true;
+      config.capturePII = false;
+      break;
+    case 'ERROR_PAGE_VIEW':
+      config.errorTypes = ['404', '500', '403'];
+      config.captureReferrer = true;
+      break;
+    case 'RETURN_VISITOR':
+      config.cookieDuration = 30;
+      config.trackVisitCount = true;
+      break;
+    case 'OUTBOUND_CLICK':
+      config.captureDestination = true;
+      config.captureLinkText = true;
+      break;
+    case 'PAGE_ENGAGEMENT':
+      config.scoreWeights = { scroll: 0.4, time: 0.3, clicks: 0.3 };
+      break;
+    case 'PRODUCT_IMAGE_INTERACTION':
+      config.trackZoom = true;
+      config.trackClick = true;
+      break;
+    case 'CART_ABANDONMENT':
+      config.abandonmentThreshold = 300000;
+      config.trackPartialCheckout = true;
+      break;
+    case 'PRICE_COMPARISON':
+      config.trackTableInteraction = true;
+      config.trackFilterUse = true;
+      break;
+    case 'REVIEW_INTERACTION':
+      config.trackScroll = true;
+      config.trackFilter = true;
+      break;
+    case 'CONTENT_READ_THROUGH':
+      config.trackScrollSpeed = true;
+      config.minimumReadTime = 30;
+      break;
   }
 
   if (rec.selector) {
