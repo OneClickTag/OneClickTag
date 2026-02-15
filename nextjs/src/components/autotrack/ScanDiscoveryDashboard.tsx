@@ -1,8 +1,9 @@
 'use client';
 
-import { Globe, Loader2, X } from 'lucide-react';
+import { useRef, useEffect, useState } from 'react';
+import { Globe, Loader2, X, Radio, Shield, MousePointerClick } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
 import { LiveDiscovery } from '@/types/site-scanner';
 import { TechPanel } from './discovery/TechPanel';
 import { PriorityElementsPanel } from './discovery/PriorityElementsPanel';
@@ -24,6 +25,55 @@ interface ScanDiscoveryDashboardProps {
   onSkipCredential?: () => void;
   isSavingCredential?: boolean;
   showCredentialPrompt?: boolean;
+  obstaclesDismissed?: number;
+  totalInteractions?: number;
+  authenticatedPagesCount?: number;
+}
+
+/**
+ * Smooth progress bar that interpolates towards target value
+ * to avoid jarring jumps when totalPages changes.
+ */
+function SmoothProgress({ current, total }: { current: number; total: number }) {
+  const [displayPercent, setDisplayPercent] = useState(0);
+  const targetPercent = total > 0 ? Math.round((current / total) * 100) : 0;
+  const rafRef = useRef<number>();
+
+  useEffect(() => {
+    const animate = () => {
+      setDisplayPercent(prev => {
+        const diff = targetPercent - prev;
+        if (Math.abs(diff) < 0.5) return targetPercent;
+        // Ease towards target - moves fast when far, slow when close
+        return prev + diff * 0.15;
+      });
+      rafRef.current = requestAnimationFrame(animate);
+    };
+    rafRef.current = requestAnimationFrame(animate);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [targetPercent]);
+
+  const percent = Math.round(Math.min(displayPercent, 100));
+
+  return (
+    <div>
+      <div className="relative h-2 w-full overflow-hidden rounded-full bg-gray-100">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-blue-500 to-blue-600 transition-none"
+          style={{
+            width: `${percent}%`,
+            boxShadow: percent > 0 ? '0 0 8px rgba(59, 130, 246, 0.4)' : 'none',
+          }}
+        />
+      </div>
+      <div className="flex justify-between text-xs text-muted-foreground mt-1">
+        <span>{percent}% complete</span>
+        <span>{current} / {total || '?'} pages</span>
+      </div>
+    </div>
+  );
 }
 
 export function ScanDiscoveryDashboard({
@@ -41,8 +91,10 @@ export function ScanDiscoveryDashboard({
   onSkipCredential,
   isSavingCredential,
   showCredentialPrompt,
+  obstaclesDismissed = 0,
+  totalInteractions = 0,
+  authenticatedPagesCount = 0,
 }: ScanDiscoveryDashboardProps) {
-  const percentage = totalPages > 0 ? Math.round((pagesProcessed / totalPages) * 100) : 0;
   let domain = '';
   try {
     domain = new URL(websiteUrl).hostname;
@@ -55,8 +107,15 @@ export function ScanDiscoveryDashboard({
       {/* Header Bar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-blue-100 rounded-lg">
-            <Globe className="h-5 w-5 text-blue-600 animate-pulse" />
+          <div className="relative p-2 bg-blue-100 rounded-lg">
+            <Globe className="h-5 w-5 text-blue-600" />
+            {/* Live scanning indicator */}
+            {!isDetectingNiche && (
+              <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500" />
+              </span>
+            )}
           </div>
           <div>
             <h3 className="font-semibold">
@@ -65,7 +124,7 @@ export function ScanDiscoveryDashboard({
             <p className="text-sm text-muted-foreground">
               {isDetectingNiche
                 ? 'AI is analyzing your site to detect the business niche'
-                : `${pagesProcessed} / ${totalPages || '?'} pages crawled`}
+                : `Discovering pages and analyzing structure`}
             </p>
           </div>
         </div>
@@ -80,21 +139,37 @@ export function ScanDiscoveryDashboard({
 
       {/* Progress */}
       {!isDetectingNiche && (
-        <div>
-          <Progress value={percentage} className="mb-1" />
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <span>{percentage}% complete</span>
-            {discovery && (
-              <span>{discovery.totalUrlsDiscovered} URLs discovered</span>
-            )}
-          </div>
+        <SmoothProgress current={pagesProcessed} total={totalPages} />
+      )}
+
+      {/* Obstacle and Interaction Counters */}
+      {!isDetectingNiche && (obstaclesDismissed > 0 || totalInteractions > 0) && (
+        <div className="flex items-center gap-4 text-xs">
+          {obstaclesDismissed > 0 && (
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <Shield className="h-3.5 w-3.5 text-green-600" />
+              <span>Auto-dismissed: {obstaclesDismissed} {obstaclesDismissed === 1 ? 'obstacle' : 'obstacles'}</span>
+            </div>
+          )}
+          {totalInteractions > 0 && (
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <MousePointerClick className="h-3.5 w-3.5 text-blue-600" />
+              <span>{totalInteractions} {totalInteractions === 1 ? 'interaction' : 'interactions'} performed</span>
+            </div>
+          )}
         </div>
       )}
 
+      {/* Niche detection state */}
       {isDetectingNiche && (
-        <div className="flex items-center gap-2 py-2">
-          <Loader2 className="h-4 w-4 animate-spin text-purple-500" />
-          <span className="text-sm text-muted-foreground">Running AI niche detection...</span>
+        <div className="flex items-center gap-3 py-3 px-4 bg-purple-50 rounded-lg border border-purple-100">
+          <div className="relative">
+            <Loader2 className="h-5 w-5 animate-spin text-purple-500" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-purple-900">Running AI niche detection</p>
+            <p className="text-xs text-purple-600">Analyzing content, structure, and technologies...</p>
+          </div>
         </div>
       )}
 
@@ -119,6 +194,14 @@ export function ScanDiscoveryDashboard({
           </div>
           {/* Right column: URL feed */}
           <UrlDiscoveryFeed discovery={discovery} newPages={newPages} />
+        </div>
+      )}
+
+      {/* URLs discovered counter */}
+      {discovery && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1 border-t">
+          <Radio className="h-3 w-3 text-blue-500 animate-pulse" />
+          <span>{discovery.totalUrlsDiscovered} total URLs discovered</span>
         </div>
       )}
     </div>
