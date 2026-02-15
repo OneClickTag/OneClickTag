@@ -106,6 +106,9 @@ model Customer {
   // Google Account Connection
   googleAccountId   String?
   googleEmail       String?
+  gtmContainerId    String?
+  gtmWorkspaceId    String?
+  gtmContainerName  String?
   googleAdsAccounts GoogleAdsAccount[]
   ga4Properties     GA4Property[]
   campaigns         Campaign[]
@@ -408,6 +411,27 @@ enum TrackingType {
 
   // Custom
   CUSTOM_EVENT
+
+  // Advanced Behavioral
+  RAGE_CLICK
+  DEAD_CLICK
+  TAB_VISIBILITY
+  SESSION_DURATION
+  EXIT_INTENT
+  TEXT_COPY
+  PAGE_PRINT
+  FORM_FIELD_INTERACTION
+  ERROR_PAGE_VIEW
+  RETURN_VISITOR
+  OUTBOUND_CLICK
+  PAGE_ENGAGEMENT
+
+  // Niche-Specific Behavioral
+  PRODUCT_IMAGE_INTERACTION
+  CART_ABANDONMENT
+  PRICE_COMPARISON
+  REVIEW_INTERACTION
+  CONTENT_READ_THROUGH
 }
 
 enum TrackingStatus {
@@ -1091,6 +1115,7 @@ enum SiteScanStatus {
   CRAWLING
   NICHE_DETECTED
   AWAITING_CONFIRMATION
+  AWAITING_AUTH
   DEEP_CRAWLING
   ANALYZING
   COMPLETED
@@ -1163,6 +1188,12 @@ model SiteScan {
   // AI usage tracking
   aiAnalysisUsed Boolean @default(false)
 
+  // V2: Deep Explorer
+  authenticatedPagesCount Int     @default(0)
+  obstaclesDismissed      Int     @default(0)
+  totalInteractions       Int     @default(0)
+  sessionCookies          Json?
+
   // Relations
   pages           ScanPage[]
   recommendations TrackingRecommendation[]
@@ -1198,6 +1229,11 @@ model ScanPage {
   metaTags        Json?
   headings        Json?
   contentSummary  String? @db.Text
+  isAuthenticated       Boolean @default(false)
+  templateGroup         String?
+  scrollableHeight      Int?
+  interactiveElementCount Int?
+  obstaclesEncountered  Json?
 
   createdAt DateTime @default(now())
 
@@ -1236,6 +1272,9 @@ model TrackingRecommendation {
   trackingId String?
 
   aiGenerated Boolean @default(false)
+  businessValue       String? @db.Text
+  implementationNotes String? @db.Text
+  affectedRoutes      Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
