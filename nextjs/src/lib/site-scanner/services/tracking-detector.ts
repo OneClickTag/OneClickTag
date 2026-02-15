@@ -9,6 +9,7 @@ import { getAIAnalysisService } from './ai-analysis';
 import { generateSelector, getBestSelector } from './selector-generator';
 import { getPatternsForNiche, TrackingPattern } from '../constants/tracking-patterns';
 import { DEFAULT_SEVERITY_MAP, GA4_EVENT_NAMES } from '../constants/severity-rules';
+import { createBehavioralOpportunities } from '../constants/behavioral-tracking';
 
 /**
  * Tracking Detector Service - detects tracking opportunities on pages.
@@ -74,8 +75,9 @@ export async function detectOpportunities(
     console.warn(`AI analysis service initialization failed: ${error?.message}`);
   }
 
-  // Add universal scroll depth tracking
-  allOpportunities.push(createScrollDepthTracking(pages[0].url));
+  // Add comprehensive behavioral tracking (replaces single scroll depth)
+  const behavioralOpps = createBehavioralOpportunities(niche, pages[0].url);
+  allOpportunities.push(...behavioralOpps);
 
   return allOpportunities;
 }
@@ -239,26 +241,6 @@ function createOpportunityFromPattern(
   };
 }
 
-function createScrollDepthTracking(pageUrl: string): TrackingOpportunity {
-  return {
-    name: 'Scroll Depth Tracking',
-    description: 'Track how far users scroll on pages to measure content engagement and identify drop-off points.',
-    trackingType: 'SCROLL_DEPTH',
-    severity: 'RECOMMENDED',
-    severityReason: 'Scroll depth provides valuable engagement data across all page types',
-    selector: null,
-    selectorConfig: null,
-    selectorConfidence: null,
-    urlPattern: '.*',
-    pageUrl,
-    funnelStage: 'top',
-    elementContext: null,
-    suggestedGA4EventName: 'scroll',
-    suggestedDestinations: ['GA4'],
-    suggestedConfig: { scrollPercentage: 75 },
-    aiGenerated: false,
-  };
-}
 
 function generateUrlPattern(url: string): string {
   try {
