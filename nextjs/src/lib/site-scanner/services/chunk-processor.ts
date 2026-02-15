@@ -5,18 +5,23 @@
  */
 
 import { parse } from 'node-html-parser';
+import { chromium } from 'playwright-core';
 import { prisma } from '@/lib/prisma';
 import { SiteScanStatus } from '@prisma/client';
 import {
   CrawledPage,
   ExtractedElement,
 } from '../interfaces';
-import { fetchPage, parsePage, discoverLinks, detectLoginPage, extractPriorityElements } from './html-crawler';
+import { parsePage, discoverLinks, extractPriorityElements } from './html-crawler';
 import { detectFromHTML, summarizeTechnologies } from './html-technology-detector';
 import { extractElements } from './crawl-engine';
 import { detectOpportunities } from './tracking-detector';
 import { processRecommendations } from './recommendation-engine';
 import { isScanCancelled } from './site-scanner';
+import { dismissObstacles } from './obstacle-handler';
+import { simulateInteractions } from './interaction-simulator';
+import { detectLoginPage as detectLoginPagePlaywright, serializeCookies, restoreCookies } from './auth-handler';
+import { createBehavioralOpportunities } from '../constants/behavioral-tracking';
 
 // ========================================
 // Types
@@ -46,6 +51,9 @@ export interface LiveDiscovery {
   sitemapFound: boolean;
   robotsFound: boolean;
   totalUrlsDiscovered: number;
+  obstaclesDismissed: number;
+  totalInteractions: number;
+  authenticatedPagesCount: number;
 }
 
 export interface UrlQueueItem {
@@ -67,6 +75,9 @@ export interface ChunkResult {
   }>;
   loginDetected?: boolean;
   loginUrl?: string;
+  obstaclesDismissed?: number;
+  interactionsPerformed?: number;
+  authenticatedPages?: number;
 }
 
 export interface Phase2ChunkResult {
@@ -82,11 +93,12 @@ const TERMINAL_STATUSES: SiteScanStatus[] = ['COMPLETED', 'FAILED', 'CANCELLED']
 // ========================================
 
 /**
- * Process a chunk of Phase 1 pages (fetch HTML, parse, detect tech, discover links).
+ * Process a chunk of Phase 1 pages (Playwright-based crawling with obstacles and interactions).
  */
 export async function processPhase1Chunk(
   scanId: string,
   chunkSize: number = 8,
+  credentials?: { username: string; password: string } | null,
 ): Promise<ChunkResult> {
   // Load scan state from DB
   const scan = await prisma.siteScan.findUnique({
@@ -103,6 +115,7 @@ export async function processPhase1Chunk(
       totalUrlsFound: true,
       loginDetected: true,
       loginUrl: true,
+      sessionCookies: true,
     },
   });
 
@@ -138,137 +151,258 @@ export async function processPhase1Chunk(
     };
   }
 
-  for (const item of toProcess) {
-    // Check cancellation
-    if (await isScanCancelled(scanId)) {
-      break;
-    }
+  // Launch Playwright browser for this chunk
+  const browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext({
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0',
+    viewport: { width: 1280, height: 720 },
+  });
 
-    // Skip if already crawled or over max pages
-    if (crawledSet.has(item.url)) continue;
-    if (crawledSet.size >= scan.maxPages) break;
-    if (item.depth > scan.maxDepth) continue;
+  // Restore cookies if available (session persistence between chunks)
+  if (scan.sessionCookies) {
+    await restoreCookies(context, scan.sessionCookies as string);
+  }
 
-    crawledSet.add(item.url);
+  const page = await context.newPage();
 
-    // Fetch page
-    const fetchResult = await fetchPage(item.url);
-    if (!fetchResult) continue;
+  try {
+    for (const item of toProcess) {
+      // Check cancellation
+      if (await isScanCancelled(scanId)) {
+        break;
+      }
 
-    // Handle redirects - use final URL and mark it as crawled
-    const finalUrl = fetchResult.redirectUrl || item.url;
-    if (fetchResult.redirectUrl) {
-      crawledSet.add(fetchResult.redirectUrl);
-    }
+      // Skip if already crawled or over max pages
+      if (crawledSet.has(item.url)) continue;
+      if (crawledSet.size >= scan.maxPages) break;
+      if (item.depth > scan.maxDepth) continue;
 
-    // Parse page
-    const crawledPage = parsePage(finalUrl, fetchResult.html, item.depth, fetchResult.headers);
+      crawledSet.add(item.url);
 
-    // Save to DB
-    await prisma.scanPage.create({
-      data: {
-        scanId,
+      // Navigate with Playwright
+      try {
+        await page.goto(item.url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+      } catch (navError: any) {
+        console.warn(`Failed to navigate to ${item.url}: ${navError?.message}`);
+        continue;
+      }
+
+      const finalUrl = page.url();
+      if (finalUrl !== item.url) {
+        crawledSet.add(finalUrl);
+      }
+
+      // Dismiss obstacles (cookie banners, popups)
+      const obstacleResult = await dismissObstacles(page);
+      discovery.obstaclesDismissed += obstacleResult.dismissed;
+
+      // Simulate interactions (scroll, expand accordions, click tabs, etc.)
+      const interactionResult = await simulateInteractions(page);
+      discovery.totalInteractions += interactionResult.interactions;
+
+      // Detect login page with Playwright
+      if (!loginDetected) {
+        const loginResult = await detectLoginPagePlaywright(page);
+        if (loginResult.isLogin) {
+          loginDetected = true;
+          loginUrl = loginResult.loginUrl || item.url;
+        }
+      }
+
+      // Extract page data via page.evaluate()
+      const pageData = await page.evaluate(() => {
+        const title = document.title || undefined;
+        const metaDesc = document.querySelector('meta[name="description"]')?.getAttribute('content') || undefined;
+        const ogTitle = document.querySelector('meta[property="og:title"]')?.getAttribute('content') || undefined;
+        const ogDesc = document.querySelector('meta[property="og:description"]')?.getAttribute('content') || undefined;
+        const ogType = document.querySelector('meta[property="og:type"]')?.getAttribute('content') || undefined;
+
+        const headings = Array.from(document.querySelectorAll('h1, h2, h3')).slice(0, 10).map(h => ({
+          level: parseInt(h.tagName.replace('H', '')),
+          text: h.textContent?.trim()?.slice(0, 100) || '',
+        }));
+
+        const hasForm = !!document.querySelector('form');
+        const hasCTA = !!(document.querySelector('a[href*="signup"], a[href*="register"], a[href*="buy"], a[href*="get-started"], button:not([type="submit"])'));
+        const hasVideo = !!(document.querySelector('video, iframe[src*="youtube"], iframe[src*="vimeo"]'));
+        const hasPhoneLink = !!document.querySelector('a[href^="tel:"]');
+        const hasEmailLink = !!document.querySelector('a[href^="mailto:"]');
+        const hasDownloadLink = !!document.querySelector('a[href$=".pdf"], a[href$=".zip"], a[download]');
+
+        const mainContent = document.querySelector('main, article, [role="main"], .content, #content');
+        const contentSummary = (mainContent?.textContent || document.body?.textContent || '').trim().slice(0, 500);
+
+        // Collect links
+        const links = Array.from(document.querySelectorAll('a[href]'))
+          .map(a => {
+            try { return new URL(a.getAttribute('href') || '', window.location.href).href; } catch { return null; }
+          })
+          .filter((h): h is string => h !== null && h.startsWith('http'));
+
+        return {
+          title: title || null,
+          metaTags: { title, description: metaDesc, ogTitle, ogDescription: ogDesc, ogType },
+          headings,
+          hasForm,
+          hasCTA,
+          hasVideo,
+          hasPhoneLink,
+          hasEmailLink,
+          hasDownloadLink,
+          contentSummary,
+          links: Array.from(new Set(links)),
+        };
+      });
+
+      // Build the CrawledPage
+      const crawledPage: CrawledPage = {
+        url: finalUrl,
+        title: pageData.title,
+        depth: item.depth,
+        pageType: classifyPageType(finalUrl, pageData),
+        hasForm: pageData.hasForm,
+        hasCTA: pageData.hasCTA,
+        hasVideo: pageData.hasVideo,
+        hasPhoneLink: pageData.hasPhoneLink,
+        hasEmailLink: pageData.hasEmailLink,
+        hasDownloadLink: pageData.hasDownloadLink,
+        importanceScore: null,
+        metaTags: pageData.metaTags,
+        headings: pageData.headings,
+        contentSummary: pageData.contentSummary,
+        isAuthenticated: false,
+        templateGroup: detectTemplateGroup(finalUrl),
+        scrollableHeight: interactionResult.scrollableHeight,
+        interactiveElementCount: interactionResult.interactions,
+        obstaclesEncountered: obstacleResult.obstacles,
+        links: pageData.links,
+        elements: [],
+      };
+
+      // Save to DB with new V2 fields
+      await prisma.scanPage.create({
+        data: {
+          scanId,
+          url: crawledPage.url,
+          title: crawledPage.title,
+          depth: crawledPage.depth,
+          pageType: crawledPage.pageType,
+          hasForm: crawledPage.hasForm,
+          hasCTA: crawledPage.hasCTA,
+          hasVideo: crawledPage.hasVideo,
+          hasPhoneLink: crawledPage.hasPhoneLink,
+          hasEmailLink: crawledPage.hasEmailLink,
+          hasDownloadLink: crawledPage.hasDownloadLink,
+          importanceScore: crawledPage.importanceScore,
+          metaTags: crawledPage.metaTags as any,
+          headings: crawledPage.headings as any,
+          contentSummary: crawledPage.contentSummary,
+          isAuthenticated: crawledPage.isAuthenticated || false,
+          templateGroup: crawledPage.templateGroup,
+          scrollableHeight: crawledPage.scrollableHeight,
+          interactiveElementCount: crawledPage.interactiveElementCount,
+          obstaclesEncountered: crawledPage.obstaclesEncountered as any,
+        },
+      });
+
+      newPages.push({
         url: crawledPage.url,
         title: crawledPage.title,
-        depth: crawledPage.depth,
         pageType: crawledPage.pageType,
         hasForm: crawledPage.hasForm,
         hasCTA: crawledPage.hasCTA,
-        hasVideo: crawledPage.hasVideo,
-        hasPhoneLink: crawledPage.hasPhoneLink,
-        hasEmailLink: crawledPage.hasEmailLink,
-        hasDownloadLink: crawledPage.hasDownloadLink,
-        importanceScore: crawledPage.importanceScore,
-        metaTags: crawledPage.metaTags as any,
-        headings: crawledPage.headings as any,
-        contentSummary: crawledPage.contentSummary,
+      });
+
+      // Detect technologies (mainly on first few pages)
+      if (crawledSet.size <= 3) {
+        const html = await page.content();
+        const techResult = detectFromHTML(html, {});
+        const summary = summarizeTechnologies(techResult);
+        mergeTechnologies(discovery, summary, techResult);
+      }
+
+      // Extract priority elements from HTML
+      const html = await page.content();
+      const root = parse(html, { comment: false, blockTextElements: { script: false, style: false } });
+      const priorityEls = extractPriorityElements(item.url, root);
+      mergePriorityElements(discovery, priorityEls, crawledPage);
+
+      // Update page types count
+      const pageType = crawledPage.pageType || 'other';
+      discovery.pageTypes[pageType] = (discovery.pageTypes[pageType] || 0) + 1;
+
+      // Add discovered URLs from page links
+      for (const link of pageData.links) {
+        if (!crawledSet.has(link) && !urlQueue.some(q => q.url === link)) {
+          try {
+            const linkDomain = getBaseDomain(new URL(link).hostname);
+            if (linkDomain === baseDomain) {
+              urlQueue.push({ url: link, depth: item.depth + 1, source: 'crawl' });
+            }
+          } catch { /* skip */ }
+        }
+      }
+
+      // Add discovered URLs from interactions
+      for (const discoveredUrl of interactionResult.discoveredUrls) {
+        if (!crawledSet.has(discoveredUrl) && !urlQueue.some(q => q.url === discoveredUrl)) {
+          try {
+            const linkDomain = getBaseDomain(new URL(discoveredUrl).hostname);
+            if (linkDomain === baseDomain) {
+              urlQueue.push({ url: discoveredUrl, depth: item.depth + 1, source: 'crawl' });
+            }
+          } catch { /* skip */ }
+        }
+      }
+
+      // Update URL patterns (sample)
+      if (discovery.urlPatterns.length < 30) {
+        try {
+          discovery.urlPatterns.push(new URL(item.url).pathname);
+        } catch { /* skip */ }
+      }
+    }
+
+    // Serialize cookies for session persistence between chunks
+    const serializedCookies = await serializeCookies(context);
+
+    // Determine if there are more pages to process
+    const hasMore = urlQueue.length > 0 && crawledSet.size < scan.maxPages;
+    discovery.totalUrlsDiscovered = crawledSet.size + urlQueue.length;
+
+    // Save state back to DB with V2 fields
+    await prisma.siteScan.update({
+      where: { id: scanId },
+      data: {
+        urlQueue: urlQueue as any,
+        crawledUrls: Array.from(crawledSet) as any,
+        liveDiscovery: discovery as any,
+        totalUrlsFound: discovery.totalUrlsDiscovered,
+        loginDetected,
+        loginUrl,
+        totalPagesScanned: crawledSet.size,
+        status: hasMore ? 'CRAWLING' : 'CRAWLING',
+        sessionCookies: serializedCookies as any,
+        obstaclesDismissed: discovery.obstaclesDismissed,
+        totalInteractions: discovery.totalInteractions,
+        authenticatedPagesCount: discovery.authenticatedPagesCount,
       },
     });
 
-    newPages.push({
-      url: crawledPage.url,
-      title: crawledPage.title,
-      pageType: crawledPage.pageType,
-      hasForm: crawledPage.hasForm,
-      hasCTA: crawledPage.hasCTA,
-    });
-
-    // Detect technologies (mainly on first few pages)
-    if (crawledSet.size <= 3) {
-      const techResult = detectFromHTML(fetchResult.html, fetchResult.headers);
-      const summary = summarizeTechnologies(techResult);
-      mergeTechnologies(discovery, summary, techResult);
-    }
-
-    // Detect login page
-    if (!loginDetected) {
-      const loginResult = detectLoginPage(fetchResult.html, item.url);
-      if (loginResult.isLogin) {
-        loginDetected = true;
-        loginUrl = loginResult.loginUrl || item.url;
-      }
-    }
-
-    // Extract priority elements
-    const root = parse(fetchResult.html, { comment: false, blockTextElements: { script: false, style: false } });
-    const priorityEls = extractPriorityElements(item.url, root);
-    mergePriorityElements(discovery, priorityEls, crawledPage);
-
-    // Update page types count
-    const pageType = crawledPage.pageType || 'other';
-    discovery.pageTypes[pageType] = (discovery.pageTypes[pageType] || 0) + 1;
-
-    // Discover new links and add to queue
-    const newLinks = crawledPage.links.filter(link => {
-      if (crawledSet.has(link)) return false;
-      if (urlQueue.some(q => q.url === link)) return false;
-      try {
-        const linkDomain = getBaseDomain(new URL(link).hostname);
-        return linkDomain === baseDomain;
-      } catch {
-        return false;
-      }
-    });
-
-    for (const link of newLinks) {
-      urlQueue.push({ url: link, depth: item.depth + 1, source: 'crawl' });
-    }
-
-    // Update URL patterns (sample)
-    if (discovery.urlPatterns.length < 30) {
-      try {
-        discovery.urlPatterns.push(new URL(item.url).pathname);
-      } catch { /* skip */ }
-    }
+    return {
+      pagesProcessed: newPages.length,
+      hasMore,
+      discovery,
+      newPages,
+      loginDetected: loginDetected || undefined,
+      loginUrl: loginUrl || undefined,
+      obstaclesDismissed: discovery.obstaclesDismissed,
+      interactionsPerformed: discovery.totalInteractions,
+      authenticatedPages: discovery.authenticatedPagesCount,
+    };
+  } finally {
+    await browser.close();
   }
-
-  // Determine if there are more pages to process
-  const hasMore = urlQueue.length > 0 && crawledSet.size < scan.maxPages;
-  discovery.totalUrlsDiscovered = crawledSet.size + urlQueue.length;
-
-  // Save state back to DB
-  await prisma.siteScan.update({
-    where: { id: scanId },
-    data: {
-      urlQueue: urlQueue as any,
-      crawledUrls: Array.from(crawledSet) as any,
-      liveDiscovery: discovery as any,
-      totalUrlsFound: discovery.totalUrlsDiscovered,
-      loginDetected,
-      loginUrl,
-      totalPagesScanned: crawledSet.size,
-      status: hasMore ? 'CRAWLING' : 'CRAWLING', // stays CRAWLING until all done
-    },
-  });
-
-  return {
-    pagesProcessed: newPages.length,
-    hasMore,
-    discovery,
-    newPages,
-    loginDetected: loginDetected || undefined,
-    loginUrl: loginUrl || undefined,
-  };
 }
 
 // ========================================
@@ -347,9 +481,13 @@ export async function processPhase2Chunk(
   // Detect tracking opportunities
   const opportunities = await detectOpportunities(crawledPages, elements, niche);
 
+  // Add behavioral tracking opportunities
+  const behavioralOpps = createBehavioralOpportunities(niche, scan.websiteUrl);
+  const allOpportunities = [...opportunities, ...behavioralOpps];
+
   // Save recommendations
   let newRecommendations = 0;
-  if (opportunities.length > 0) {
+  if (allOpportunities.length > 0) {
     // Deduplicate with existing recommendations
     const existingRecs = await prisma.trackingRecommendation.findMany({
       where: { scanId },
@@ -359,7 +497,7 @@ export async function processPhase2Chunk(
       existingRecs.map(r => `${r.trackingType}:${r.pageUrl}:${r.selector || r.urlPattern || ''}`)
     );
 
-    const newOpps = opportunities.filter(opp => {
+    const newOpps = allOpportunities.filter(opp => {
       const key = `${opp.trackingType}:${opp.pageUrl}:${opp.selector || opp.urlPattern || ''}`;
       return !existingKeys.has(key);
     });
@@ -384,6 +522,9 @@ export async function processPhase2Chunk(
           suggestedGA4EventName: opp.suggestedGA4EventName,
           suggestedDestinations: opp.suggestedDestinations as any,
           aiGenerated: opp.aiGenerated,
+          businessValue: opp.businessValue || null,
+          implementationNotes: opp.implementationNotes || null,
+          affectedRoutes: opp.affectedRoutes as any || null,
         })),
       });
       newRecommendations = newOpps.length;
@@ -429,6 +570,9 @@ export function createEmptyDiscovery(): LiveDiscovery {
     sitemapFound: false,
     robotsFound: false,
     totalUrlsDiscovered: 0,
+    obstaclesDismissed: 0,
+    totalInteractions: 0,
+    authenticatedPagesCount: 0,
   };
 }
 
@@ -489,4 +633,37 @@ function getBaseDomain(hostname: string): string {
   const parts = hostname.split('.');
   if (parts.length <= 2) return hostname;
   return parts.slice(-2).join('.');
+}
+
+function classifyPageType(url: string, pageData: any): string | null {
+  const path = new URL(url).pathname.toLowerCase();
+  if (/\/(checkout|pay|payment)/i.test(path)) return 'checkout';
+  if (/\/(cart|basket|bag)/i.test(path)) return 'cart';
+  if (/\/(product|item|shop)\//i.test(path)) return 'product';
+  if (/\/(pricing|plans)/i.test(path)) return 'pricing';
+  if (/\/(contact|reach-us)/i.test(path)) return 'contact';
+  if (/\/(about|team)/i.test(path)) return 'about';
+  if (/\/(blog|article|post|news)/i.test(path)) return 'blog';
+  if (/\/(login|signin|sign-in)/i.test(path)) return 'login';
+  if (/\/(signup|register|sign-up)/i.test(path)) return 'signup';
+  if (/\/(faq|help|support)/i.test(path)) return 'faq';
+  if (/\/(services|solutions)/i.test(path)) return 'services';
+  if (/\/(demo|request-demo)/i.test(path)) return 'demo';
+  if (/\/(terms|privacy|legal|policy)/i.test(path)) return 'terms';
+  if (path === '/' || path === '') return 'homepage';
+  if (/\/(categor|collection)/i.test(path)) return 'category';
+  return 'other';
+}
+
+function detectTemplateGroup(url: string): string | undefined {
+  try {
+    const path = new URL(url).pathname;
+    const segments = path.split('/').filter(Boolean);
+    if (segments.length >= 2) {
+      return `/${segments[0]}/`;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
 }
