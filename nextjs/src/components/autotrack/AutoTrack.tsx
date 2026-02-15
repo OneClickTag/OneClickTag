@@ -34,6 +34,7 @@ const ACTIVE_STATUSES: SiteScanStatus[] = [
 export function AutoTrack({ customerId, customerWebsiteUrl, onCreateTracking }: AutoTrackProps) {
   const [activeScanId, setActiveScanId] = useState<string | null>(null);
   const [showCredentialPrompt, setShowCredentialPrompt] = useState(false);
+  const credentialSkippedRef = useRef(false);
   const phase1StartedRef = useRef(false);
 
   // Queries
@@ -63,14 +64,13 @@ export function AutoTrack({ customerId, customerWebsiteUrl, onCreateTracking }: 
     }
   }, [scanHistory, activeScanId]);
 
-  // Show credential prompt and pause processing when login is detected
+  // Show credential prompt when login is detected (non-blocking - processing continues)
   useEffect(() => {
-    if (chunkedScan.loginDetected && !showCredentialPrompt) {
+    if (chunkedScan.loginDetected && !showCredentialPrompt && !credentialSkippedRef.current) {
       setShowCredentialPrompt(true);
-      // Pause chunk processing to wait for credentials
-      if (chunkedScan.isProcessing) {
-        chunkedScan.stopProcessing();
-      }
+      // Don't stop processing - scan continues crawling non-protected pages
+      // while credential prompt is visible. Credentials will be added to
+      // subsequent chunk requests if provided.
     }
   }, [chunkedScan.loginDetected, showCredentialPrompt, chunkedScan]);
 
@@ -98,6 +98,7 @@ export function AutoTrack({ customerId, customerWebsiteUrl, onCreateTracking }: 
   const handleStartScan = async (websiteUrl?: string, maxPages?: number, maxDepth?: number) => {
     try {
       phase1StartedRef.current = false;
+      credentialSkippedRef.current = false;
       setShowCredentialPrompt(false);
       const result = await startScan.mutateAsync({
         customerId,
@@ -170,6 +171,7 @@ export function AutoTrack({ customerId, customerWebsiteUrl, onCreateTracking }: 
     setActiveScanId(null);
     chunkedScan.reset();
     phase1StartedRef.current = false;
+    credentialSkippedRef.current = false;
     setShowCredentialPrompt(false);
   };
 
@@ -187,17 +189,11 @@ export function AutoTrack({ customerId, customerWebsiteUrl, onCreateTracking }: 
       });
 
       // Store credentials in chunked scan state for subsequent chunk requests
+      // They will be included in subsequent chunk API calls automatically
       chunkedScan.setCredentials({ username, password });
 
-      // Hide the credential prompt
+      // Hide the credential prompt - processing is still running
       setShowCredentialPrompt(false);
-
-      // Resume processing - restart phase 1 with credentials, preserving progress
-      if (!chunkedScan.isProcessing) {
-        // Continue from where we left off by resuming phase 1
-        // The credentials are now stored in state and will be included in subsequent chunks
-        chunkedScan.startPhase1(true); // resume=true
-      }
     } catch (error) {
       console.error('Failed to provide credentials:', error);
     }
@@ -240,7 +236,10 @@ export function AutoTrack({ customerId, customerWebsiteUrl, onCreateTracking }: 
           onCancel={handleCancelScan}
           isCancelling={cancelScan.isPending}
           onSaveCredential={handleSaveCredential}
-          onSkipCredential={() => setShowCredentialPrompt(false)}
+          onSkipCredential={() => {
+            credentialSkippedRef.current = true;
+            setShowCredentialPrompt(false);
+          }}
           isSavingCredential={provideCredentials.isPending}
           showCredentialPrompt={showCredentialPrompt}
           obstaclesDismissed={chunkedScan.obstaclesDismissed}

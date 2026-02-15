@@ -9,7 +9,6 @@ import { getAIAnalysisService } from './ai-analysis';
 import { generateSelector, getBestSelector } from './selector-generator';
 import { getPatternsForNiche, TrackingPattern } from '../constants/tracking-patterns';
 import { DEFAULT_SEVERITY_MAP, GA4_EVENT_NAMES } from '../constants/severity-rules';
-import { createBehavioralOpportunities } from '../constants/behavioral-tracking';
 
 /**
  * Tracking Detector Service - detects tracking opportunities on pages.
@@ -74,10 +73,6 @@ export async function detectOpportunities(
   } catch (error: any) {
     console.warn(`AI analysis service initialization failed: ${error?.message}`);
   }
-
-  // Add comprehensive behavioral tracking (replaces single scroll depth)
-  const behavioralOpps = createBehavioralOpportunities(niche, pages[0].url);
-  allOpportunities.push(...behavioralOpps);
 
   return allOpportunities;
 }

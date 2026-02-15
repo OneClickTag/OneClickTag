@@ -434,19 +434,13 @@ export async function processPhase2Chunk(
   const niche = scan.confirmedNiche || 'other';
 
   // Get pages that haven't been deeply analyzed yet
-  // We track this by checking which pages don't have recommendations yet
+  // Track by importanceScore: null means not yet analyzed in Phase 2
   const allPages = await prisma.scanPage.findMany({
     where: { scanId },
-    orderBy: { importanceScore: 'desc' },
+    orderBy: { depth: 'asc' },
   });
 
-  const existingRecPages = await prisma.trackingRecommendation.findMany({
-    where: { scanId },
-    select: { pageUrl: true },
-  });
-  const analyzedUrls = new Set(existingRecPages.map(r => r.pageUrl).filter(Boolean));
-
-  const unanalyzedPages = allPages.filter(p => !analyzedUrls.has(p.url));
+  const unanalyzedPages = allPages.filter(p => p.importanceScore === null);
   const pagesToProcess = unanalyzedPages.slice(0, chunkSize);
 
   if (pagesToProcess.length === 0) {
@@ -491,13 +485,24 @@ export async function processPhase2Chunk(
     // Deduplicate with existing recommendations
     const existingRecs = await prisma.trackingRecommendation.findMany({
       where: { scanId },
-      select: { trackingType: true, selector: true, urlPattern: true, pageUrl: true },
+      select: { trackingType: true, name: true, selector: true, urlPattern: true, pageUrl: true },
     });
     const existingKeys = new Set(
-      existingRecs.map(r => `${r.trackingType}:${r.pageUrl}:${r.selector || r.urlPattern || ''}`)
+      existingRecs.map(r => {
+        // For behavioral trackings (urlPattern='.*', no selector), dedup by type+name
+        if (r.urlPattern === '.*' && !r.selector) {
+          return `${r.trackingType}:${r.name}`;
+        }
+        return `${r.trackingType}:${r.pageUrl}:${r.selector || r.urlPattern || ''}`;
+      })
     );
 
     const newOpps = allOpportunities.filter(opp => {
+      // For behavioral trackings, dedup by type+name (site-wide, not page-specific)
+      if (opp.urlPattern === '.*' && !opp.selector) {
+        const key = `${opp.trackingType}:${opp.name}`;
+        return !existingKeys.has(key);
+      }
       const key = `${opp.trackingType}:${opp.pageUrl}:${opp.selector || opp.urlPattern || ''}`;
       return !existingKeys.has(key);
     });
@@ -530,6 +535,12 @@ export async function processPhase2Chunk(
       newRecommendations = newOpps.length;
     }
   }
+
+  // Mark processed pages as analyzed (set importanceScore to 0 as placeholder; finalize recalculates)
+  await prisma.scanPage.updateMany({
+    where: { id: { in: pagesToProcess.map(p => p.id) } },
+    data: { importanceScore: 0 },
+  });
 
   const remainingUnanalyzed = unanalyzedPages.length - pagesToProcess.length;
   const hasMore = remainingUnanalyzed > 0;
