@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, MapIcon, ListChecks, AlertCircle } from 'lucide-react';
 import { ScanSummary, TrackingRecommendation } from '@/types/site-scanner';
 import {
   useRecommendations,
@@ -12,6 +12,8 @@ import {
 import { TrackingReadinessScore } from './TrackingReadinessScore';
 import { TechnologyDetection } from './TechnologyDetection';
 import { RecommendationsList } from './RecommendationsList';
+import { ExploredRoutes } from './ExploredRoutes';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface ScanResultsProps {
   customerId: string;
@@ -60,8 +62,36 @@ export function ScanResults({ customerId, scan, onCreateTracking }: ScanResultsP
 
   const counts = scan.recommendationCounts || { critical: 0, important: 0, recommended: 0, optional: 0 };
 
+  // Calculate coverage
+  const scanPages = scan.pages || [];
+  const totalRoutesDiscovered = scan.totalUrlsFound || 0;
+  const pagesScanned = scanPages.length;
+  const coveragePercent = totalRoutesDiscovered > 0
+    ? Math.round((pagesScanned / totalRoutesDiscovered) * 100)
+    : 0;
+
   return (
     <div className="space-y-4">
+      {/* Coverage Banner */}
+      {totalRoutesDiscovered > 0 && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <MapIcon className="h-5 w-5 text-blue-600" />
+              <div>
+                <h3 className="font-semibold text-blue-900">Site Coverage</h3>
+                <p className="text-sm text-blue-700">
+                  Explored {pagesScanned} of {totalRoutesDiscovered} discovered routes ({coveragePercent}% coverage)
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-3xl font-bold text-blue-600">{coveragePercent}%</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Summary row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Readiness score */}
@@ -121,35 +151,53 @@ export function ScanResults({ customerId, scan, onCreateTracking }: ScanResultsP
         existingTracking={scan.existingTracking}
       />
 
-      {/* Recommendations */}
-      <div className="bg-white rounded-lg border p-4">
-        <h3 className="font-semibold mb-3">
-          Tracking Recommendations ({scan.totalRecommendations || 0})
-        </h3>
+      {/* Tabs: Recommendations and Explored Routes */}
+      <Tabs defaultValue="recommendations" className="w-full">
+        <TabsList className="w-full justify-start">
+          <TabsTrigger value="recommendations" className="flex items-center gap-2">
+            <ListChecks className="h-4 w-4" />
+            Recommendations ({scan.totalRecommendations || 0})
+          </TabsTrigger>
+          <TabsTrigger value="routes" className="flex items-center gap-2">
+            <MapIcon className="h-4 w-4" />
+            Explored Routes ({scanPages.length})
+          </TabsTrigger>
+        </TabsList>
 
-        {loadingRecs ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin" />
+        <TabsContent value="recommendations" className="mt-4">
+          <div className="bg-white rounded-lg border p-4">
+            {loadingRecs ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin" />
+              </div>
+            ) : recommendations && recommendations.length > 0 ? (
+              <RecommendationsList
+                recommendations={recommendations}
+                onAccept={handleAccept}
+                onReject={handleReject}
+                onBulkAccept={handleBulkAccept}
+                onCreateTracking={onCreateTracking}
+                acceptingId={acceptingId}
+                rejectingId={rejectingId}
+                isBulkAccepting={bulkAcceptMutation.isPending}
+              />
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                No recommendations found.
+              </div>
+            )}
           </div>
-        ) : recommendations && recommendations.length > 0 ? (
-          <RecommendationsList
-            recommendations={recommendations}
-            onAccept={handleAccept}
-            onReject={handleReject}
-            onBulkAccept={handleBulkAccept}
-            onCreateTracking={onCreateTracking}
-            acceptingId={acceptingId}
-            rejectingId={rejectingId}
-            isBulkAccepting={bulkAcceptMutation.isPending}
+        </TabsContent>
+
+        <TabsContent value="routes" className="mt-4">
+          <ExploredRoutes
+            scanPages={scanPages}
+            recommendations={recommendations || []}
           />
-        ) : (
-          <div className="text-center py-8 text-muted-foreground">
-            No recommendations found.
-          </div>
-        )}
-      </div>
+        </TabsContent>
+      </Tabs>
 
-      {/* Site Map */}
+      {/* Site Map - Keep for backwards compatibility */}
       {scan.siteMap && Object.keys(scan.siteMap).length > 0 && (
         <div className="bg-white rounded-lg border p-4">
           <h3 className="font-semibold mb-3">Site Structure</h3>
