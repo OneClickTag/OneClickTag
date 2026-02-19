@@ -151,6 +151,8 @@ model StapeContainer {
   containerName        String
   serverDomain         String
   stapeDefaultDomain   String
+  stapeDomainId        String?
+  dnsRecords           Json?
   status               StapeContainerStatus @default(PENDING)
   domainStatus         StapeDomainStatus    @default(PENDING)
   gtmServerContainerId String?

@@ -454,6 +454,31 @@ export async function getPrivacyPageContent() {
 }
 
 /**
+ * Fetch cookie policy page content
+ */
+export async function getCookiePolicyPageContent() {
+  try {
+    const page = await prisma.contentPage.findUnique({
+      where: { slug: 'cookie-policy' },
+    });
+
+    if (page && page.isPublished) {
+      return {
+        title: page.title,
+        content: page.content,
+        metaTitle: page.metaTitle,
+        metaDescription: page.metaDescription,
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error fetching cookie policy page content:', error);
+    return null;
+  }
+}
+
+/**
  * Page-level SEO settings interface
  */
 export interface PageSeoSettings {
