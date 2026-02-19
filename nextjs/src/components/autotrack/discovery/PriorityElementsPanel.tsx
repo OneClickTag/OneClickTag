@@ -39,7 +39,7 @@ export function PriorityElementsPanel({ discovery }: PriorityElementsPanelProps)
       label: 'Forms',
       icon: <FileText className="h-3.5 w-3.5" />,
       count: priorityElements.forms.length,
-      items: priorityElements.forms.map(f => ({ label: f.type, detail: new URL(f.url).pathname })),
+      items: priorityElements.forms.map(f => ({ label: f.type, detail: tryPathname(f.url) })),
       color: 'text-red-600 bg-red-50',
     },
     {
@@ -47,7 +47,7 @@ export function PriorityElementsPanel({ discovery }: PriorityElementsPanelProps)
       label: 'CTAs',
       icon: <MousePointerClick className="h-3.5 w-3.5" />,
       count: priorityElements.ctas.length,
-      items: priorityElements.ctas.map(c => ({ label: c.text, detail: new URL(c.url).pathname })),
+      items: priorityElements.ctas.map(c => ({ label: c.text, detail: tryPathname(c.url) })),
       color: 'text-orange-600 bg-orange-50',
     },
     {
@@ -114,10 +114,30 @@ export function PriorityElementsPanel({ discovery }: PriorityElementsPanelProps)
     <div className="bg-white rounded-lg border p-4 space-y-2">
       <h4 className="text-xs font-medium text-muted-foreground uppercase">Priority Elements</h4>
       <div className="space-y-1">
-        {groups.map(group => (
-          <ElementGroupRow key={group.key} group={group} />
+        {groups.map((group, i) => (
+          <div
+            key={group.key}
+            style={{
+              animation: `fadeSlideIn 0.3s ease-out ${i * 60}ms both`,
+            }}
+          >
+            <ElementGroupRow group={group} />
+          </div>
         ))}
       </div>
+
+      <style jsx>{`
+        @keyframes fadeSlideIn {
+          from {
+            opacity: 0;
+            transform: translateX(-8px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
+        }
+      `}</style>
     </div>
   );
 }
@@ -131,14 +151,22 @@ function ElementGroupRow({ group }: { group: ElementGroup }) {
         className="w-full flex items-center gap-2 py-1.5 px-2 rounded hover:bg-gray-50 transition-colors text-left"
         onClick={() => setExpanded(!expanded)}
       >
-        {expanded ? <ChevronDown className="h-3 w-3 text-muted-foreground" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
+        <span className="transition-transform duration-200" style={{ transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+          <ChevronRight className="h-3 w-3 text-muted-foreground" />
+        </span>
         <span className={group.color.split(' ')[0]}>{group.icon}</span>
         <span className="text-sm flex-1">{group.label}</span>
         <Badge variant="outline" className={`text-xs ${group.color}`}>
           {group.count}
         </Badge>
       </button>
-      {expanded && group.items.length > 0 && (
+      <div
+        className="overflow-hidden transition-all duration-200 ease-out"
+        style={{
+          maxHeight: expanded ? `${Math.min(group.items.length, 10) * 24 + 16}px` : '0px',
+          opacity: expanded ? 1 : 0,
+        }}
+      >
         <div className="ml-8 mt-1 mb-2 space-y-0.5">
           {group.items.slice(0, 10).map((item, i) => (
             <div key={i} className="text-xs text-muted-foreground truncate">
@@ -150,7 +178,7 @@ function ElementGroupRow({ group }: { group: ElementGroup }) {
             <div className="text-xs text-muted-foreground">+{group.items.length - 10} more</div>
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

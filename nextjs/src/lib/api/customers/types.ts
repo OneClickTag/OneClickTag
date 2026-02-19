@@ -118,8 +118,15 @@ export interface StapeContainerResponse {
   containerName: string;
   serverDomain: string;
   stapeDefaultDomain: string;
-  status: string;
-  domainStatus: string;
+  stapeDomainId?: string | null;
+  dnsRecords?: Array<{
+    type: { type: string; label: string };
+    host: string;
+    value: string;
+    domain?: string;
+  }> | null;
+  status: 'PENDING' | 'PROVISIONING' | 'ACTIVE' | 'FAILED';
+  domainStatus: 'PENDING' | 'VALIDATED' | 'FAILED';
   gtmServerContainerId?: string | null;
   tenantId: string;
   createdAt: Date;

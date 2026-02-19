@@ -6,7 +6,10 @@ import {
   addStapeDomain,
   enableCookieKeeper,
   deleteStapeContainer,
+  validateStapeDomain,
 } from '@/lib/stape/client';
+
+const DOMAIN_REGEX = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)+$/;
 
 // POST: Enable server-side tracking and provision Stape container
 export async function POST(
@@ -24,6 +27,13 @@ export async function POST(
     if (!serverDomain) {
       return NextResponse.json(
         { error: 'serverDomain is required (e.g., track.yoursite.com)' },
+        { status: 400 }
+      );
+    }
+
+    if (!DOMAIN_REGEX.test(serverDomain)) {
+      return NextResponse.json(
+        { error: 'Invalid domain format. Use a subdomain like track.yoursite.com' },
         { status: 400 }
       );
     }
@@ -54,52 +64,75 @@ export async function POST(
 
     // 1. Create Stape sGTM container
     const containerName = `OneClickTag - ${customer.fullName}`;
+    const stapeZone = process.env.STAPE_DEFAULT_ZONE || 'usa';
     const stapeContainer = await createStapeContainer({
       name: containerName,
+      zone: { type: stapeZone },
     });
 
-    // 2. Add custom domain
-    const domainResult = await addStapeDomain(stapeContainer.id, {
-      domain: serverDomain,
-    });
+    const containerId = stapeContainer.identifier || String(stapeContainer.id);
 
-    // 3. Enable Cookie Keeper power-up (non-blocking)
     try {
-      await enableCookieKeeper(stapeContainer.id);
-    } catch (error) {
-      console.warn('Failed to enable Cookie Keeper:', error);
+      // 2. Add custom domain
+      const domainResult = await addStapeDomain(containerId, {
+        name: serverDomain,
+        cdnType: 'stape',
+      });
+
+      // Extract DNS records for the customer to configure
+      const dnsRecords = domainResult.records || [];
+      const aRecord = dnsRecords.find((r) => r.type?.type === 'a');
+      const cnameTarget = aRecord?.value || stapeContainer.stapeDomain;
+
+      // 3. Enable Cookie Keeper power-up (non-blocking)
+      try {
+        await enableCookieKeeper(containerId);
+      } catch (error) {
+        console.warn('Failed to enable Cookie Keeper:', error);
+      }
+
+      // 4. Save to database
+      const stapeRecord = await prisma.stapeContainer.create({
+        data: {
+          customerId: customer.id,
+          stapeContainerId: containerId,
+          containerName,
+          serverDomain,
+          stapeDefaultDomain: stapeContainer.stapeDomain || '',
+          stapeDomainId: domainResult.identifier,
+          dnsRecords: dnsRecords.length > 0 ? dnsRecords : undefined,
+          status: 'PROVISIONING',
+          domainStatus: 'PENDING',
+          gtmServerContainerId: stapeContainer.sGtmContainerId || null,
+          tenantId: session.tenantId,
+        },
+      });
+
+      // 5. Enable server-side on customer
+      await prisma.customer.update({
+        where: { id: customer.id },
+        data: { serverSideEnabled: true },
+      });
+
+      return NextResponse.json({
+        stapeContainer: stapeRecord,
+        dnsRecords,
+        cnameTarget,
+        message: `Add an A record: ${serverDomain} -> ${cnameTarget}`,
+      }, { status: 201 });
+    } catch (innerError) {
+      // Rollback: delete the Stape container we just created
+      try {
+        await deleteStapeContainer(containerId);
+      } catch (cleanupError) {
+        console.warn('Failed to cleanup Stape container after provisioning error:', cleanupError);
+      }
+      throw innerError;
     }
-
-    // 4. Save to database
-    const stapeRecord = await prisma.stapeContainer.create({
-      data: {
-        customerId: customer.id,
-        stapeContainerId: stapeContainer.id,
-        containerName,
-        serverDomain,
-        stapeDefaultDomain: stapeContainer.domain,
-        status: 'PROVISIONING',
-        domainStatus: 'PENDING',
-        gtmServerContainerId: stapeContainer.gtmContainerId || null,
-        tenantId: session.tenantId,
-      },
-    });
-
-    // 5. Enable server-side on customer
-    await prisma.customer.update({
-      where: { id: customer.id },
-      data: { serverSideEnabled: true },
-    });
-
-    return NextResponse.json({
-      stapeContainer: stapeRecord,
-      cnameTarget: domainResult.cnameTarget || stapeContainer.domain,
-      message: `Add a CNAME record: ${serverDomain} -> ${domainResult.cnameTarget || stapeContainer.domain}`,
-    }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Stape setup error:', message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('Stape setup error:', error);
+    return NextResponse.json({ error: 'Failed to set up server-side tracking' }, { status: 500 });
   }
 }
 
@@ -121,6 +154,24 @@ export async function GET(
 
     if (!customer) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
+    }
+
+    // Backfill DNS records from Stape if missing (for containers created before this field existed)
+    const stape = customer.stapeContainer;
+    if (stape && !stape.dnsRecords && stape.stapeDomainId) {
+      try {
+        const validation = await validateStapeDomain(stape.stapeContainerId, stape.stapeDomainId);
+        const dnsRecords = validation.records || [];
+        if (dnsRecords.length > 0) {
+          await prisma.stapeContainer.update({
+            where: { id: stape.id },
+            data: { dnsRecords },
+          });
+          (stape as Record<string, unknown>).dnsRecords = dnsRecords;
+        }
+      } catch (e) {
+        console.warn('Failed to backfill DNS records:', e);
+      }
     }
 
     return NextResponse.json({
@@ -166,6 +217,17 @@ export async function DELETE(
         where: { id: customer.stapeContainer.id },
       });
     }
+
+    // Reset server-side trackings to client-side
+    await prisma.tracking.updateMany({
+      where: { customerId: id, trackingMode: 'SERVER_SIDE' },
+      data: {
+        trackingMode: 'CLIENT_SIDE',
+        sgtmTriggerId: null,
+        sgtmTagId: null,
+        sgtmTagIdAds: null,
+      },
+    });
 
     // Disable server-side on customer
     await prisma.customer.update({

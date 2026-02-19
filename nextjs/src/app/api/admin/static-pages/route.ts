@@ -3,12 +3,13 @@ import prisma from '@/lib/prisma';
 import { getSessionFromRequest, requireAdmin } from '@/lib/auth/session';
 
 // Static page slugs managed by this endpoint
-const STATIC_PAGE_SLUGS = ['about', 'terms', 'privacy'];
+const STATIC_PAGE_SLUGS = ['about', 'terms', 'privacy', 'cookie-policy'];
 
 const DEFAULT_TITLES: Record<string, string> = {
   about: 'About Us',
   terms: 'Terms of Service',
   privacy: 'Privacy Policy',
+  'cookie-policy': 'Cookie Policy',
 };
 
 // GET /api/admin/static-pages - Get all static pages or a specific page

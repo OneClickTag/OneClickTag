@@ -112,6 +112,7 @@ export function useTrackings(filters: TrackingFilters = {}) {
   return useQuery({
     queryKey: ['trackings', filters],
     queryFn: () => api.get<TrackingsResponse>(`/api/trackings?${queryString}`),
+    staleTime: 30_000,
   });
 }
 

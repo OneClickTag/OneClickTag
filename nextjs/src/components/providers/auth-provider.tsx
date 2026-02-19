@@ -16,9 +16,9 @@ interface AuthContextType {
   user: AuthUser | null;
   firebaseUser: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  loginWithGoogle: () => Promise<void>;
-  register: (email: string, password: string, name: string) => Promise<void>;
+  login: (email: string, password: string, turnstileToken?: string) => Promise<void>;
+  loginWithGoogle: (turnstileToken?: string) => Promise<void>;
+  register: (email: string, password: string, name: string, turnstileToken?: string) => Promise<void>;
   logout: () => Promise<void>;
   getToken: () => Promise<string | null>;
 }
@@ -72,7 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, turnstileToken?: string) => {
     const { loginWithEmail } = await import('@/lib/auth/firebase-client');
     const userCredential = await loginWithEmail(email, password);
     const idToken = await userCredential.user.getIdToken();
@@ -83,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ idToken }),
+      body: JSON.stringify({ idToken, turnstileToken }),
     });
 
     if (!response.ok) {
@@ -97,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data.user);
   };
 
-  const loginWithGoogle = async () => {
+  const loginWithGoogle = async (turnstileToken?: string) => {
     const { loginWithGoogle: firebaseLoginWithGoogle } = await import('@/lib/auth/firebase-client');
     const userCredential = await firebaseLoginWithGoogle();
     const idToken = await userCredential.user.getIdToken();
@@ -108,7 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ idToken }),
+      body: JSON.stringify({ idToken, turnstileToken }),
     });
 
     if (!response.ok) {
@@ -122,7 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data.user);
   };
 
-  const register = async (email: string, password: string, name: string) => {
+  const register = async (email: string, password: string, name: string, turnstileToken?: string) => {
     const { registerWithEmail } = await import('@/lib/auth/firebase-client');
     const userCredential = await registerWithEmail(email, password, name);
     const idToken = await userCredential.user.getIdToken();
@@ -133,7 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ idToken, name, email }),
+      body: JSON.stringify({ idToken, name, email, turnstileToken }),
     });
 
     if (!response.ok) {

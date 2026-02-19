@@ -122,6 +122,9 @@ export async function executeGTMSync(data: GTMSyncJob): Promise<{ success: boole
           });
         }
 
+        // Ensure GA4 Client exists in the server container (idempotent)
+        await createGA4Client(gtm, serverAccountId, serverContainerId, serverWorkspaceId);
+
         // Create server-side trigger (custom event matching the GA4 event name)
         const serverTrigger = await createTrigger(gtm, serverAccountId, serverContainerId, serverWorkspaceId, {
           name: `${tracking.name} - Server Trigger`,

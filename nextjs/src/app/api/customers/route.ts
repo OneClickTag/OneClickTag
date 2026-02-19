@@ -103,6 +103,18 @@ function validateCreateInput(
     }
   }
 
+  // WebsiteUrl validation
+  if (input.websiteUrl !== undefined && input.websiteUrl !== null && input.websiteUrl !== '') {
+    if (typeof input.websiteUrl !== 'string') {
+      return { valid: false, error: 'Website URL must be a string' };
+    }
+    try {
+      new URL(input.websiteUrl as string);
+    } catch {
+      return { valid: false, error: 'Invalid website URL format' };
+    }
+  }
+
   if (input.status && !Object.values(CustomerStatus).includes(input.status as CustomerStatus)) {
     return { valid: false, error: 'Invalid customer status' };
   }
@@ -137,6 +149,7 @@ function validateCreateInput(
         ? (input.company as string).trim()
         : undefined,
       phone: input.phone as string | undefined,
+      websiteUrl: (input.websiteUrl && input.websiteUrl !== '') ? (input.websiteUrl as string).trim() : undefined,
       status: (input.status as CustomerStatus) || CustomerStatus.ACTIVE,
       tags: (input.tags as string[]) || [],
       notes: input.notes as string | undefined,

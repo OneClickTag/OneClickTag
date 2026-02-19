@@ -1,37 +1,14 @@
-// POST /api/customers/[id]/connect-google - Connect Google account
+// POST /api/customers/[id]/connect-google - Initiate Google OAuth for customer
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionFromRequest, requireTenant } from '@/lib/auth/session';
 import prisma from '@/lib/prisma';
+import { getAuthUrl } from '@/lib/google/oauth';
 import { CustomerNotFoundError } from '@/lib/api/customers/service';
+import crypto from 'crypto';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
-}
-
-// Validate connect Google input
-function validateConnectInput(
-  data: unknown
-): { valid: true; code: string; redirectUri?: string } | { valid: false; error: string } {
-  if (!data || typeof data !== 'object') {
-    return { valid: false, error: 'Invalid request body' };
-  }
-
-  const input = data as Record<string, unknown>;
-
-  if (!input.code || typeof input.code !== 'string') {
-    return { valid: false, error: 'Authorization code is required' };
-  }
-
-  if (input.redirectUri !== undefined && typeof input.redirectUri !== 'string') {
-    return { valid: false, error: 'Redirect URI must be a string' };
-  }
-
-  return {
-    valid: true,
-    code: input.code,
-    redirectUri: input.redirectUri as string | undefined,
-  };
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
@@ -51,50 +28,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       throw new CustomerNotFoundError(id);
     }
 
-    // Parse request body
-    const body = await request.json();
+    // Build state object for OAuth callback
+    const state = {
+      nonce: crypto.randomUUID(),
+      userId: session.id,
+      tenantId: session.tenantId,
+      customerId: id,
+      redirectUrl: `${request.nextUrl.origin}/customers/${id}`,
+      timestamp: Date.now(),
+    };
 
-    // Validate input
-    const validation = validateConnectInput(body);
-    if (!validation.valid) {
-      return NextResponse.json({ error: validation.error }, { status: 400 });
-    }
+    // Base64url-encode the state
+    const encodedState = Buffer.from(JSON.stringify(state)).toString('base64url');
 
-    // NOTE: The actual Google OAuth integration logic would go here
-    // This requires the GoogleIntegrationService which handles:
-    // 1. Exchanging the authorization code for tokens
-    // 2. Storing tokens in the database
-    // 3. Syncing Google Ads accounts
-    // 4. Syncing GA4 properties
-    // 5. Setting up GTM workspace and essentials
-    //
-    // For now, we return a placeholder response indicating this endpoint
-    // needs the Google integration service to be migrated
+    // Generate Google OAuth URL
+    const authUrl = getAuthUrl(encodedState);
 
-    // TODO: Migrate GoogleIntegrationService from NestJS
-    // The service is located at:
-    // /Users/orharazi/OneClickTag/backend/src/modules/customer/services/google-integration.service.ts
-
-    return NextResponse.json(
-      {
-        error: 'Google integration service not yet migrated to Next.js',
-        message: 'This endpoint requires the GoogleIntegrationService to be migrated from the NestJS backend',
-        customerId: id,
-        // Returning the structure that would be expected
-        expectedResponse: {
-          id: customer.id,
-          googleAccountId: null,
-          googleEmail: null,
-          googleAccount: {
-            connected: false,
-            hasGTMAccess: false,
-            hasGA4Access: false,
-            hasAdsAccess: false,
-          },
-        },
-      },
-      { status: 501 }
-    );
+    return NextResponse.json({ authUrl });
   } catch (error) {
     console.error(`POST /api/customers/[id]/connect-google error:`, error);
 

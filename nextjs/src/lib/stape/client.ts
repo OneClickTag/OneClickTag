@@ -6,23 +6,23 @@ import type {
   StapeDomainValidationResponse,
 } from './types';
 
-const STAPE_API_BASE_URL = process.env.STAPE_API_BASE_URL || 'https://api.app.stape.io/api/v2';
-const STAPE_API_KEY = process.env.STAPE_API_KEY || '';
-
 async function stapeRequest<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  if (!STAPE_API_KEY) {
+  const apiKey = process.env.STAPE_API_KEY;
+  const baseUrl = process.env.STAPE_API_BASE_URL || 'https://api.app.stape.io/api/v2';
+
+  if (!apiKey) {
     throw new Error('STAPE_API_KEY environment variable is not configured');
   }
 
-  const url = `${STAPE_API_BASE_URL}${path}`;
+  const url = `${baseUrl}${path}`;
   const response = await fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${STAPE_API_KEY}`,
+      'X-AUTH-TOKEN': apiKey,
       ...options.headers,
     },
   });
@@ -32,7 +32,14 @@ async function stapeRequest<T>(
     throw new Error(`Stape API error (${response.status}): ${errorBody}`);
   }
 
-  return response.json() as Promise<T>;
+  // Handle empty responses (e.g., 204 No Content from DELETE)
+  if (response.status === 204 || response.headers.get('content-length') === '0') {
+    return undefined as T;
+  }
+
+  const json = await response.json();
+  // Stape API wraps all responses in a { body: ..., error: ... } envelope
+  return (json.body ?? json) as T;
 }
 
 export async function createStapeContainer(
@@ -55,7 +62,6 @@ export async function deleteStapeContainer(
 ): Promise<void> {
   await stapeRequest(`/containers/${containerId}`, {
     method: 'DELETE',
-    body: JSON.stringify({ reason: 'Customer disconnected' }),
   });
 }
 

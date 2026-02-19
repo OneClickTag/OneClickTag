@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/components/providers/auth-provider';
 import { Logo } from '@/components/Logo';
 import { Chrome, Loader2 } from 'lucide-react';
+import { Turnstile } from '@marsidev/react-turnstile';
 
 function LoginForm() {
   const [email, setEmail] = useState('');
@@ -16,6 +17,7 @@ function LoginForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loginAttempted, setLoginAttempted] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -37,7 +39,7 @@ function LoginForm() {
     setLoginAttempted(true);
 
     try {
-      await login(email, password);
+      await login(email, password, turnstileToken || undefined);
       // Redirect handled by useEffect when user state updates
     } catch (err: any) {
       console.error('[Login] Sign in failed:', err);
@@ -53,7 +55,7 @@ function LoginForm() {
     setLoginAttempted(true);
 
     try {
-      await loginWithGoogle();
+      await loginWithGoogle(turnstileToken || undefined);
       // Redirect handled by useEffect when user state updates
     } catch (err: any) {
       console.error('Google sign in failed:', err);
@@ -176,6 +178,16 @@ function LoginForm() {
             Sign up
           </Link>
         </p>
+
+        {process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && (
+          <Turnstile
+            siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+            onSuccess={setTurnstileToken}
+            onError={() => setTurnstileToken(null)}
+            onExpire={() => setTurnstileToken(null)}
+            options={{ size: 'invisible' }}
+          />
+        )}
       </div>
     </div>
   );

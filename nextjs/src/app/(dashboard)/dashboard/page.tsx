@@ -11,6 +11,7 @@ import {
   AlertCircle,
   Clock,
   TrendingUp,
+  BarChart3,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -41,17 +42,34 @@ interface AnalyticsOverview {
 export default function DashboardPage() {
   const api = useApi();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['analytics', 'overview'],
     queryFn: () => api.get<AnalyticsOverview>('/api/analytics/overview'),
   });
+
+  if (isError) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-3xl font-bold">Dashboard</h1>
+        <Card>
+          <CardContent className="py-12 text-center">
+            <AlertCircle className="mx-auto h-12 w-12 text-red-400" />
+            <h3 className="mt-4 text-lg font-medium">Failed to load dashboard</h3>
+            <p className="text-muted-foreground mt-2">
+              {error instanceof Error ? error.message : 'An unexpected error occurred.'}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
       <div className="space-y-6">
         <h1 className="text-3xl font-bold">Dashboard</h1>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {[1, 2, 3, 4].map((i) => (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
             <Card key={i}>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <Skeleton className="h-4 w-24" />
@@ -76,6 +94,20 @@ export default function DashboardPage() {
       bgColor: 'bg-blue-100',
     },
     {
+      title: 'Connected Customers',
+      value: data?.overview.activeCustomers || 0,
+      icon: TrendingUp,
+      color: 'text-indigo-600',
+      bgColor: 'bg-indigo-100',
+    },
+    {
+      title: 'Total Trackings',
+      value: data?.overview.totalTrackings || 0,
+      icon: Activity,
+      color: 'text-purple-600',
+      bgColor: 'bg-purple-100',
+    },
+    {
       title: 'Active Trackings',
       value: data?.overview.activeTrackings || 0,
       icon: CheckCircle,
@@ -98,6 +130,9 @@ export default function DashboardPage() {
     },
   ];
 
+  const statusData = data?.trackingsByStatus || {};
+  const totalTrackings = Object.values(statusData).reduce((a, b) => a + b, 0);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -111,7 +146,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {stats.map((stat) => (
           <Card key={stat.title}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -128,6 +163,56 @@ export default function DashboardPage() {
           </Card>
         ))}
       </div>
+
+      {/* Tracking Status Breakdown */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5" />
+            Tracking Status Breakdown
+          </CardTitle>
+          <CardDescription>
+            Distribution of trackings by status
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {totalTrackings > 0 ? (
+            <div className="space-y-4">
+              {Object.entries(statusData).map(([status, count]) => {
+                const percentage = Math.round((count / totalTrackings) * 100);
+                const colors: Record<string, string> = {
+                  ACTIVE: 'bg-green-500',
+                  PENDING: 'bg-yellow-500',
+                  FAILED: 'bg-red-500',
+                  CREATING: 'bg-blue-500',
+                  PAUSED: 'bg-gray-500',
+                  SYNCING: 'bg-purple-500',
+                };
+                return (
+                  <div key={status}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="font-medium">{status}</span>
+                      <span className="text-muted-foreground">
+                        {count} ({percentage}%)
+                      </span>
+                    </div>
+                    <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full ${colors[status] || 'bg-gray-500'}`}
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-center text-muted-foreground py-8">
+              No tracking data available yet.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Recent Activity */}
       <Card>

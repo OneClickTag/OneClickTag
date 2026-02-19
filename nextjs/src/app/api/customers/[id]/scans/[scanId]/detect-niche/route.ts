@@ -69,6 +69,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       ? buildTechnologyArray(liveDiscovery.technologies)
       : [];
 
+    // Gather content from multiple key pages for richer niche detection
+    const keyPages = pages.filter(p =>
+      p.pageType === 'homepage' || p.pageType === 'about' || p.pageType === 'services' ||
+      p.pageType === 'pricing' || p.pageType === 'features' || p.pageType === 'other'
+    ).slice(0, 8);
+
+    const allPageContent = keyPages
+      .filter(p => p.contentSummary && p.url !== homepage?.url)
+      .map(p => `[${p.pageType || 'page'}] ${p.title || ''}: ${p.contentSummary}`)
+      .join('\n');
+
+    const homepageMeta = homepage?.metaTags as any;
+
     const crawlSummary = {
       websiteUrl: scan.websiteUrl,
       totalPages: pages.length,
@@ -76,10 +89,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       urlPatterns,
       homepageContent: {
         title: homepage?.title || null,
-        metaDescription: (homepage?.metaTags as any)?.description || null,
+        metaDescription: homepageMeta?.description || homepageMeta?.ogDescription || null,
+        ogType: homepageMeta?.ogType || null,
         headings: (homepage?.headings as any[]) || [],
         keyContent: homepage?.contentSummary || '',
       },
+      allPageContent,
       technologies,
       existingTracking: liveDiscovery?.technologies?.analytics?.map((a: string) => ({
         type: 'analytics',

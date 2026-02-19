@@ -354,7 +354,7 @@ export default function AdminContentPage() {
         <p className="text-sm text-blue-900">
           <strong>Tip:</strong> Content pages are accessible at{' '}
           <code className="bg-blue-100 px-2 py-1 rounded">/content/[slug]</code>.
-          Toggle the status to publish or unpublish pages. For static pages (About, Terms, Privacy),
+          Toggle the status to publish or unpublish pages. For static pages (About, Terms, Privacy, Cookie Policy),
           use the <a href="/admin/static-pages" className="underline font-medium">Static Pages</a> editor.
         </p>
       </div>

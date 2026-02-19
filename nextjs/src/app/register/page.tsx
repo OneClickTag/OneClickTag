@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/components/providers/auth-provider';
 import { Logo } from '@/components/Logo';
 import { Chrome, Loader2, Info } from 'lucide-react';
+import { Turnstile } from '@marsidev/react-turnstile';
 
 const EARLY_ACCESS_MODE = process.env.NEXT_PUBLIC_EARLY_ACCESS_MODE === 'true';
 
@@ -18,6 +19,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   const router = useRouter();
   const { user, register, loginWithGoogle } = useAuth();
@@ -34,7 +36,7 @@ export default function RegisterPage() {
     setError(null);
 
     try {
-      await register(email, password, name);
+      await register(email, password, name, turnstileToken || undefined);
       router.push('/dashboard');
     } catch (err: any) {
       console.error('Registration failed:', err);
@@ -48,7 +50,7 @@ export default function RegisterPage() {
     setError(null);
 
     try {
-      await loginWithGoogle();
+      await loginWithGoogle(turnstileToken || undefined);
       router.push('/dashboard');
     } catch (err: any) {
       console.error('Google sign up failed:', err);
@@ -183,6 +185,16 @@ export default function RegisterPage() {
             Sign in
           </Link>
         </p>
+
+        {process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && (
+          <Turnstile
+            siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+            onSuccess={setTurnstileToken}
+            onError={() => setTurnstileToken(null)}
+            onExpire={() => setTurnstileToken(null)}
+            options={{ size: 'invisible' }}
+          />
+        )}
       </div>
     </div>
   );

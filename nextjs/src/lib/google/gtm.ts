@@ -207,6 +207,18 @@ export async function createGA4Client(
   containerId: string,
   workspaceId: string
 ): Promise<tagmanager_v2.Schema$Client> {
+  // Check for existing GA4 Client (idempotent)
+  const listResponse = await gtm.accounts.containers.workspaces.clients.list({
+    parent: `accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}`,
+  });
+  const existing = listResponse.data.client?.find(
+    (c) => c.type === 'gaaw' && c.name === 'GA4 Client'
+  );
+  if (existing) {
+    console.log(`[GTM] Found existing GA4 Client (${existing.clientId})`);
+    return existing;
+  }
+
   const response = await gtm.accounts.containers.workspaces.clients.create({
     parent: `accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}`,
     requestBody: {

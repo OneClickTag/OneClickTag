@@ -12,26 +12,34 @@ export interface Customer {
   fullName: string;
   company?: string;
   phone?: string;
+  websiteUrl?: string;
   status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'ARCHIVED';
   tags: string[];
   notes?: string;
   googleAccountId?: string;
   googleEmail?: string;
+  gtmContainerId?: string;
+  gtmWorkspaceId?: string;
+  gtmContainerName?: string;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface CustomersResponse {
-  customers: Customer[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
+  data: Customer[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  };
 }
 
 export interface CustomerFilters {
   page?: number;
-  pageSize?: number;
+  limit?: number;
   search?: string;
   status?: string;
   sortBy?: string;
@@ -49,6 +57,7 @@ export function useCustomers(filters: CustomerFilters = {}) {
   return useQuery({
     queryKey: ['customers', filters],
     queryFn: () => api.get<CustomersResponse>(`/api/customers?${queryString}`),
+    staleTime: 30_000,
   });
 }
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyIdToken } from '@/lib/auth/firebase-admin';
+import { verifyTurnstile } from '@/lib/auth/turnstile';
 import prisma from '@/lib/prisma';
 import { SignJWT } from 'jose';
 
@@ -14,6 +15,7 @@ interface RegisterRequestBody {
   idToken: string;
   name?: string;
   tenantName?: string;
+  turnstileToken?: string;
 }
 
 interface RegisterResponse {
@@ -81,6 +83,18 @@ export async function POST(request: NextRequest): Promise<NextResponse<RegisterR
         { error: 'Firebase ID token is required' },
         { status: 400 }
       );
+    }
+
+    // Verify Turnstile CAPTCHA
+    if (body.turnstileToken) {
+      const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined;
+      const isHuman = await verifyTurnstile(body.turnstileToken, ip);
+      if (!isHuman) {
+        return NextResponse.json(
+          { error: 'CAPTCHA verification failed. Please try again.' },
+          { status: 403 }
+        );
+      }
     }
 
     // Verify Firebase token

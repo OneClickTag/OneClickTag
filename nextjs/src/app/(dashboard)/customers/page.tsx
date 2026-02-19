@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useCustomers, useDeleteCustomer } from '@/hooks/use-customers';
 import { Button } from '@/components/ui/button';
@@ -25,14 +26,24 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 export default function CustomersPage() {
+  const router = useRouter();
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
   const pageSize = 10;
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   const { data, isLoading, refetch } = useCustomers({
     page,
-    pageSize,
-    search: search || undefined,
+    limit: pageSize,
+    search: debouncedSearch || undefined,
   });
 
   const deleteCustomer = useDeleteCustomer();
@@ -157,11 +168,12 @@ export default function CustomersPage() {
           ) : (
             <DataTable
               columns={columns}
-              data={data?.customers || []}
-              pageCount={data?.totalPages || 1}
+              data={data?.data || []}
+              pageCount={data?.pagination?.totalPages || 1}
               page={page}
               pageSize={pageSize}
               onPageChange={setPage}
+              onRowClick={(row: { id: string }) => router.push(`/customers/${row.id}`)}
             />
           )}
         </CardContent>

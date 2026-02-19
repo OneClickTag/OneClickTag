@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { EmailTriggerAction } from '@prisma/client';
 import { z } from 'zod';
 import { sendTriggeredEmail, getEmailLogoUrl } from '@/lib/email/email.service';
+import { verifyTurnstile } from '@/lib/auth/turnstile';
 
 // Validation schema for creating a lead
 const createLeadSchema = z.object({
@@ -19,6 +20,7 @@ const createLeadSchema = z.object({
   utmSource: z.string().optional(),
   utmMedium: z.string().optional(),
   utmCampaign: z.string().optional(),
+  turnstileToken: z.string().optional(),
 });
 
 /**
@@ -42,6 +44,18 @@ export async function POST(request: NextRequest) {
     }
 
     const data = validationResult.data;
+
+    // Verify Turnstile CAPTCHA
+    if (data.turnstileToken) {
+      const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined;
+      const isHuman = await verifyTurnstile(data.turnstileToken, ip);
+      if (!isHuman) {
+        return NextResponse.json(
+          { error: 'CAPTCHA verification failed. Please try again.' },
+          { status: 403 }
+        );
+      }
+    }
 
     // Check if email already exists
     const existingLead = await prisma.lead.findUnique({

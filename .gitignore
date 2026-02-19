@@ -1,9 +1,5 @@
 # Dependencies
 node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
 
 # Environment files
 .env
@@ -13,7 +9,6 @@ pnpm-debug.log*
 .env.development.local
 .env.test.local
 .env.production.local
-*.env.backup
 
 # Firebase/Google Cloud credentials (NEVER commit these!)
 *firebase*.json
@@ -25,20 +20,18 @@ serviceAccountDetails.json
 credentials.json
 client_secret*.json
 
-# ECS environment files (contain secrets, upload to S3 manually)
-backend/api.env
-backend/api.env.dev
-backend/api.env.stage
-backend/api.env.prod
-frontend/frontend.env
-frontend/frontend.env.dev
-frontend/frontend.env.stage
-frontend/frontend.env.prod
+# Next.js build output
+.next/
+out/
 
 # Build outputs
 dist/
 build/
 coverage/
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
 
 # IDE
 .vscode/
@@ -53,25 +46,22 @@ Thumbs.db
 # Logs
 logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Runtime data
-pids
-*.pid
-*.seed
-*.pid.lock
-
-# Optional npm cache directory
-.npm
-
-# Optional REPL history
-.node_repl_history
-
-# Temporary folders
-tmp/
-temp/*.env.production
+# Vercel
+.vercel
 
 # Playwright MCP
 .playwright-mcp/
 
+# Turbo
+.turbo/
+
 # Git worktrees
 .worktrees/
+
+# Temporary folders
+tmp/
+temp/

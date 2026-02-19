@@ -48,8 +48,8 @@ export function useApi() {
       });
 
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ message: 'Request failed' }));
-        throw new Error(error.message || `HTTP ${response.status}`);
+        const errorData = await response.json().catch(() => ({ error: 'Request failed' }));
+        throw new Error(errorData.error || errorData.message || `HTTP ${response.status}`);
       }
 
       return response.json();

@@ -34,7 +34,7 @@ export async function listAccessibleAccounts(
 
   // Use REST API to list accessible customers
   const response = await fetch(
-    'https://googleads.googleapis.com/v17/customers:listAccessibleCustomers',
+    'https://googleads.googleapis.com/v20/customers:listAccessibleCustomers',
     {
       headers: {
         'Authorization': `Bearer ${credentials.token}`,
@@ -85,7 +85,7 @@ async function getAccountDetails(
   `;
 
   const response = await fetch(
-    `https://googleads.googleapis.com/v17/customers/${customerId}/googleAds:searchStream`,
+    `https://googleads.googleapis.com/v20/customers/${customerId}/googleAds:searchStream`,
     {
       method: 'POST',
       headers: {
@@ -159,7 +159,7 @@ export async function createConversionAction(
   ];
 
   const response = await fetch(
-    `https://googleads.googleapis.com/v17/customers/${customerId}/conversionActions:mutate`,
+    `https://googleads.googleapis.com/v20/customers/${customerId}/conversionActions:mutate`,
     {
       method: 'POST',
       headers: {
@@ -206,7 +206,7 @@ async function getConversionLabel(
   `;
 
   const response = await fetch(
-    `https://googleads.googleapis.com/v17/customers/${customerId}/googleAds:searchStream`,
+    `https://googleads.googleapis.com/v20/customers/${customerId}/googleAds:searchStream`,
     {
       method: 'POST',
       headers: {

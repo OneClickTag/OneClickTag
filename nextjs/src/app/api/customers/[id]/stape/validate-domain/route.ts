@@ -32,26 +32,41 @@ export async function POST(
 
     const stape = customer.stapeContainer;
 
-    // Call Stape API to validate the domain
+    if (!stape.stapeDomainId) {
+      return NextResponse.json(
+        { error: 'Domain ID not found. Please re-enable server-side tracking.' },
+        { status: 400 }
+      );
+    }
+
+    // Call Stape API to revalidate the domain using the stored domain ID
     const validation = await validateStapeDomain(
       stape.stapeContainerId,
-      stape.serverDomain
+      stape.stapeDomainId
     );
 
+    // Check domain status from Stape response (status.type is lowercase: "active", "verifying", etc.)
+    const domainStatusType = validation.status?.type?.toLowerCase();
+    const isValid = domainStatusType === 'active' || domainStatusType === 'verified';
+
     // Update domain status in database
-    const newDomainStatus = validation.isValid ? 'VALIDATED' : 'FAILED';
-    const newContainerStatus = validation.isValid ? 'ACTIVE' : stape.status;
+    const newDomainStatus = isValid ? 'VALIDATED' : 'FAILED';
+    const newContainerStatus = isValid ? 'ACTIVE' : stape.status;
+
+    // Also persist DNS records if returned (backfills old containers that lack them)
+    const dnsRecords = validation.records || [];
 
     await prisma.stapeContainer.update({
       where: { id: stape.id },
       data: {
         domainStatus: newDomainStatus,
         status: newContainerStatus,
+        ...(dnsRecords.length > 0 ? { dnsRecords } : {}),
       },
     });
 
     return NextResponse.json({
-      isValid: validation.isValid,
+      isValid,
       domain: stape.serverDomain,
       domainStatus: newDomainStatus,
       containerStatus: newContainerStatus,
@@ -59,6 +74,6 @@ export async function POST(
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Domain validation error:', message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: 'Domain validation failed' }, { status: 500 });
   }
 }

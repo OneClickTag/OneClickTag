@@ -11,6 +11,7 @@ import { SiteScanStatus } from '@prisma/client';
 import {
   CrawledPage,
   ExtractedElement,
+  SKIP_PATTERNS,
 } from '../interfaces';
 import { parsePage, discoverLinks, extractPriorityElements } from './html-crawler';
 import { detectFromHTML, summarizeTechnologies } from './html-technology-detector';
@@ -133,8 +134,14 @@ export async function processPhase1Chunk(
   const baseUrl = new URL(scan.websiteUrl);
   const baseDomain = getBaseDomain(baseUrl.hostname);
 
+  // Build a Set of queued URLs for O(1) lookup (instead of urlQueue.some)
+  const queuedUrls = new Set(urlQueue.map(q => q.url));
+
   // Pop next N URLs from queue
   const toProcess = urlQueue.splice(0, chunkSize);
+  // Remove popped URLs from the lookup set
+  for (const item of toProcess) queuedUrls.delete(item.url);
+
   const newPages: ChunkResult['newPages'] = [];
   let loginDetected = scan.loginDetected;
   let loginUrl = scan.loginUrl;
@@ -172,19 +179,32 @@ export async function processPhase1Chunk(
         break;
       }
 
-      // Skip if already crawled or over max pages
+      // Skip if already crawled, over max pages, or non-HTML resource
       if (crawledSet.has(item.url)) continue;
       if (crawledSet.size >= scan.maxPages) break;
       if (item.depth > scan.maxDepth) continue;
+      if (shouldSkipCrawlUrl(item.url)) continue;
 
       crawledSet.add(item.url);
 
       // Navigate with Playwright
+      // Use networkidle for homepage/first pages to catch JS-rendered links
+      const isFirstPage = crawledSet.size <= 2;
+      const waitUntil = isFirstPage ? 'networkidle' as const : 'domcontentloaded' as const;
       try {
-        await page.goto(item.url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+        await page.goto(item.url, { waitUntil, timeout: isFirstPage ? 20000 : 15000 });
+        // Extra wait for homepage to ensure SPA frameworks fully render
+        if (isFirstPage) {
+          await page.waitForTimeout(1500);
+        }
       } catch (navError: any) {
-        console.warn(`Failed to navigate to ${item.url}: ${navError?.message}`);
-        continue;
+        // If networkidle times out, the page likely loaded fine — continue
+        if (isFirstPage && navError?.message?.includes('timeout')) {
+          console.warn(`networkidle timeout for ${item.url}, continuing with loaded content`);
+        } else {
+          console.warn(`Failed to navigate to ${item.url}: ${navError?.message}`);
+          continue;
+        }
       }
 
       const finalUrl = page.url();
@@ -209,7 +229,7 @@ export async function processPhase1Chunk(
         }
       }
 
-      // Extract page data via page.evaluate()
+      // Extract page data via page.evaluate() — enhanced link discovery
       const pageData = await page.evaluate(() => {
         const title = document.title || undefined;
         const metaDesc = document.querySelector('meta[name="description"]')?.getAttribute('content') || undefined;
@@ -232,12 +252,99 @@ export async function processPhase1Chunk(
         const mainContent = document.querySelector('main, article, [role="main"], .content, #content');
         const contentSummary = (mainContent?.textContent || document.body?.textContent || '').trim().slice(0, 500);
 
-        // Collect links
-        const links = Array.from(document.querySelectorAll('a[href]'))
-          .map(a => {
-            try { return new URL(a.getAttribute('href') || '', window.location.href).href; } catch { return null; }
-          })
-          .filter((h): h is string => h !== null && h.startsWith('http'));
+        // --- Enhanced link discovery ---
+        const allLinks = new Set<string>();
+        const base = window.location.href;
+
+        const addUrl = (href: string) => {
+          try {
+            const url = new URL(href, base);
+            if (url.protocol === 'http:' || url.protocol === 'https:') {
+              allLinks.add(url.href);
+            }
+          } catch { /* invalid URL */ }
+        };
+
+        // 1. Standard <a href> links
+        Array.from(document.querySelectorAll('a[href]')).forEach(a => {
+          const href = a.getAttribute('href');
+          if (href) addUrl(href);
+        });
+
+        // 2. data-href, data-url, data-link attributes (used by frameworks/components)
+        Array.from(document.querySelectorAll('[data-href], [data-url], [data-link]')).forEach(el => {
+          const href = el.getAttribute('data-href') || el.getAttribute('data-url') || el.getAttribute('data-link');
+          if (href) addUrl(href);
+        });
+
+        // 3. Image map area links
+        Array.from(document.querySelectorAll('area[href]')).forEach(area => {
+          const href = area.getAttribute('href');
+          if (href) addUrl(href);
+        });
+
+        // 4. <link> elements (canonical, alternate, prerender)
+        Array.from(document.querySelectorAll('link[rel="alternate"][href], link[rel="canonical"][href], link[rel="prerender"][href]')).forEach(link => {
+          const href = link.getAttribute('href');
+          if (href) addUrl(href);
+        });
+
+        // 5. Next.js route manifest
+        const nextData = (window as any).__NEXT_DATA__;
+        if (nextData?.buildManifest?.sortedPages) {
+          for (const route of nextData.buildManifest.sortedPages) {
+            if (!route.startsWith('/_') && !route.startsWith('/api/')) {
+              addUrl(route);
+            }
+          }
+        }
+        // Also check Next.js page list
+        if (nextData?.props?.pageProps) {
+          const props = nextData.props.pageProps;
+          // Some Next.js apps expose navigation/page lists in props
+          const findUrls = (obj: any, depth: number) => {
+            if (depth > 3 || !obj) return;
+            if (typeof obj === 'string' && (obj.startsWith('/') || obj.startsWith('http'))) {
+              addUrl(obj);
+            }
+            if (Array.isArray(obj)) {
+              obj.forEach(item => findUrls(item, depth + 1));
+            } else if (typeof obj === 'object') {
+              for (const key of ['url', 'href', 'path', 'slug', 'link', 'route']) {
+                if (obj[key] && typeof obj[key] === 'string') addUrl(obj[key]);
+              }
+            }
+          };
+          findUrls(props, 0);
+        }
+
+        // 6. Nuxt.js routes
+        const nuxtData = (window as any).__NUXT__;
+        if (nuxtData?.routeMap) {
+          for (const route of Object.keys(nuxtData.routeMap)) {
+            addUrl(route);
+          }
+        }
+
+        // 7. onclick/data-navigate with URL patterns
+        Array.from(document.querySelectorAll('[onclick], [data-navigate]')).forEach(el => {
+          const handler = el.getAttribute('onclick') || el.getAttribute('data-navigate') || '';
+          const urlMatches = handler.match(/['"](\/?[a-zA-Z][\w\-/]*(?:\?[^'"]*)?)['"]/g);
+          if (urlMatches) {
+            for (const match of urlMatches) {
+              const path = match.slice(1, -1);
+              if (path.startsWith('/') && !path.startsWith('//')) addUrl(path);
+            }
+          }
+        });
+
+        // 8. Meta refresh redirects
+        const metaRefresh = document.querySelector('meta[http-equiv="refresh"]');
+        if (metaRefresh) {
+          const content = metaRefresh.getAttribute('content') || '';
+          const urlMatch = content.match(/url=(.+)/i);
+          if (urlMatch) addUrl(urlMatch[1].trim());
+        }
 
         return {
           title: title || null,
@@ -250,7 +357,7 @@ export async function processPhase1Chunk(
           hasEmailLink,
           hasDownloadLink,
           contentSummary,
-          links: Array.from(new Set(links)),
+          links: Array.from(allLinks),
         };
       });
 
@@ -331,28 +438,20 @@ export async function processPhase1Chunk(
       const pageType = crawledPage.pageType || 'other';
       discovery.pageTypes[pageType] = (discovery.pageTypes[pageType] || 0) + 1;
 
-      // Add discovered URLs from page links
-      for (const link of pageData.links) {
-        if (!crawledSet.has(link) && !urlQueue.some(q => q.url === link)) {
-          try {
-            const linkDomain = getBaseDomain(new URL(link).hostname);
-            if (linkDomain === baseDomain) {
-              urlQueue.push({ url: link, depth: item.depth + 1, source: 'crawl' });
-            }
-          } catch { /* skip */ }
-        }
-      }
-
-      // Add discovered URLs from interactions
-      for (const discoveredUrl of interactionResult.discoveredUrls) {
-        if (!crawledSet.has(discoveredUrl) && !urlQueue.some(q => q.url === discoveredUrl)) {
-          try {
-            const linkDomain = getBaseDomain(new URL(discoveredUrl).hostname);
-            if (linkDomain === baseDomain) {
-              urlQueue.push({ url: discoveredUrl, depth: item.depth + 1, source: 'crawl' });
-            }
-          } catch { /* skip */ }
-        }
+      // Add discovered URLs from page links + interactions (combined, deduplicated)
+      const allDiscoveredLinks = [...pageData.links, ...interactionResult.discoveredUrls];
+      for (const rawLink of allDiscoveredLinks) {
+        const link = normalizeCrawlUrl(rawLink);
+        if (!link) continue;
+        if (crawledSet.has(link) || queuedUrls.has(link)) continue;
+        if (shouldSkipCrawlUrl(link)) continue;
+        try {
+          const linkDomain = getBaseDomain(new URL(link).hostname);
+          if (linkDomain === baseDomain) {
+            urlQueue.push({ url: link, depth: item.depth + 1, source: 'crawl' });
+            queuedUrls.add(link);
+          }
+        } catch { /* skip */ }
       }
 
       // Update URL patterns (sample)
@@ -647,7 +746,9 @@ function getBaseDomain(hostname: string): string {
 }
 
 function classifyPageType(url: string, pageData: any): string | null {
-  const path = new URL(url).pathname.toLowerCase();
+  const parsed = new URL(url);
+  // Use hash path for hash-based routing (e.g. /#/about), fallback to pathname
+  const path = (parsed.hash.startsWith('#/') ? parsed.hash.slice(1) : parsed.pathname).toLowerCase();
   if (/\/(checkout|pay|payment)/i.test(path)) return 'checkout';
   if (/\/(cart|basket|bag)/i.test(path)) return 'cart';
   if (/\/(product|item|shop)\//i.test(path)) return 'product';
@@ -661,7 +762,7 @@ function classifyPageType(url: string, pageData: any): string | null {
   if (/\/(services|solutions)/i.test(path)) return 'services';
   if (/\/(demo|request-demo)/i.test(path)) return 'demo';
   if (/\/(terms|privacy|legal|policy)/i.test(path)) return 'terms';
-  if (path === '/' || path === '') return 'homepage';
+  if ((path === '/' || path === '') && !parsed.hash) return 'homepage';
   if (/\/(categor|collection)/i.test(path)) return 'category';
   return 'other';
 }
@@ -677,4 +778,40 @@ function detectTemplateGroup(url: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Normalize a discovered URL for deduplication and queue insertion.
+ * - Preserves hash for hash-based routing (#/path)
+ * - Strips in-page anchors (#section)
+ * - Removes tracking query params
+ * - Normalizes trailing slashes
+ */
+function normalizeCrawlUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    // Only HTTP(S)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    // Preserve hash for hash-based routing (#/path), strip in-page anchors
+    if (parsed.hash && !parsed.hash.startsWith('#/')) {
+      parsed.hash = '';
+    }
+    // Normalize pathname
+    parsed.pathname = parsed.pathname.replace(/\/+$/, '') || '/';
+    // Remove tracking/session query params
+    const trackingParams = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'fbclid', 'gclid', 'ref', 'mc_cid', 'mc_eid'];
+    for (const param of trackingParams) {
+      parsed.searchParams.delete(param);
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if a URL should be skipped for crawling (non-HTML resources, admin pages, etc.)
+ */
+function shouldSkipCrawlUrl(url: string): boolean {
+  return SKIP_PATTERNS.some(pattern => pattern.test(url));
 }

@@ -117,47 +117,75 @@ export class AIAnalysisService {
   // ========================================
 
   private buildNicheDetectionPrompt(data: CrawlSummary): string {
-    return `Analyze this website and determine its industry niche.
+    // Gather all page content summaries for richer context
+    const allPageContent = (data as any).allPageContent as string | undefined;
+
+    return `You are an expert website analyst. Analyze this website's content, structure, and technology to determine its PRIMARY business niche.
 
 Website: ${data.websiteUrl}
 Total Pages Crawled: ${data.totalPages}
 
-Page Type Distribution:
-${Object.entries(data.pageTypes).map(([type, count]) => `- ${type}: ${count}`).join('\n')}
+## Page Type Distribution
+${Object.entries(data.pageTypes).map(([type, count]) => `- ${type}: ${count}`).join('\n') || 'No page types detected'}
 
-URL Patterns Found:
-${data.urlPatterns.slice(0, 20).map(p => `- ${p}`).join('\n')}
+## URL Patterns Found
+${data.urlPatterns.slice(0, 30).map(p => `- ${p}`).join('\n') || 'None'}
 
-Homepage Title: ${data.homepageContent.title || 'N/A'}
-Homepage Meta Description: ${data.homepageContent.metaDescription || 'N/A'}
-Homepage Headings:
-${data.homepageContent.headings.slice(0, 10).map(h => `  H${h.level}: ${h.text}`).join('\n')}
+## Homepage Content
+Title: ${data.homepageContent.title || 'N/A'}
+Meta Description: ${data.homepageContent.metaDescription || 'N/A'}
+OG Type: ${(data as any).homepageContent?.ogType || 'N/A'}
+Headings:
+${data.homepageContent.headings.slice(0, 15).map(h => `  H${h.level}: ${h.text}`).join('\n') || '  None'}
 
-Key Content (first 500 chars):
-${data.homepageContent.keyContent.slice(0, 500)}
+Main Content:
+${data.homepageContent.keyContent.slice(0, 1500)}
 
-Detected Technologies:
+${allPageContent ? `## Additional Page Content (sampled from inner pages)\n${allPageContent.slice(0, 2000)}` : ''}
+
+## Detected Technologies
 ${data.technologies.map(t => `- ${t.name} (${t.category})`).join('\n') || 'None detected'}
 
-Existing Tracking:
+## Existing Tracking
 ${data.existingTracking.map(t => `- ${t.provider}: ${t.type}`).join('\n') || 'None detected'}
 
-Has E-commerce Elements: ${data.hasEcommerce}
-Has Forms: ${data.hasForms}
-Has Video: ${data.hasVideo}
-Has Phone Numbers: ${data.hasPhoneNumbers}
+## Structural Signals
+- E-commerce elements (cart/checkout): ${data.hasEcommerce}
+- Forms detected: ${data.hasForms}
+- Video content: ${data.hasVideo}
+- Phone numbers: ${data.hasPhoneNumbers}
+
+## Niche Classification Guide
+Choose the BEST match from these niches. Read the descriptions carefully:
+
+- **saas**: Software-as-a-Service products. Indicators: pricing/plans pages, free trial/demo CTAs, feature lists, API/integration pages, dashboard mentions, "platform"/"solution" language, subscription billing. Includes AI tools, developer tools, marketing tools, productivity software, B2B/B2C software.
+- **e-commerce**: Online stores selling physical or digital products. Indicators: product listings, shopping cart, checkout flow, SKUs, "add to cart", product categories, Shopify/WooCommerce.
+- **education**: Educational platforms, online courses, training. Indicators: course listings, lesson/module pages, enrollment, certifications, learning paths, student portals, webinars, tutorials, "learn"/"academy"/"course" language.
+- **lead-generation**: Service businesses collecting leads. Indicators: contact forms, "get a quote", consultation booking, service pages, testimonials, portfolio, team pages, local business signals.
+- **content**: Blogs, news sites, media publishers. Indicators: article pages, author bylines, publish dates, categories/tags, newsletter signup, "read more" links, WordPress/Ghost.
+- **marketplace**: Two-sided platforms connecting buyers/sellers. Indicators: listings from multiple sellers, vendor profiles, search/filter by seller, commission language.
+- **healthcare**: Medical, health, wellness businesses. Indicators: doctor/provider pages, appointment booking, medical terminology, HIPAA references, health conditions.
+- **finance**: Financial services, fintech, insurance. Indicators: account management, loan/investment calculators, financial products, regulatory compliance language.
+- **real-estate**: Property listings, real estate agencies. Indicators: property search, MLS listings, agent profiles, mortgage calculators, neighborhood guides.
+- **travel**: Travel booking, hospitality, tourism. Indicators: destination pages, booking engine, hotel/flight search, itineraries, travel guides.
+- **non-profit**: Charities, foundations, NGOs. Indicators: donation pages, volunteer signup, mission/impact pages, cause-related content.
+- **food-delivery**: Restaurants, food ordering, meal delivery. Indicators: menus, order online, delivery zones, restaurant listings.
+- **entertainment**: Media, gaming, streaming, events. Indicators: content catalogs, streaming players, event listings, ticket purchasing.
+- **other**: ONLY if the site truly doesn't fit any category above. This should be rare.
+
+IMPORTANT: Avoid defaulting to "other". Most websites fit into one of the above categories. A site that sells AI tools or software is "saas", not "other". A site that teaches things is "education", not "other". A consulting agency is "lead-generation". Think carefully about what the business DOES.
 
 Respond with ONLY valid JSON in this exact format:
 {
-  "niche": "one of: e-commerce, saas, lead-generation, content, non-profit, marketplace, education, healthcare, real-estate, travel, finance, food-delivery, entertainment, other",
-  "subCategory": "more specific category, e.g., 'fashion e-commerce with B2C focus'",
+  "niche": "exact value from the list above",
+  "subCategory": "more specific description, e.g., 'AI-powered SaaS platform for content generation'",
   "confidence": 0.95,
-  "reasoning": "Brief explanation of why this niche was detected",
+  "reasoning": "2-3 sentence explanation of why this niche was detected based on the evidence",
   "signals": [
-    {"type": "url_pattern", "description": "Found 15 product pages", "weight": 0.8},
-    {"type": "content", "description": "Shopping cart and checkout flow detected", "weight": 0.9}
+    {"type": "url_pattern", "description": "specific evidence from the data above", "weight": 0.8},
+    {"type": "content", "description": "specific content evidence", "weight": 0.9}
   ],
-  "suggestedTrackingFocus": ["purchase tracking", "add-to-cart events", "product views"]
+  "suggestedTrackingFocus": ["specific tracking recommendations for this niche"]
 }`;
   }
 
@@ -257,8 +285,11 @@ Respond with ONLY valid JSON:
       if (!jsonMatch) return null;
 
       const parsed = JSON.parse(jsonMatch[0]);
+      const rawNiche = (parsed.niche || 'other').toLowerCase().trim();
+      const normalizedNiche = this.normalizeNiche(rawNiche);
+
       return {
-        niche: parsed.niche || 'other',
+        niche: normalizedNiche,
         subCategory: parsed.subCategory || null,
         confidence: Math.min(1, Math.max(0, parsed.confidence || 0.5)),
         reasoning: parsed.reasoning || '',
@@ -273,6 +304,160 @@ Respond with ONLY valid JSON:
       console.warn(`Failed to parse niche response: ${error?.message}`);
       return null;
     }
+  }
+
+  /**
+   * Normalize AI-returned niche values to match AVAILABLE_NICHES exactly.
+   * Handles aliases, typos, and related terms.
+   */
+  private normalizeNiche(raw: string): string {
+    const VALID_NICHES = [
+      'e-commerce', 'saas', 'lead-generation', 'content', 'non-profit',
+      'marketplace', 'education', 'healthcare', 'real-estate', 'travel',
+      'finance', 'food-delivery', 'entertainment', 'other',
+    ];
+
+    // Direct match
+    if (VALID_NICHES.includes(raw)) return raw;
+
+    // Alias mapping - maps common AI responses to correct niche values
+    const NICHE_ALIASES: Record<string, string> = {
+      // SaaS aliases
+      'software': 'saas',
+      'software-as-a-service': 'saas',
+      'b2b-saas': 'saas',
+      'b2c-saas': 'saas',
+      'devtools': 'saas',
+      'developer-tools': 'saas',
+      'dev-tools': 'saas',
+      'ai-tools': 'saas',
+      'ai-platform': 'saas',
+      'ai': 'saas',
+      'ai-saas': 'saas',
+      'platform': 'saas',
+      'tool': 'saas',
+      'tools': 'saas',
+      'productivity': 'saas',
+      'marketing-tools': 'saas',
+      'analytics-platform': 'saas',
+      'crm': 'saas',
+      'technology': 'saas',
+      'tech': 'saas',
+      'api': 'saas',
+      'cloud': 'saas',
+      'automation': 'saas',
+
+      // E-commerce aliases
+      'ecommerce': 'e-commerce',
+      'e commerce': 'e-commerce',
+      'online-store': 'e-commerce',
+      'retail': 'e-commerce',
+      'shop': 'e-commerce',
+      'store': 'e-commerce',
+      'shopping': 'e-commerce',
+
+      // Education aliases
+      'online-education': 'education',
+      'e-learning': 'education',
+      'elearning': 'education',
+      'edtech': 'education',
+      'ed-tech': 'education',
+      'courses': 'education',
+      'online-courses': 'education',
+      'training': 'education',
+      'academy': 'education',
+      'learning': 'education',
+      'tutorial': 'education',
+      'tutorials': 'education',
+
+      // Lead generation aliases
+      'lead-gen': 'lead-generation',
+      'leadgen': 'lead-generation',
+      'agency': 'lead-generation',
+      'consulting': 'lead-generation',
+      'services': 'lead-generation',
+      'professional-services': 'lead-generation',
+      'local-business': 'lead-generation',
+      'b2b': 'lead-generation',
+      'corporate': 'lead-generation',
+
+      // Content aliases
+      'blog': 'content',
+      'news': 'content',
+      'media': 'content',
+      'publishing': 'content',
+      'magazine': 'content',
+      'editorial': 'content',
+
+      // Healthcare aliases
+      'health': 'healthcare',
+      'medical': 'healthcare',
+      'wellness': 'healthcare',
+      'fitness': 'healthcare',
+      'pharma': 'healthcare',
+      'dental': 'healthcare',
+      'telemedicine': 'healthcare',
+      'telehealth': 'healthcare',
+
+      // Finance aliases
+      'fintech': 'finance',
+      'financial': 'finance',
+      'banking': 'finance',
+      'insurance': 'finance',
+      'investment': 'finance',
+      'crypto': 'finance',
+      'cryptocurrency': 'finance',
+
+      // Real estate aliases
+      'realestate': 'real-estate',
+      'real estate': 'real-estate',
+      'property': 'real-estate',
+      'housing': 'real-estate',
+
+      // Travel aliases
+      'tourism': 'travel',
+      'hospitality': 'travel',
+      'hotel': 'travel',
+      'booking': 'travel',
+
+      // Non-profit aliases
+      'nonprofit': 'non-profit',
+      'non profit': 'non-profit',
+      'charity': 'non-profit',
+      'ngo': 'non-profit',
+      'foundation': 'non-profit',
+
+      // Food delivery aliases
+      'food': 'food-delivery',
+      'restaurant': 'food-delivery',
+      'delivery': 'food-delivery',
+      'meal-delivery': 'food-delivery',
+
+      // Entertainment aliases
+      'gaming': 'entertainment',
+      'streaming': 'entertainment',
+      'music': 'entertainment',
+      'events': 'entertainment',
+      'media-entertainment': 'entertainment',
+    };
+
+    // Check aliases
+    if (NICHE_ALIASES[raw]) return NICHE_ALIASES[raw];
+
+    // Fuzzy matching - check if any alias is contained in the raw string
+    for (const [alias, niche] of Object.entries(NICHE_ALIASES)) {
+      if (raw.includes(alias) || alias.includes(raw)) {
+        return niche;
+      }
+    }
+
+    // Check if any valid niche is contained in the raw string
+    for (const niche of VALID_NICHES) {
+      if (raw.includes(niche)) return niche;
+    }
+
+    console.warn(`Could not normalize niche "${raw}", defaulting to "other"`);
+    return 'other';
   }
 
   private parsePageAnalysisResponse(

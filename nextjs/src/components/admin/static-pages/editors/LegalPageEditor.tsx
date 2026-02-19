@@ -26,7 +26,7 @@ interface LegalContent {
 }
 
 interface LegalPageEditorProps {
-  pageType: 'terms' | 'privacy';
+  pageType: 'terms' | 'privacy' | 'cookie-policy';
   content: string;
   title: string;
   metaTitle: string;
@@ -60,9 +60,17 @@ const defaultSections: Record<string, LegalSection[]> = {
     { id: '5', title: 'Your Rights', content: 'You have the right to access, update, or delete your personal information at any time.' },
     { id: '6', title: 'Contact Us', content: 'If you have any questions about this Privacy Policy, please contact us.' },
   ],
+  'cookie-policy': [
+    { id: '1', title: 'What Are Cookies', content: 'Cookies are small text files stored on your device when you visit a website.' },
+    { id: '2', title: 'How We Use Cookies', content: 'We use cookies to improve your experience, remember your preferences, and analyze site traffic.' },
+    { id: '3', title: 'Types of Cookies We Use', content: 'We use essential cookies for site functionality, analytics cookies for usage insights, and marketing cookies for relevant advertising.' },
+    { id: '4', title: 'Managing Cookies', content: 'You can control and manage cookies through your browser settings. Note that disabling certain cookies may affect site functionality.' },
+    { id: '5', title: 'Third-Party Cookies', content: 'Some cookies are placed by third-party services that appear on our pages, such as analytics and advertising partners.' },
+    { id: '6', title: 'Updates to This Policy', content: 'We may update this Cookie Policy from time to time. Changes will be posted on this page.' },
+  ],
 };
 
-function parseLegalContent(content: string, pageType: 'terms' | 'privacy'): LegalContent {
+function parseLegalContent(content: string, pageType: 'terms' | 'privacy' | 'cookie-policy'): LegalContent {
   try {
     const parsed = JSON.parse(content);
     return parsed;
@@ -139,6 +147,12 @@ export function LegalPageEditor({
       icon: FileText,
       description: 'How you collect, use, and protect user data',
       route: '/privacy',
+    },
+    'cookie-policy': {
+      title: 'Cookie Policy',
+      icon: FileText,
+      description: 'How your site uses cookies and tracking technologies',
+      route: '/cookie-policy',
     },
   };
 

@@ -92,10 +92,10 @@ export function parsePage(url: string, html: string, depth: number, headers: Rec
     'a[href$=".pdf"], a[href$=".doc"], a[href$=".docx"], a[href$=".zip"], a[download]'
   );
 
-  // Content summary
+  // Content summary - extract enough text for robust niche detection
   const mainContent = root.querySelector('main, article, [role="main"], .content, #content');
   const contentText = (mainContent || root.querySelector('body') || root).textContent || '';
-  const contentSummary = contentText.replace(/\s+/g, ' ').trim().slice(0, 300);
+  const contentSummary = contentText.replace(/\s+/g, ' ').trim().slice(0, 800);
 
   return {
     url,
@@ -338,9 +338,11 @@ function getBaseDomain(hostname: string): string {
 function normalizeUrl(url: string): string {
   try {
     const parsed = new URL(url);
-    parsed.hash = '';
-    let path = parsed.pathname.replace(/\/+$/, '') || '/';
-    parsed.pathname = path;
+    // Preserve hash for hash-based routing (#/path), strip in-page anchors (#section)
+    if (parsed.hash && !parsed.hash.startsWith('#/')) {
+      parsed.hash = '';
+    }
+    parsed.pathname = parsed.pathname.replace(/\/+$/, '') || '/';
     return parsed.toString();
   } catch {
     return url;

@@ -2,16 +2,12 @@
 
 import * as React from "react"
 import {
-  Bell,
   Settings,
   User,
   LogOut,
   Menu,
   Home,
   Users,
-  Target,
-  BarChart3,
-  Tag,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -24,7 +20,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { useAuth } from "@/components/providers/auth-provider"
 
 interface MainLayoutProps {
   children: React.ReactNode
@@ -33,14 +30,20 @@ interface MainLayoutProps {
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
   { name: "Customers", href: "/customers", icon: Users },
-  { name: "Campaigns", href: "/campaigns", icon: Target },
-  { name: "Analytics", href: "/analytics", icon: BarChart3 },
-  { name: "Tags", href: "/tags", icon: Tag },
 ]
 
 export function MainLayout({ children }: MainLayoutProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false)
   const pathname = usePathname()
+  const { user, logout } = useAuth()
+
+  const userName = user?.name || "User"
+  const userInitials = userName
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2)
 
   const isCurrentPath = (path: string) => {
     return pathname === path || pathname?.startsWith(path + "/")
@@ -73,29 +76,20 @@ export function MainLayout({ children }: MainLayoutProps) {
             {/* Center section - Search placeholder */}
             <div className="flex-1 max-w-2xl mx-4">
               <div className="w-full h-10 bg-gray-100 rounded-md flex items-center px-3 text-gray-400 text-sm">
-                Search customers, campaigns, tags...
+                Search customers, trackings...
               </div>
             </div>
 
             {/* Right section */}
             <div className="flex items-center space-x-4">
-              {/* Notifications */}
-              <Button variant="ghost" size="sm" className="relative">
-                <Bell className="h-5 w-5" />
-                <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-                  3
-                </span>
-              </Button>
-
               {/* User menu */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="sm" className="flex items-center space-x-2">
                     <Avatar className="h-8 w-8">
-                      <AvatarImage src="/placeholder-avatar.jpg" alt="User" />
-                      <AvatarFallback>JD</AvatarFallback>
+                      <AvatarFallback>{userInitials}</AvatarFallback>
                     </Avatar>
-                    <span className="hidden md:block text-sm font-medium">John Doe</span>
+                    <span className="hidden md:block text-sm font-medium">{userName}</span>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
@@ -108,7 +102,7 @@ export function MainLayout({ children }: MainLayoutProps) {
                     Settings
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem className="text-red-600">
+                  <DropdownMenuItem className="text-red-600" onClick={() => logout()}>
                     <LogOut className="h-4 w-4 mr-2" />
                     Sign out
                   </DropdownMenuItem>
@@ -184,7 +178,7 @@ export function MainLayout({ children }: MainLayoutProps) {
 
       {/* Main content */}
       <main className="lg:pl-64 pt-16">
-        <div className="min-h-screen">
+        <div className="min-h-screen p-4 sm:p-6 lg:p-8">
           {children}
         </div>
       </main>

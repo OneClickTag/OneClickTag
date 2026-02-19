@@ -8,11 +8,13 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Sparkles, Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import { Turnstile } from '@marsidev/react-turnstile';
 
 function EarlyAccessContent() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -56,6 +58,7 @@ function EarlyAccessContent() {
           utmMedium,
           utmCampaign,
           userAgent: navigator.userAgent,
+          turnstileToken,
         }),
       });
 
@@ -213,6 +216,16 @@ function EarlyAccessContent() {
               <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
                 {error}
               </div>
+            )}
+
+            {process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && (
+              <Turnstile
+                siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+                onSuccess={setTurnstileToken}
+                onError={() => setTurnstileToken(null)}
+                onExpire={() => setTurnstileToken(null)}
+                options={{ size: 'invisible' }}
+              />
             )}
 
             <Button

@@ -54,6 +54,7 @@ interface DataTableProps<TData, TValue> {
   pageSize?: number
   onPageChange?: (page: number) => void
   onPageSizeChange?: (pageSize: number) => void
+  onRowClick?: (row: TData) => void
   sorting?: {
     sorting: SortingState
     onSortingChange: OnChangeFn<SortingState>
@@ -74,6 +75,7 @@ export function DataTable<TData, TValue>({
   pageSize: pageSizeProp,
   onPageChange: onPageChangeProp,
   onPageSizeChange: onPageSizeProp,
+  onRowClick,
   sorting,
 }: DataTableProps<TData, TValue>) {
   // Support both individual props and pagination object
@@ -195,6 +197,8 @@ export function DataTable<TData, TValue>({
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
+                  className={onRowClick ? "cursor-pointer hover:bg-muted/50" : ""}
+                  onClick={() => onRowClick?.(row.original)}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>

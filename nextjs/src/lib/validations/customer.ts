@@ -6,6 +6,7 @@ export const createCustomerSchema = z.object({
   lastName: z.string().min(1, 'Last name is required').max(100),
   company: z.string().max(200).optional(),
   phone: z.string().max(50).optional(),
+  websiteUrl: z.string().url('Invalid URL format').max(500).optional().or(z.literal('')),
   tags: z.array(z.string()).optional(),
   notes: z.string().max(5000).optional(),
 });

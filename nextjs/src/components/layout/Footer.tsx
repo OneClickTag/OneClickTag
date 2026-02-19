@@ -57,6 +57,7 @@ const defaultFooterConfig: FooterConfig = {
       links: [
         { label: "Terms of Service", url: "/terms" },
         { label: "Privacy Policy", url: "/privacy" },
+        { label: "Cookie Policy", url: "/cookie-policy" },
       ],
     },
   ],

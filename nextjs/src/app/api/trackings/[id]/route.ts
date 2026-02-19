@@ -87,7 +87,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    return NextResponse.json({ data: tracking });
+    return NextResponse.json(tracking);
   } catch (error) {
     console.error('Error fetching tracking:', error);
 

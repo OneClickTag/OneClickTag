@@ -94,37 +94,23 @@ export interface BulkImportJob {
   mapping: Record<string, string>;
 }
 
-// Add jobs to queues (gracefully handle missing Redis)
+// Add jobs - always execute inline in Next.js (no separate worker process)
 export async function addGTMSyncJob(data: GTMSyncJob) {
-  if (!gtmSyncQueue) gtmSyncQueue = getQueue(QUEUE_NAMES.GTM_SYNC);
-  if (!gtmSyncQueue) {
-    console.log('[Queue] GTM sync would run inline (Redis not available):', data.trackingId);
-    return { id: `inline-${Date.now()}`, name: 'sync', data };
-  }
-
-  return gtmSyncQueue.add('sync', data, {
-    attempts: 3,
-    backoff: {
-      type: 'exponential',
-      delay: 1000,
-    },
+  console.log('[Queue] Running GTM sync inline:', data.trackingId);
+  const { executeGTMSync } = await import('./sync');
+  executeGTMSync(data).catch((err) => {
+    console.error('[Queue] Inline GTM sync failed:', err.message);
   });
+  return { id: `inline-${Date.now()}`, name: 'sync', data };
 }
 
 export async function addAdsSyncJob(data: AdsSyncJob) {
-  if (!adsSyncQueue) adsSyncQueue = getQueue(QUEUE_NAMES.ADS_SYNC);
-  if (!adsSyncQueue) {
-    console.log('[Queue] Ads sync would run inline (Redis not available):', data.trackingId);
-    return { id: `inline-${Date.now()}`, name: 'sync', data };
-  }
-
-  return adsSyncQueue.add('sync', data, {
-    attempts: 3,
-    backoff: {
-      type: 'exponential',
-      delay: 1000,
-    },
+  console.log('[Queue] Running Ads sync inline:', data.trackingId);
+  const { executeAdsSync } = await import('./sync');
+  executeAdsSync(data).catch((err) => {
+    console.error('[Queue] Inline Ads sync failed:', err.message);
   });
+  return { id: `inline-${Date.now()}`, name: 'sync', data };
 }
 
 export async function addAnalyticsJob(data: AnalyticsAggregationJob) {

@@ -81,8 +81,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         customerId,
         tenantId: session.tenantId,
         websiteUrl,
-        maxPages: body.maxPages || 50,
-        maxDepth: body.maxDepth || 3,
+        maxPages: body.maxPages || 200,
+        maxDepth: body.maxDepth || 8,
         status: 'DISCOVERING',
       },
     });
@@ -100,19 +100,33 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const preCrawl = await discoverAllUrls(domain);
 
+    // Normalize the main URL for consistent dedup
+    const normalizeUrl = (u: string): string => {
+      try {
+        const p = new URL(u);
+        if (p.hash && !p.hash.startsWith('#/')) p.hash = '';
+        p.pathname = p.pathname.replace(/\/+$/, '') || '/';
+        return p.toString();
+      } catch { return u; }
+    };
+
+    const normalizedWebsiteUrl = normalizeUrl(websiteUrl);
+
     // Build initial URL queue: homepage first, then sitemap URLs
     const urlQueue: Array<{ url: string; depth: number; source: string }> = [
-      { url: websiteUrl, depth: 0, source: 'homepage' },
+      { url: normalizedWebsiteUrl, depth: 0, source: 'homepage' },
     ];
+    const seenUrls = new Set([normalizedWebsiteUrl]);
 
     // Add sitemap URLs (limit to maxPages to avoid huge queues)
-    const maxPages = body.maxPages || 50;
-    const sitemapUrls = preCrawl.urls
-      .filter(u => u !== websiteUrl)
-      .slice(0, maxPages - 1);
-
-    for (const sUrl of sitemapUrls) {
-      urlQueue.push({ url: sUrl, depth: 1, source: 'sitemap' });
+    const maxPages = body.maxPages || 200;
+    for (const rawUrl of preCrawl.urls) {
+      if (urlQueue.length >= maxPages) break;
+      const normalized = normalizeUrl(rawUrl);
+      if (!seenUrls.has(normalized)) {
+        seenUrls.add(normalized);
+        urlQueue.push({ url: normalized, depth: 1, source: 'sitemap' });
+      }
     }
 
     // Initialize discovery state

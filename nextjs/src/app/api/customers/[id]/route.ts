@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionFromRequest, requireTenant } from '@/lib/auth/session';
+import prisma from '@/lib/prisma';
 import {
   findCustomerById,
   findCustomerBySlug,
@@ -89,6 +90,17 @@ function validateUpdateInput(
     updateData.phone = input.phone as string | undefined;
   }
 
+  // Website URL validation
+  if (input.websiteUrl !== undefined) {
+    if (input.websiteUrl !== null && typeof input.websiteUrl !== 'string') {
+      return { valid: false, error: 'Website URL must be a string or null' };
+    }
+    if (typeof input.websiteUrl === 'string' && input.websiteUrl.length > 500) {
+      return { valid: false, error: 'Website URL must be at most 500 characters' };
+    }
+    updateData.websiteUrl = input.websiteUrl ? (input.websiteUrl as string).trim() : undefined;
+  }
+
   // Status validation
   if (input.status !== undefined) {
     if (!Object.values(CustomerStatus).includes(input.status as CustomerStatus)) {
@@ -155,6 +167,32 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       customer = await findCustomerBySlug(id, session.tenantId, includeGoogleAds);
     } else {
       customer = await findCustomerById(id, session.tenantId, includeGoogleAds);
+    }
+
+    // Augment with GTM fields via raw SQL (Prisma client may have stale schema cache)
+    if (customer.id) {
+      try {
+        const gtmData = await prisma.$queryRawUnsafe<Array<{
+          gtmAccountId: string | null;
+          gtmContainerId: string | null;
+          gtmWorkspaceId: string | null;
+          gtmContainerName: string | null;
+        }>>(
+          `SELECT "gtmAccountId", "gtmContainerId", "gtmWorkspaceId", "gtmContainerName" FROM customers WHERE id = $1`,
+          customer.id
+        );
+        if (gtmData[0]) {
+          customer.gtmContainerId = gtmData[0].gtmContainerId;
+          customer.gtmWorkspaceId = gtmData[0].gtmWorkspaceId;
+          customer.gtmContainerName = gtmData[0].gtmContainerName;
+          // Update googleAccount status based on actual GTM data
+          if (customer.googleAccount) {
+            customer.googleAccount.hasGTMAccess = !!gtmData[0].gtmContainerId;
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to fetch GTM fields via raw SQL:', e);
+      }
     }
 
     return NextResponse.json(customer);

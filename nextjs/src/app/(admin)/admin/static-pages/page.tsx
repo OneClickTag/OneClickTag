@@ -12,6 +12,7 @@ import {
   Info,
   FileText,
   Shield,
+  Cookie,
 } from 'lucide-react';
 import { AboutPageEditor } from '@/components/admin/static-pages/editors/AboutPageEditor';
 import { LegalPageEditor } from '@/components/admin/static-pages/editors/LegalPageEditor';
@@ -45,12 +46,18 @@ const PAGE_CONFIG = {
     description: 'Privacy Policy document',
     route: '/privacy',
   },
+  'cookie-policy': {
+    icon: Cookie,
+    label: 'Cookies',
+    description: 'Cookie Policy document',
+    route: '/cookie-policy',
+  },
 };
 
 export default function AdminStaticPages() {
   const api = useApi();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'about' | 'terms' | 'privacy'>('about');
+  const [activeTab, setActiveTab] = useState<'about' | 'terms' | 'privacy' | 'cookie-policy'>('about');
   const [pendingChanges, setPendingChanges] = useState<Record<string, Partial<StaticPage>>>({});
 
   const { data: pages = [], isLoading, refetch } = useQuery({
@@ -110,7 +117,7 @@ export default function AdminStaticPages() {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Static Pages</h2>
-          <p className="text-gray-600 mt-1">Edit About, Terms, and Privacy pages</p>
+          <p className="text-gray-600 mt-1">Edit About, Terms, Privacy, and Cookie Policy pages</p>
         </div>
         <div className="flex space-x-2">
           <Button variant="outline" onClick={() => refetch()}>
@@ -135,7 +142,7 @@ export default function AdminStaticPages() {
         </div>
       ) : (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'about' | 'terms' | 'privacy')} className="w-full">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'about' | 'terms' | 'privacy' | 'cookie-policy')} className="w-full">
             <div className="border-b px-4">
               <TabsList className="h-14 bg-transparent gap-2">
                 {(Object.keys(PAGE_CONFIG) as Array<keyof typeof PAGE_CONFIG>).map((slug) => {
@@ -217,6 +224,26 @@ export default function AdminStaticPages() {
                   isSaving={isSaving}
                   hasChanges={hasPendingChanges('privacy')}
                   lastUpdated={getPageBySlug('privacy')?.updatedAt}
+                />
+              </TabsContent>
+
+              <TabsContent value="cookie-policy" className="mt-0">
+                <LegalPageEditor
+                  pageType="cookie-policy"
+                  content={getCurrentValue('cookie-policy', 'content') as string}
+                  title={getCurrentValue('cookie-policy', 'title') as string}
+                  metaTitle={getCurrentValue('cookie-policy', 'metaTitle') as string}
+                  metaDescription={getCurrentValue('cookie-policy', 'metaDescription') as string}
+                  isPublished={getCurrentValue('cookie-policy', 'isPublished') as boolean}
+                  onContentChange={(value) => handleFieldChange('cookie-policy', 'content', value)}
+                  onTitleChange={(value) => handleFieldChange('cookie-policy', 'title', value)}
+                  onMetaTitleChange={(value) => handleFieldChange('cookie-policy', 'metaTitle', value)}
+                  onMetaDescriptionChange={(value) => handleFieldChange('cookie-policy', 'metaDescription', value)}
+                  onPublishedChange={(value) => handleFieldChange('cookie-policy', 'isPublished', value)}
+                  onSave={() => handleSave('cookie-policy')}
+                  isSaving={isSaving}
+                  hasChanges={hasPendingChanges('cookie-policy')}
+                  lastUpdated={getPageBySlug('cookie-policy')?.updatedAt}
                 />
               </TabsContent>
             </div>
