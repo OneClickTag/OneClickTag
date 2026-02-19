@@ -70,6 +70,13 @@ export interface GA4Property {
   updatedAt: string;
 }
 
+export interface StapeDnsRecord {
+  type: { type: string; label: string };
+  host: string;
+  value: string;
+  domain?: string;
+}
+
 export interface StapeContainer {
   id: string;
   customerId: string;
@@ -77,6 +84,7 @@ export interface StapeContainer {
   containerName: string;
   serverDomain: string;
   stapeDefaultDomain: string;
+  dnsRecords?: StapeDnsRecord[] | null;
   status: 'PENDING' | 'PROVISIONING' | 'ACTIVE' | 'FAILED';
   domainStatus: 'PENDING' | 'VALIDATED' | 'FAILED';
   gtmServerContainerId?: string | null;

@@ -47,8 +47,10 @@ import {
   Tag,
   MonitorSmartphone,
   Server,
+  Copy,
+  Mail,
 } from 'lucide-react';
-import { Customer } from '@/types/customer';
+import { Customer, StapeDnsRecord } from '@/types/customer';
 import { AutoTrack } from '@/components/autotrack/AutoTrack';
 
 const TRACKING_TYPES: { value: TrackingType; label: string }[] = [
@@ -117,16 +119,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
   // Server-side tracking mutations
   const enableStape = useMutation({
     mutationFn: async () => {
-      const response = await fetch(`/api/customers/${id}/stape`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serverDomain }),
-      });
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to enable server-side tracking');
-      }
-      return response.json();
+      return api.post(`/api/customers/${id}/stape`, { serverDomain });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['customer', id] });
@@ -139,16 +132,9 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
 
   const validateDomain = useMutation({
     mutationFn: async () => {
-      const response = await fetch(`/api/customers/${id}/stape/validate-domain`, {
-        method: 'POST',
-      });
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Domain validation failed');
-      }
-      return response.json();
+      return api.post<{ isValid: boolean }>(`/api/customers/${id}/stape/validate-domain`);
     },
-    onSuccess: (data: { isValid: boolean }) => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['customer', id] });
       toast.success(
         data.isValid ? 'Domain verified!' : 'Domain not yet verified',
@@ -166,14 +152,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
 
   const disableStape = useMutation({
     mutationFn: async () => {
-      const response = await fetch(`/api/customers/${id}/stape`, {
-        method: 'DELETE',
-      });
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to disable server-side tracking');
-      }
-      return response.json();
+      return api.delete(`/api/customers/${id}/stape`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['customer', id] });
@@ -187,6 +166,15 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
   const handleEnableServerSide = () => enableStape.mutate();
   const handleValidateDomain = () => validateDomain.mutate();
   const handleDisableServerSide = () => disableStape.mutate();
+
+  // Backfill DNS records for containers created before the dnsRecords field existed
+  useEffect(() => {
+    if (customer?.stapeContainer && !customer.stapeContainer.dnsRecords) {
+      api.get(`/api/customers/${id}/stape`).then(() => {
+        queryClient.invalidateQueries({ queryKey: ['customer', id] });
+      }).catch(() => {});
+    }
+  }, [customer?.stapeContainer?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Settings form state
   const [settingsForm, setSettingsForm] = useState({
@@ -870,29 +858,104 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                       </div>
                     </div>
 
-                    {customer.stapeContainer.domainStatus === 'PENDING' && (
-                      <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
-                        <h4 className="text-sm font-medium mb-2">DNS Setup Required</h4>
-                        <p className="text-sm text-muted-foreground mb-2">
-                          Add this CNAME record in your DNS provider:
-                        </p>
-                        <div className="bg-white rounded border p-3 font-mono text-sm">
-                          <p>{customer.stapeContainer.serverDomain} CNAME {customer.stapeContainer.stapeDefaultDomain}</p>
+                    {customer.stapeContainer.domainStatus !== 'VALIDATED' && (() => {
+                      const dnsRecords = (customer.stapeContainer!.dnsRecords || []) as StapeDnsRecord[];
+                      const domain = customer.stapeContainer!.serverDomain;
+
+                      const formatDnsText = () => {
+                        if (dnsRecords.length === 0) {
+                          return `Type: CNAME\nHost: ${domain.split('.')[0]}\nPoints to: ${customer.stapeContainer!.stapeDefaultDomain}`;
+                        }
+                        return dnsRecords.map(r =>
+                          `Type: ${r.type?.type?.toUpperCase() || 'CNAME'}  |  Host: ${r.host || domain.split('.')[0]}  |  Value: ${r.value}`
+                        ).join('\n');
+                      };
+
+                      const handleCopyDns = () => {
+                        navigator.clipboard.writeText(formatDnsText());
+                        toast.success('DNS records copied to clipboard');
+                      };
+
+                      const handleEmailDns = () => {
+                        const subject = encodeURIComponent(`DNS Records for ${domain}`);
+                        const body = encodeURIComponent(
+                          `Please add the following DNS records for ${domain}:\n\n${formatDnsText()}\n\nThese records are required to verify the server-side tracking domain.`
+                        );
+                        window.open(`mailto:?subject=${subject}&body=${body}`);
+                      };
+
+                      return (
+                        <div className={`rounded-lg border p-4 ${
+                          customer.stapeContainer!.domainStatus === 'FAILED'
+                            ? 'border-red-200 bg-red-50'
+                            : 'border-blue-200 bg-blue-50'
+                        }`}>
+                          <h4 className="text-sm font-medium mb-2">
+                            {customer.stapeContainer!.domainStatus === 'FAILED'
+                              ? 'Domain Verification Failed'
+                              : 'DNS Setup Required'}
+                          </h4>
+                          <p className="text-sm text-muted-foreground mb-2">
+                            {customer.stapeContainer!.domainStatus === 'FAILED'
+                              ? 'DNS records not found yet. Add the records below and try again:'
+                              : 'Add these DNS records in your domain provider:'}
+                          </p>
+
+                          {dnsRecords.length > 0 ? (
+                            <div className="bg-white rounded border overflow-hidden">
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="border-b bg-muted/50">
+                                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Type</th>
+                                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Host</th>
+                                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Value</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="font-mono text-xs">
+                                  {dnsRecords.map((record, idx) => (
+                                    <tr key={idx} className={idx < dnsRecords.length - 1 ? 'border-b' : ''}>
+                                      <td className="px-3 py-2 font-semibold">{record.type?.type?.toUpperCase() || '—'}</td>
+                                      <td className="px-3 py-2">{record.host || domain.split('.')[0]}</td>
+                                      <td className="px-3 py-2 break-all">{record.value}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                            <div className="bg-white rounded border p-3 font-mono text-sm space-y-1">
+                              <p><span className="text-muted-foreground">Type:</span> CNAME</p>
+                              <p><span className="text-muted-foreground">Host:</span> {domain.split('.')[0]}</p>
+                              <p><span className="text-muted-foreground">Points to:</span> {customer.stapeContainer!.stapeDefaultDomain}</p>
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-2 mt-3">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={handleValidateDomain}
+                              disabled={validateDomain.isPending}
+                            >
+                              {validateDomain.isPending ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              ) : (
+                                <RefreshCw className="mr-2 h-4 w-4" />
+                              )}
+                              {customer.stapeContainer!.domainStatus === 'FAILED' ? 'Retry Verification' : 'Verify Domain'}
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={handleCopyDns}>
+                              <Copy className="mr-2 h-4 w-4" />
+                              Copy Records
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={handleEmailDns}>
+                              <Mail className="mr-2 h-4 w-4" />
+                              Email Records
+                            </Button>
+                          </div>
                         </div>
-                        <Button
-                          className="mt-3"
-                          variant="outline"
-                          size="sm"
-                          onClick={handleValidateDomain}
-                          disabled={validateDomain.isPending}
-                        >
-                          {validateDomain.isPending ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          ) : null}
-                          Verify Domain
-                        </Button>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     <Button
                       variant="destructive"
