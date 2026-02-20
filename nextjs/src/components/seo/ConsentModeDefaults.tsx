@@ -3,8 +3,36 @@
  * defaults BEFORE any GTM / GA4 tags load.
  *
  * Must be placed in <head> before <AnalyticsScripts />.
+ *
+ * Reads `consentExpiryDays` from the CookieConsentBanner DB record so the
+ * expiry used by this inline script matches what CookieBanner.tsx uses on the
+ * client.  Falls back to 365 days when no record exists.
  */
-export function ConsentModeDefaults() {
+import prisma from '@/lib/prisma';
+
+export async function ConsentModeDefaults() {
+  let expiryDays = 365;
+
+  try {
+    const tenant = await prisma.tenant.findFirst({
+      where: { isActive: true },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+
+    if (tenant) {
+      const banner = await prisma.cookieConsentBanner.findUnique({
+        where: { tenantId: tenant.id },
+        select: { consentExpiryDays: true },
+      });
+      if (banner) {
+        expiryDays = banner.consentExpiryDays;
+      }
+    }
+  } catch {
+    // Fall back to default 365 days on error
+  }
+
   const script = `
 window.dataLayer = window.dataLayer || [];
 function gtag(){dataLayer.push(arguments);}
@@ -18,8 +46,8 @@ function gtag(){dataLayer.push(arguments);}
   var marketingGranted = false;
 
   if (stored && stored.timestamp) {
-    var DEFAULT_EXPIRY_DAYS = 365;
-    var expiryMs = DEFAULT_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+    var EXPIRY_DAYS = ${expiryDays};
+    var expiryMs = EXPIRY_DAYS * 24 * 60 * 60 * 1000;
     var isExpired = (Date.now() - stored.timestamp) > expiryMs;
 
     if (!isExpired) {
