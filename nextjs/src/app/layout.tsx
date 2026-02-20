@@ -6,7 +6,7 @@ import { ThemeProvider } from '@/components/providers/theme-provider';
 import { AuthProvider } from '@/components/providers/auth-provider';
 import { QueryProvider } from '@/components/providers/query-provider';
 import { CookieBanner } from '@/components/CookieBanner';
-import { StructuredData, AnalyticsScripts, GTMNoScript } from '@/components/seo';
+import { StructuredData, ConsentModeDefaults, AnalyticsScripts, GTMNoScript } from '@/components/seo';
 import { getSiteSettings } from '@/lib/server/api';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -81,6 +81,7 @@ export default async function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <StructuredData />
+        <ConsentModeDefaults />
         <AnalyticsScripts />
       </head>
       <body className={inter.className}>

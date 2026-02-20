@@ -36,8 +36,6 @@ const CATEGORY_TYPES = [
   { value: 'NECESSARY', label: 'Necessary' },
   { value: 'ANALYTICS', label: 'Analytics' },
   { value: 'MARKETING', label: 'Marketing' },
-  { value: 'PREFERENCES', label: 'Preferences' },
-  { value: 'FUNCTIONAL', label: 'Functional' },
 ];
 
 interface CookieCategory {

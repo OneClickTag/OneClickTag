@@ -18,7 +18,7 @@ interface CookieCategoryData {
   id: string;
   name: string;
   description: string;
-  category: 'NECESSARY' | 'ANALYTICS' | 'MARKETING' | 'PREFERENCES' | 'FUNCTIONAL';
+  category: 'NECESSARY' | 'ANALYTICS' | 'MARKETING';
   isRequired: boolean;
   cookies: CookieItem[];
 }
@@ -27,8 +27,6 @@ interface CookiePreferences {
   necessary: boolean;
   analytics: boolean;
   marketing: boolean;
-  preferences: boolean;
-  functional: boolean;
   timestamp: number;
 }
 
@@ -88,8 +86,6 @@ const categoryToPreferenceKey: Record<string, keyof Omit<CookiePreferences, 'tim
   NECESSARY: 'necessary',
   ANALYTICS: 'analytics',
   MARKETING: 'marketing',
-  PREFERENCES: 'preferences',
-  FUNCTIONAL: 'functional',
 };
 
 export function CookieBanner() {
@@ -104,8 +100,6 @@ export function CookieBanner() {
     necessary: true, // Always required
     analytics: false,
     marketing: false,
-    preferences: false,
-    functional: false,
     timestamp: 0,
   });
 
@@ -168,15 +162,58 @@ export function CookieBanner() {
     return () => clearTimeout(timer);
   }, [isLoading, settings.isActive, settings.consentExpiryDays]);
 
+  // Listen for "Cookie Settings" footer link to reopen the banner
+  useEffect(() => {
+    const handleOpenSettings = () => {
+      // Restore saved preferences so toggles reflect current state
+      const stored = localStorage.getItem(COOKIE_CONSENT_KEY);
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored) as CookiePreferences;
+          setPreferences(parsed);
+        } catch {
+          // ignore
+        }
+      }
+      setShowBanner(true);
+      setShowCustomize(true);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => setIsVisible(true));
+      });
+    };
+
+    window.addEventListener('openCookieSettings', handleOpenSettings);
+    return () => window.removeEventListener('openCookieSettings', handleOpenSettings);
+  }, []);
+
   const savePreferences = async (prefs: CookiePreferences) => {
     const withTimestamp = { ...prefs, timestamp: Date.now() };
     localStorage.setItem(COOKIE_CONSENT_KEY, JSON.stringify(withTimestamp));
     setPreferences(withTimestamp);
 
+    // Push Google Consent Mode V2 update
+    if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
+      const consentState = {
+        analytics_storage: prefs.analytics ? 'granted' : 'denied',
+        ad_storage: prefs.marketing ? 'granted' : 'denied',
+        ad_user_data: prefs.marketing ? 'granted' : 'denied',
+        ad_personalization: prefs.marketing ? 'granted' : 'denied',
+      } as const;
+
+      window.gtag('consent', 'update', consentState);
+
+      window.dataLayer = window.dataLayer || [];
+      window.dataLayer.push({
+        event: 'consent_updated',
+        ...consentState,
+      });
+    }
+
     // Animate out before hiding
     setIsVisible(false);
     setTimeout(() => {
       setShowBanner(false);
+      setShowCustomize(false);
     }, 300);
 
     // Record consent to backend if we have tenant info
@@ -216,8 +253,6 @@ export function CookieBanner() {
       necessary: true,
       analytics: true,
       marketing: true,
-      preferences: true,
-      functional: true,
       timestamp: 0,
     });
   };
@@ -227,8 +262,6 @@ export function CookieBanner() {
       necessary: true,
       analytics: false,
       marketing: false,
-      preferences: false,
-      functional: false,
       timestamp: 0,
     });
   };

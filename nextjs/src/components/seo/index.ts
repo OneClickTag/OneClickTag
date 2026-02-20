@@ -8,3 +8,4 @@ export {
 } from './StructuredData';
 
 export { AnalyticsScripts, GTMNoScript } from './AnalyticsScripts';
+export { ConsentModeDefaults } from './ConsentModeDefaults';

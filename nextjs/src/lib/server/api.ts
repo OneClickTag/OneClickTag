@@ -458,12 +458,9 @@ export async function getPrivacyPageContent() {
  */
 export async function getCookiePolicyPageContent() {
   try {
-    console.log('[CookiePolicy] Fetching content page with slug: cookie-policy');
     const page = await prisma.contentPage.findUnique({
       where: { slug: 'cookie-policy' },
     });
-
-    console.log('[CookiePolicy] Query result:', page ? `found (id=${page.id}, published=${page.isPublished}, contentLen=${page.content?.length})` : 'null');
 
     if (page && page.isPublished) {
       return {
@@ -474,10 +471,9 @@ export async function getCookiePolicyPageContent() {
       };
     }
 
-    console.log('[CookiePolicy] Page not found or not published');
     return null;
   } catch (error) {
-    console.error('[CookiePolicy] Error fetching content:', error);
+    console.error('Error fetching cookie policy page content:', error);
     return null;
   }
 }

@@ -58,6 +58,7 @@ const defaultFooterConfig: FooterConfig = {
         { label: "Terms of Service", url: "/terms" },
         { label: "Privacy Policy", url: "/privacy" },
         { label: "Cookie Policy", url: "/cookie-policy" },
+        { label: "Cookie Settings", url: "#cookie-settings" },
       ],
     },
   ],
@@ -141,6 +142,18 @@ export function Footer({ config: serverConfig }: FooterProps = {}) {
 
         // Only use API data if it has content, otherwise use defaults
         if (data && (data.brandName || data.sections?.length > 0)) {
+          const sections = Array.isArray(data.sections) && data.sections.length > 0
+            ? data.sections
+            : defaultFooterConfig.sections
+
+          // Ensure "Cookie Settings" link exists in the Legal section
+          const sectionsWithCookieSettings = sections.map((section: FooterSection) => {
+            if (section.title === "Legal" && !section.links.some((l: FooterLink) => l.url === "#cookie-settings")) {
+              return { ...section, links: [...section.links, { label: "Cookie Settings", url: "#cookie-settings" }] }
+            }
+            return section
+          })
+
           setConfig({
             id: data.id || "default",
             brandName: data.brandName || defaultFooterConfig.brandName,
@@ -148,9 +161,7 @@ export function Footer({ config: serverConfig }: FooterProps = {}) {
             socialLinks: Array.isArray(data.socialLinks) && data.socialLinks.length > 0
               ? data.socialLinks
               : defaultFooterConfig.socialLinks,
-            sections: Array.isArray(data.sections) && data.sections.length > 0
-              ? data.sections
-              : defaultFooterConfig.sections,
+            sections: sectionsWithCookieSettings,
             copyrightText: data.copyrightText || defaultFooterConfig.copyrightText,
           })
         } else {
@@ -239,7 +250,14 @@ export function Footer({ config: serverConfig }: FooterProps = {}) {
               <ul className="space-y-2">
                 {section.links.map((link, linkIndex) => (
                   <li key={linkIndex}>
-                    {link.url.startsWith("http") ? (
+                    {link.url === "#cookie-settings" ? (
+                      <button
+                        onClick={() => window.dispatchEvent(new CustomEvent("openCookieSettings"))}
+                        className="text-sm hover:text-white transition-colors text-gray-300 cursor-pointer"
+                      >
+                        {link.label}
+                      </button>
+                    ) : link.url.startsWith("http") ? (
                       <a
                         href={link.url}
                         target="_blank"
