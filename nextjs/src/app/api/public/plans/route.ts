@@ -21,7 +21,9 @@ export async function GET() {
       },
     });
 
-    return NextResponse.json(plans);
+    const response = NextResponse.json(plans);
+    response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
+    return response;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Failed to fetch plans:', message);

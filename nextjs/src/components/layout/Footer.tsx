@@ -3,6 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { Logo } from "@/components/Logo"
+import { useFooterConfig } from "@/hooks/use-public-data"
 
 interface SocialLink {
   platform: string
@@ -118,67 +119,40 @@ interface FooterProps {
 
 export function Footer({ config: serverConfig }: FooterProps = {}) {
   const currentYear = new Date().getFullYear()
-  const [config, setConfig] = React.useState<FooterConfig>(
-    serverConfig || defaultFooterConfig
-  )
-  const [loading, setLoading] = React.useState(!serverConfig)
+  const { data: fetchedConfig, isLoading } = useFooterConfig()
   const isEarlyAccessMode = process.env.NEXT_PUBLIC_EARLY_ACCESS_MODE === "true"
 
-  React.useEffect(() => {
-    // Skip client-side fetch if server config was provided
-    if (serverConfig) {
-      setConfig(serverConfig)
-      setLoading(false)
-      return
+  // Use server config if provided (SSR), then fetched data, then defaults
+  const loading = !serverConfig && isLoading
+
+  const config = React.useMemo(() => {
+    const rawConfig = serverConfig || fetchedConfig
+    if (!rawConfig || (!rawConfig.brandName && !rawConfig.sections?.length)) {
+      return defaultFooterConfig
     }
 
-    const fetchFooterConfig = async () => {
-      try {
-        const response = await fetch("/api/public/footer")
-        if (!response.ok) {
-          throw new Error("Failed to fetch footer config")
-        }
-        const data = await response.json()
+    const sections = Array.isArray(rawConfig.sections) && rawConfig.sections.length > 0
+      ? rawConfig.sections
+      : defaultFooterConfig.sections
 
-        // Only use API data if it has content, otherwise use defaults
-        if (data && (data.brandName || data.sections?.length > 0)) {
-          const sections = Array.isArray(data.sections) && data.sections.length > 0
-            ? data.sections
-            : defaultFooterConfig.sections
-
-          // Ensure "Cookie Settings" link exists in the Legal section
-          const sectionsWithCookieSettings = sections.map((section: FooterSection) => {
-            if (section.title === "Legal" && !section.links.some((l: FooterLink) => l.url === "#cookie-settings")) {
-              return { ...section, links: [...section.links, { label: "Cookie Settings", url: "#cookie-settings" }] }
-            }
-            return section
-          })
-
-          setConfig({
-            id: data.id || "default",
-            brandName: data.brandName || defaultFooterConfig.brandName,
-            brandDescription: data.brandDescription || defaultFooterConfig.brandDescription,
-            socialLinks: Array.isArray(data.socialLinks) && data.socialLinks.length > 0
-              ? data.socialLinks
-              : defaultFooterConfig.socialLinks,
-            sections: sectionsWithCookieSettings,
-            copyrightText: data.copyrightText || defaultFooterConfig.copyrightText,
-          })
-        } else {
-          // Use defaults if API returns empty data
-          setConfig(defaultFooterConfig)
-        }
-      } catch (error) {
-        console.error("Failed to load footer config, using defaults:", error)
-        // Use default config if fetch fails
-        setConfig(defaultFooterConfig)
-      } finally {
-        setLoading(false)
+    const sectionsWithCookieSettings = sections.map((section: FooterSection) => {
+      if (section.title === "Legal" && !section.links.some((l: FooterLink) => l.url === "#cookie-settings")) {
+        return { ...section, links: [...section.links, { label: "Cookie Settings", url: "#cookie-settings" }] }
       }
-    }
+      return section
+    })
 
-    fetchFooterConfig()
-  }, [serverConfig])
+    return {
+      id: rawConfig.id || "default",
+      brandName: rawConfig.brandName || defaultFooterConfig.brandName,
+      brandDescription: rawConfig.brandDescription || defaultFooterConfig.brandDescription,
+      socialLinks: Array.isArray(rawConfig.socialLinks) && rawConfig.socialLinks.length > 0
+        ? rawConfig.socialLinks
+        : defaultFooterConfig.socialLinks,
+      sections: sectionsWithCookieSettings,
+      copyrightText: rawConfig.copyrightText || defaultFooterConfig.copyrightText,
+    }
+  }, [serverConfig, fetchedConfig])
 
   if (loading) {
     return (

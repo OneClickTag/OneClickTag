@@ -80,6 +80,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
 
+  const [activeTab, setActiveTab] = useState('trackings');
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [trackingName, setTrackingName] = useState('');
   const [trackingType, setTrackingType] = useState<TrackingType>('BUTTON_CLICK');
@@ -106,10 +107,21 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
     }
   }, [searchParams, id, queryClient]);
 
+  // Base customer data - always loaded (no Google Ads/GA4 data)
   const { data: customer, isLoading: customerLoading } = useQuery({
     queryKey: ['customer', id],
-    queryFn: () => api.get<Customer>(`/api/customers/${id}?includeGoogleAds=true`),
+    queryFn: () => api.get<Customer>(`/api/customers/${id}`),
   });
+
+  // Google data - only loaded when Settings tab is active
+  const { data: customerWithGoogle } = useQuery({
+    queryKey: ['customer', id, 'google'],
+    queryFn: () => api.get<Customer>(`/api/customers/${id}?includeGoogleAds=true`),
+    enabled: activeTab === 'settings',
+  });
+
+  // Use Google-enriched customer data for Settings tab fields
+  const settingsCustomer = customerWithGoogle || customer;
 
   const { data: trackings, isLoading: trackingsLoading } = useCustomerTrackings(id);
   const connectGoogle = useConnectGoogleAccount();
@@ -323,7 +335,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
         </div>
       </div>
 
-      <Tabs defaultValue="trackings">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="trackings">
             <Activity className="mr-2 h-4 w-4" />
@@ -490,10 +502,12 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
         </TabsContent>
 
         <TabsContent value="autotrack">
-          <AutoTrack
-            customerId={id}
-            customerWebsiteUrl={customer?.websiteUrl ?? undefined}
-          />
+          {activeTab === 'autotrack' && (
+            <AutoTrack
+              customerId={id}
+              customerWebsiteUrl={customer?.websiteUrl ?? undefined}
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="settings" className="space-y-6">
@@ -669,14 +683,14 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
 
                 {/* Google Ads */}
                 <div className={`rounded-lg border p-4 ${
-                  customer.googleAdsAccounts && customer.googleAdsAccounts.length > 0
+                  settingsCustomer?.googleAdsAccounts && settingsCustomer.googleAdsAccounts.length > 0
                     ? 'border-green-200 bg-green-50'
                     : customer.googleAccountId
                       ? 'border-yellow-200 bg-yellow-50'
                       : 'border-gray-200 bg-gray-50'
                 }`}>
                   <div className="flex items-center gap-2 mb-2">
-                    {customer.googleAdsAccounts && customer.googleAdsAccounts.length > 0 ? (
+                    {settingsCustomer?.googleAdsAccounts && settingsCustomer.googleAdsAccounts.length > 0 ? (
                       <CheckCircle className="h-5 w-5 text-green-600" />
                     ) : customer.googleAccountId ? (
                       <XCircle className="h-5 w-5 text-yellow-500" />
@@ -688,8 +702,8 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                   <div className="flex items-center gap-1">
                     <MonitorSmartphone className="h-3 w-3 text-muted-foreground" />
                     <p className="text-xs text-muted-foreground">
-                      {customer.googleAdsAccounts && customer.googleAdsAccounts.length > 0
-                        ? `${customer.googleAdsAccounts.length} account${customer.googleAdsAccounts.length > 1 ? 's' : ''}`
+                      {settingsCustomer?.googleAdsAccounts && settingsCustomer.googleAdsAccounts.length > 0
+                        ? `${settingsCustomer.googleAdsAccounts.length} account${settingsCustomer.googleAdsAccounts.length > 1 ? 's' : ''}`
                         : customer.googleAccountId
                           ? 'No accounts found'
                           : 'Not connected'}
@@ -699,14 +713,14 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
 
                 {/* GA4 */}
                 <div className={`rounded-lg border p-4 ${
-                  customer.ga4Properties && customer.ga4Properties.length > 0
+                  settingsCustomer?.ga4Properties && settingsCustomer.ga4Properties.length > 0
                     ? 'border-green-200 bg-green-50'
                     : customer.googleAccountId
                       ? 'border-yellow-200 bg-yellow-50'
                       : 'border-gray-200 bg-gray-50'
                 }`}>
                   <div className="flex items-center gap-2 mb-2">
-                    {customer.ga4Properties && customer.ga4Properties.length > 0 ? (
+                    {settingsCustomer?.ga4Properties && settingsCustomer.ga4Properties.length > 0 ? (
                       <CheckCircle className="h-5 w-5 text-green-600" />
                     ) : customer.googleAccountId ? (
                       <XCircle className="h-5 w-5 text-yellow-500" />
@@ -718,8 +732,8 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                   <div className="flex items-center gap-1">
                     <BarChart3 className="h-3 w-3 text-muted-foreground" />
                     <p className="text-xs text-muted-foreground">
-                      {customer.ga4Properties && customer.ga4Properties.length > 0
-                        ? `${customer.ga4Properties.length} propert${customer.ga4Properties.length > 1 ? 'ies' : 'y'}`
+                      {settingsCustomer?.ga4Properties && settingsCustomer.ga4Properties.length > 0
+                        ? `${settingsCustomer.ga4Properties.length} propert${settingsCustomer.ga4Properties.length > 1 ? 'ies' : 'y'}`
                         : customer.googleAccountId
                           ? 'No properties found'
                           : 'Not connected'}
@@ -729,11 +743,11 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
               </div>
 
               {/* Google Ads Accounts Detail */}
-              {customer.googleAdsAccounts && customer.googleAdsAccounts.length > 0 && (
+              {settingsCustomer?.googleAdsAccounts && settingsCustomer.googleAdsAccounts.length > 0 && (
                 <div className="mt-4">
                   <h4 className="text-sm font-medium mb-2">Google Ads Accounts</h4>
                   <div className="space-y-2">
-                    {customer.googleAdsAccounts.map((account) => (
+                    {settingsCustomer.googleAdsAccounts.map((account) => (
                       <div key={account.id} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
                         <div>
                           <span className="font-medium">{account.accountName}</span>
@@ -749,11 +763,11 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
               )}
 
               {/* GA4 Properties Detail */}
-              {customer.ga4Properties && customer.ga4Properties.length > 0 && (
+              {settingsCustomer?.ga4Properties && settingsCustomer.ga4Properties.length > 0 && (
                 <div className="mt-4">
                   <h4 className="text-sm font-medium mb-2">GA4 Properties</h4>
                   <div className="space-y-2">
-                    {customer.ga4Properties.map((property) => (
+                    {settingsCustomer.ga4Properties.map((property) => (
                       <div key={property.id} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
                         <div>
                           <span className="font-medium">{property.propertyName}</span>

@@ -17,10 +17,14 @@ export async function GET() {
 
     // Return null if no footer configured - let client handle empty state
     if (!footer) {
-      return NextResponse.json(null);
+      const response = NextResponse.json(null);
+      response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
+      return response;
     }
 
-    return NextResponse.json(footer);
+    const response = NextResponse.json(footer);
+    response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
+    return response;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Failed to fetch footer content:', message);

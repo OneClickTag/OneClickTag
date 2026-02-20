@@ -178,114 +178,122 @@ export async function GET(request: NextRequest): Promise<NextResponse<CallbackSu
         // Non-blocking - tokens are still stored
       }
 
-      // Non-blocking: Sync Google Ads accounts
-      try {
-        const { listAccessibleAccounts } = await import('@/lib/google/ads');
-        const adsAccounts = await listAccessibleAccounts(user.id, tenantId);
-        for (const account of adsAccounts) {
-          try {
-            await prisma.googleAdsAccount.upsert({
-              where: {
-                accountId_tenantId: {
+      // Non-blocking: Sync all Google services in parallel
+      const [adsResult, gtmResult, ga4Result] = await Promise.allSettled([
+        // Google Ads sync
+        (async () => {
+          const { listAccessibleAccounts } = await import('@/lib/google/ads');
+          const adsAccounts = await listAccessibleAccounts(user.id, tenantId);
+          for (const account of adsAccounts) {
+            try {
+              await prisma.googleAdsAccount.upsert({
+                where: {
+                  accountId_tenantId: {
+                    accountId: account.customerId,
+                    tenantId,
+                  },
+                },
+                update: {
+                  accountName: account.descriptiveName,
+                  currency: account.currencyCode,
+                  timeZone: account.timeZone,
+                  isActive: true,
+                },
+                create: {
+                  googleAccountId: account.customerId,
                   accountId: account.customerId,
+                  accountName: account.descriptiveName,
+                  currency: account.currencyCode,
+                  timeZone: account.timeZone,
+                  isActive: true,
+                  customerId: stateData.customerId!,
                   tenantId,
                 },
-              },
-              update: {
-                accountName: account.descriptiveName,
-                currency: account.currencyCode,
-                timeZone: account.timeZone,
-                isActive: true,
-              },
-              create: {
-                googleAccountId: account.customerId,
-                accountId: account.customerId,
-                accountName: account.descriptiveName,
-                currency: account.currencyCode,
-                timeZone: account.timeZone,
-                isActive: true,
-                customerId: stateData.customerId!,
-                tenantId,
-              },
-            });
-          } catch (err) {
-            console.error(`Failed to sync account ${account.customerId}:`, err);
+              });
+            } catch (err) {
+              console.error(`Failed to sync account ${account.customerId}:`, err);
+            }
           }
-        }
-        console.log(`Synced ${adsAccounts.length} Google Ads accounts`);
-      } catch (error) {
-        console.warn('Google Ads sync failed (non-blocking):', error);
-      }
+          console.log(`Synced ${adsAccounts.length} Google Ads accounts`);
+        })(),
 
-      // Non-blocking: Setup GTM workspace and store on customer
-      try {
-        const { getGTMClient, listContainers, getOrCreateWorkspace } = await import('@/lib/google/gtm');
-        const gtm = await getGTMClient(user.id, tenantId);
-        const containers = await listContainers(user.id, tenantId);
-        if (containers.length > 0) {
-          const container = containers[0];
-          const containerId = container.containerId!;
-          const containerName = container.name || container.publicId || containerId;
-          const accountId = container.accountId!;
-          const workspaceId = await getOrCreateWorkspace(gtm, accountId, containerId);
+        // GTM workspace setup
+        (async () => {
+          const { getGTMClient, listContainers, getOrCreateWorkspace } = await import('@/lib/google/gtm');
+          const gtm = await getGTMClient(user.id, tenantId);
+          const containers = await listContainers(user.id, tenantId);
+          if (containers.length > 0) {
+            const container = containers[0];
+            const containerId = container.containerId!;
+            const containerName = container.name || container.publicId || containerId;
+            const accountId = container.accountId!;
+            const workspaceId = await getOrCreateWorkspace(gtm, accountId, containerId);
 
-          // Store GTM container/workspace info on the customer
-          await prisma.$executeRawUnsafe(
-            `UPDATE customers SET "gtmAccountId" = $1, "gtmContainerId" = $2, "gtmWorkspaceId" = $3, "gtmContainerName" = $4 WHERE id = $5`,
-            accountId, containerId, workspaceId, containerName, stateData.customerId
-          );
+            // Store GTM container/workspace info on the customer
+            await prisma.$executeRawUnsafe(
+              `UPDATE customers SET "gtmAccountId" = $1, "gtmContainerId" = $2, "gtmWorkspaceId" = $3, "gtmContainerName" = $4 WHERE id = $5`,
+              accountId, containerId, workspaceId, containerName, stateData.customerId
+            );
 
-          console.log(`GTM workspace ready: ${workspaceId} in container ${containerId} (${containerName})`);
-        } else {
-          console.warn('No GTM containers found for customer');
-        }
-      } catch (error) {
-        console.warn('GTM workspace setup failed (non-blocking):', error);
-      }
+            console.log(`GTM workspace ready: ${workspaceId} in container ${containerId} (${containerName})`);
+          } else {
+            console.warn('No GTM containers found for customer');
+          }
+        })(),
 
-      // Non-blocking: Sync GA4 properties
-      try {
-        const { listGA4Properties } = await import('@/lib/google/ga4');
-        const ga4Properties = await listGA4Properties(user.id, tenantId);
-        for (const property of ga4Properties) {
-          try {
-            await prisma.gA4Property.upsert({
-              where: {
-                propertyId_tenantId: {
+        // GA4 properties sync
+        (async () => {
+          const { listGA4Properties } = await import('@/lib/google/ga4');
+          const ga4Properties = await listGA4Properties(user.id, tenantId);
+          for (const property of ga4Properties) {
+            try {
+              await prisma.gA4Property.upsert({
+                where: {
+                  propertyId_tenantId: {
+                    propertyId: property.propertyId,
+                    tenantId,
+                  },
+                },
+                update: {
+                  propertyName: property.propertyName,
+                  displayName: property.displayName,
+                  timeZone: property.timeZone,
+                  currency: property.currency,
+                  industryCategory: property.industryCategory,
+                  measurementId: property.measurementId || undefined,
+                  isActive: true,
+                },
+                create: {
+                  googleAccountId: property.propertyId,
                   propertyId: property.propertyId,
+                  propertyName: property.propertyName,
+                  displayName: property.displayName,
+                  timeZone: property.timeZone,
+                  currency: property.currency,
+                  industryCategory: property.industryCategory,
+                  measurementId: property.measurementId || undefined,
+                  isActive: true,
+                  customerId: stateData.customerId!,
                   tenantId,
                 },
-              },
-              update: {
-                propertyName: property.propertyName,
-                displayName: property.displayName,
-                timeZone: property.timeZone,
-                currency: property.currency,
-                industryCategory: property.industryCategory,
-                measurementId: property.measurementId || undefined,
-                isActive: true,
-              },
-              create: {
-                googleAccountId: property.propertyId,
-                propertyId: property.propertyId,
-                propertyName: property.propertyName,
-                displayName: property.displayName,
-                timeZone: property.timeZone,
-                currency: property.currency,
-                industryCategory: property.industryCategory,
-                measurementId: property.measurementId || undefined,
-                isActive: true,
-                customerId: stateData.customerId!,
-                tenantId,
-              },
-            });
-          } catch (err) {
-            console.error(`Failed to sync GA4 property ${property.propertyId}:`, err);
+              });
+            } catch (err) {
+              console.error(`Failed to sync GA4 property ${property.propertyId}:`, err);
+            }
           }
-        }
-        console.log(`Synced ${ga4Properties.length} GA4 properties`);
-      } catch (error) {
-        console.warn('GA4 properties sync failed (non-blocking):', error);
+          console.log(`Synced ${ga4Properties.length} GA4 properties`);
+        })(),
+      ]);
+
+      // Log any failures
+      if (adsResult.status === 'rejected') {
+        console.warn('Google Ads sync failed (non-blocking):', adsResult.reason);
+      }
+      if (gtmResult.status === 'rejected') {
+        console.warn('GTM workspace setup failed (non-blocking):', gtmResult.reason);
+      }
+      if (ga4Result.status === 'rejected') {
+        console.warn('GA4 properties sync failed (non-blocking):', ga4Result.reason);
       }
     }
 

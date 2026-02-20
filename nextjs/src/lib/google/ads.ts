@@ -50,22 +50,18 @@ export async function listAccessibleAccounts(
   const data = await response.json();
   const resourceNames = data.resourceNames || [];
 
-  // Get details for each account
-  const accounts: GoogleAdsAccount[] = [];
-  for (const resourceName of resourceNames) {
-    const customerId = resourceName.replace('customers/', '');
-    try {
-      const accountDetails = await getAccountDetails(
-        credentials.token!,
-        customerId
-      );
-      if (accountDetails) {
-        accounts.push(accountDetails);
-      }
-    } catch (error) {
-      console.error(`Failed to get details for account ${customerId}:`, error);
-    }
-  }
+  // Parallelize account detail fetches
+  const accountResults = await Promise.allSettled(
+    resourceNames.map(async (resourceName: string) => {
+      const customerId = resourceName.replace('customers/', '');
+      return getAccountDetails(credentials.token!, customerId);
+    })
+  );
+
+  const accounts: GoogleAdsAccount[] = accountResults
+    .filter((r): r is PromiseFulfilledResult<GoogleAdsAccount | null> => r.status === 'fulfilled')
+    .map(r => r.value)
+    .filter((account): account is GoogleAdsAccount => account !== null);
 
   return accounts;
 }

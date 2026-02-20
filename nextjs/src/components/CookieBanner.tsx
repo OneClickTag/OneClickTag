@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { X, Cookie, ChevronDown, ChevronUp } from 'lucide-react';
+import { useCookieBannerData } from '@/hooks/use-public-data';
 
 interface CookieItem {
   id: string;
@@ -95,7 +96,6 @@ export function CookieBanner() {
   const [settings, setSettings] = useState<BannerSettings>(defaultSettings);
   const [categories, setCategories] = useState<CookieCategoryData[]>([]);
   const [tenantId, setTenantId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [preferences, setPreferences] = useState<CookiePreferences>({
     necessary: true, // Always required
     analytics: false,
@@ -103,27 +103,17 @@ export function CookieBanner() {
     timestamp: 0,
   });
 
-  // Fetch banner settings and categories from the database
-  useEffect(() => {
-    const fetchBannerData = async () => {
-      try {
-        const response = await fetch('/api/public/cookie-banner');
-        if (response.ok) {
-          const data: CookieBannerData = await response.json();
-          setSettings(data.banner);
-          setCategories(data.categories || []);
-          setTenantId(data.tenantId);
-        }
-      } catch (error) {
-        console.error('Failed to fetch cookie banner settings:', error);
-        // Use default settings on error
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  // Fetch banner settings and categories from the database (React Query)
+  const { data: bannerData, isLoading } = useCookieBannerData();
 
-    fetchBannerData();
-  }, []);
+  // Sync fetched data into local state when it arrives
+  useEffect(() => {
+    if (bannerData) {
+      setSettings(bannerData.banner);
+      setCategories(bannerData.categories || []);
+      setTenantId(bannerData.tenantId);
+    }
+  }, [bannerData]);
 
   // Check consent and show banner
   useEffect(() => {

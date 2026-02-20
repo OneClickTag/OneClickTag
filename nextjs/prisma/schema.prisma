@@ -221,6 +221,7 @@ model GA4Property {
 
   @@unique([propertyId, tenantId])
   @@index([tenantId, customerId])
+  @@index([customerId])
   @@map("ga4_properties")
 }
 
@@ -614,6 +615,7 @@ model FooterContent {
   updatedAt        DateTime @updatedAt
   updatedBy        String?
 
+  @@index([isActive])
   @@map("footer_content")
 }
 
@@ -1259,6 +1261,7 @@ model SiteScan {
   @@index([tenantId, customerId])
   @@index([tenantId, status])
   @@index([customerId, createdAt])
+  @@index([customerId, tenantId, status])
   @@map("site_scans")
 }
 

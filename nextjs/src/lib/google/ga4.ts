@@ -31,55 +31,55 @@ export async function listGA4Properties(
     return [];
   }
 
-  const properties: GA4PropertyInfo[] = [];
-
-  for (const account of accounts) {
-    if (!account.name) continue;
-
-    try {
+  // Parallelize property fetches across accounts
+  const accountResults = await Promise.allSettled(
+    accounts.filter(account => account.name).map(async (account) => {
       const propertiesResponse = await analyticsAdmin.properties.list({
         filter: `parent:${account.name}`,
       });
 
       const accountProperties = propertiesResponse.data.properties || [];
 
-      for (const property of accountProperties) {
-        if (!property.name) continue;
+      // Parallelize data stream fetches across properties
+      const propertyResults = await Promise.allSettled(
+        accountProperties.filter(p => p.name).map(async (property) => {
+          const propertyId = property.name!.replace('properties/', '');
 
-        // Extract property ID from resource name (e.g., "properties/123456789")
-        const propertyId = property.name.replace('properties/', '');
-
-        // Try to get data streams to find measurement ID
-        let measurementId: string | undefined;
-        try {
-          const streamsResponse = await analyticsAdmin.properties.dataStreams.list({
-            parent: property.name,
-          });
-          const webStream = (streamsResponse.data.dataStreams || []).find(
-            (s) => s.type === 'WEB_DATA_STREAM'
-          );
-          if (webStream?.webStreamData?.measurementId) {
-            measurementId = webStream.webStreamData.measurementId;
+          let measurementId: string | undefined;
+          try {
+            const streamsResponse = await analyticsAdmin.properties.dataStreams.list({
+              parent: property.name!,
+            });
+            const webStream = (streamsResponse.data.dataStreams || []).find(
+              (s) => s.type === 'WEB_DATA_STREAM'
+            );
+            if (webStream?.webStreamData?.measurementId) {
+              measurementId = webStream.webStreamData.measurementId;
+            }
+          } catch {
+            // Ignore stream fetch errors
           }
-        } catch {
-          // Ignore stream fetch errors
-        }
 
-        properties.push({
-          propertyId,
-          propertyName: property.displayName || `Property ${propertyId}`,
-          displayName: property.displayName || '',
-          websiteUrl: undefined, // Not available in v1beta property listing
-          timeZone: property.timeZone || undefined,
-          currency: property.currencyCode || undefined,
-          industryCategory: property.industryCategory || undefined,
-          ...(measurementId && { measurementId }),
-        });
-      }
-    } catch (error) {
-      console.warn(`Failed to list properties for account ${account.name}:`, error);
-    }
-  }
+          return {
+            propertyId,
+            propertyName: property.displayName || `Property ${propertyId}`,
+            displayName: property.displayName || '',
+            websiteUrl: undefined,
+            timeZone: property.timeZone || undefined,
+            currency: property.currencyCode || undefined,
+            industryCategory: property.industryCategory || undefined,
+            ...(measurementId && { measurementId }),
+          } as GA4PropertyInfo;
+        })
+      );
 
-  return properties;
+      return propertyResults
+        .filter((r): r is PromiseFulfilledResult<GA4PropertyInfo> => r.status === 'fulfilled')
+        .map(r => r.value);
+    })
+  );
+
+  return accountResults
+    .filter((r): r is PromiseFulfilledResult<GA4PropertyInfo[]> => r.status === 'fulfilled')
+    .flatMap(r => r.value);
 }

@@ -25,6 +25,35 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/**
+ * Helper function to authenticate with backend API using Firebase ID token
+ * @param idToken Firebase ID token
+ * @param turnstileToken Optional Turnstile verification token
+ * @returns User data and access token from backend
+ */
+async function authenticateWithBackend(
+  idToken: string,
+  turnstileToken?: string
+): Promise<{ user: AuthUser; accessToken: string }> {
+  const body: Record<string, string> = { idToken };
+  if (turnstileToken) {
+    body.turnstileToken = turnstileToken;
+  }
+
+  const response = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Login failed' }));
+    throw new Error(error.error || 'Login failed');
+  }
+
+  return response.json();
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
@@ -38,24 +67,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           // Get Firebase ID token and authenticate with backend
           const idToken = await fbUser.getIdToken();
-          const response = await fetch('/api/auth/login', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ idToken }),
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            // Set auth cookie for middleware
-            document.cookie = `auth-token=${data.accessToken}; path=/; max-age=${60 * 60 * 24 * 7}`; // 7 days
-            setUser(data.user);
-          } else {
-            console.error('Backend auth failed, response:', await response.text());
-            document.cookie = 'auth-token=; path=/; max-age=0'; // Clear cookie
-            setUser(null);
-          }
+          const data = await authenticateWithBackend(idToken);
+          // Set auth cookie for middleware
+          document.cookie = `auth-token=${data.accessToken}; path=/; max-age=${60 * 60 * 24 * 7}`; // 7 days
+          setUser(data.user);
         } catch (error) {
           console.error('Failed to authenticate with backend:', error);
           document.cookie = 'auth-token=; path=/; max-age=0'; // Clear cookie
@@ -78,20 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const idToken = await userCredential.user.getIdToken();
 
     // Authenticate with backend
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ idToken, turnstileToken }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to authenticate with backend');
-    }
-
-    const data = await response.json();
+    const data = await authenticateWithBackend(idToken, turnstileToken);
     // Set auth cookie for middleware
     document.cookie = `auth-token=${data.accessToken}; path=/; max-age=${60 * 60 * 24 * 7}`; // 7 days
     setUser(data.user);
@@ -103,20 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const idToken = await userCredential.user.getIdToken();
 
     // Authenticate with backend
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ idToken, turnstileToken }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to authenticate with backend');
-    }
-
-    const data = await response.json();
+    const data = await authenticateWithBackend(idToken, turnstileToken);
     // Set auth cookie for middleware
     document.cookie = `auth-token=${data.accessToken}; path=/; max-age=${60 * 60 * 24 * 7}`; // 7 days
     setUser(data.user);

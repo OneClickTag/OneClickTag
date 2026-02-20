@@ -15,7 +15,6 @@ export async function GET(request: NextRequest) {
     let tenantId = searchParams.get('tenantId');
 
     // If no tenantId provided, get the default/first active tenant
-    // This is for the main website cookie banner
     if (!tenantId) {
       const defaultTenant = await prisma.tenant.findFirst({
         where: { isActive: true },
@@ -32,47 +31,25 @@ export async function GET(request: NextRequest) {
       tenantId = defaultTenant.id;
     }
 
-    // Verify tenant exists and is active
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: { id: true, isActive: true },
-    });
-
-    if (!tenant) {
-      return NextResponse.json(
-        { error: 'Tenant not found' },
-        { status: 404 }
-      );
-    }
-
-    if (!tenant.isActive) {
-      return NextResponse.json(
-        { error: 'Tenant is inactive' },
-        { status: 403 }
-      );
-    }
-
-    // Get banner settings
-    const banner = await prisma.cookieConsentBanner.findUnique({
-      where: { tenantId },
-    });
-
-    // Get cookie categories with their cookies
-    const categories = await prisma.cookieCategory.findMany({
-      where: { tenantId },
-      include: {
-        cookies: {
-          orderBy: { name: 'asc' },
+    // Fetch banner + categories in parallel (also removes separate tenant verification)
+    const [banner, categories] = await Promise.all([
+      prisma.cookieConsentBanner.findUnique({
+        where: { tenantId },
+      }),
+      prisma.cookieCategory.findMany({
+        where: { tenantId },
+        include: {
+          cookies: {
+            orderBy: { name: 'asc' },
+          },
         },
-      },
-      orderBy: { category: 'asc' },
-    });
+        orderBy: { category: 'asc' },
+      }),
+    ]);
 
-    // Return the complete cookie banner data
-    return NextResponse.json({
+    const data = {
       tenantId,
       banner: banner || {
-        // Default banner settings if none exist
         isActive: true,
         headingText: 'We value your privacy',
         bodyText: 'We use cookies to enhance your browsing experience, serve personalized content, and analyze our traffic. By clicking "Accept All", you consent to our use of cookies.',
@@ -107,7 +84,11 @@ export async function GET(request: NextRequest) {
           type: cookie.type,
         })),
       })),
-    });
+    };
+
+    const response = NextResponse.json(data);
+    response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
+    return response;
   } catch (error) {
     console.error('Get public cookie banner error:', error);
 
