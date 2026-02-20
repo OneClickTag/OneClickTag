@@ -56,6 +56,10 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
 
           // Early access questionnaire (private)
           '/early-access/questionnaire',
+
+          // Utility pages (not useful for search engines)
+          '/unsubscribe',
+          '/thank-you',
         ],
       },
       // Additional rules for specific bots

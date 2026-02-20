@@ -76,6 +76,61 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     });
   }
 
+  // About page
+  if (!excludedSet.has('/about')) {
+    const aboutSeo = seoSettingsMap.get('/about');
+    staticPages.push({
+      url: `${baseUrl}/about`,
+      lastModified: aboutSeo?.updatedAt || new Date(),
+      changeFrequency: (aboutSeo?.sitemapFreq as 'daily' | 'weekly' | 'monthly' | 'yearly') || 'monthly',
+      priority: aboutSeo?.sitemapPriority || 0.8,
+    });
+  }
+
+  // Plans/Pricing page
+  if (!excludedSet.has('/plans')) {
+    const plansSeo = seoSettingsMap.get('/plans');
+    staticPages.push({
+      url: `${baseUrl}/plans`,
+      lastModified: plansSeo?.updatedAt || new Date(),
+      changeFrequency: (plansSeo?.sitemapFreq as 'daily' | 'weekly' | 'monthly' | 'yearly') || 'weekly',
+      priority: plansSeo?.sitemapPriority || 0.8,
+    });
+  }
+
+  // Cookie Policy page
+  if (!excludedSet.has('/cookie-policy')) {
+    const cookieSeo = seoSettingsMap.get('/cookie-policy');
+    staticPages.push({
+      url: `${baseUrl}/cookie-policy`,
+      lastModified: cookieSeo?.updatedAt || new Date(),
+      changeFrequency: (cookieSeo?.sitemapFreq as 'daily' | 'weekly' | 'monthly' | 'yearly') || 'monthly',
+      priority: cookieSeo?.sitemapPriority || 0.3,
+    });
+  }
+
+  // Privacy Policy page
+  if (!excludedSet.has('/privacy')) {
+    const privacySeo = seoSettingsMap.get('/privacy');
+    staticPages.push({
+      url: `${baseUrl}/privacy`,
+      lastModified: privacySeo?.updatedAt || new Date(),
+      changeFrequency: (privacySeo?.sitemapFreq as 'daily' | 'weekly' | 'monthly' | 'yearly') || 'monthly',
+      priority: privacySeo?.sitemapPriority || 0.3,
+    });
+  }
+
+  // Terms of Service page
+  if (!excludedSet.has('/terms')) {
+    const termsSeo = seoSettingsMap.get('/terms');
+    staticPages.push({
+      url: `${baseUrl}/terms`,
+      lastModified: termsSeo?.updatedAt || new Date(),
+      changeFrequency: (termsSeo?.sitemapFreq as 'daily' | 'weekly' | 'monthly' | 'yearly') || 'monthly',
+      priority: termsSeo?.sitemapPriority || 0.3,
+    });
+  }
+
   // Thank you page
   if (!excludedSet.has('/thank-you')) {
     const thankYouSeo = seoSettingsMap.get('/thank-you');
