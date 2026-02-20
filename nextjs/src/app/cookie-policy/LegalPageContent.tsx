@@ -1,5 +1,3 @@
-'use client';
-
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -32,19 +30,6 @@ function parseLegalContent(content: string): LegalContent | null {
     return null;
   } catch {
     return null;
-  }
-}
-
-function formatDate(dateString: string): string {
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  } catch {
-    return dateString;
   }
 }
 
@@ -93,24 +78,6 @@ export function LegalPageContent({ content, pageType }: LegalPageContentProps) {
   if (parsedContent) {
     return (
       <div className="space-y-8">
-        {/* Document Dates */}
-        {(parsedContent.effectiveDate || parsedContent.lastUpdated) && (
-          <div className="flex flex-wrap gap-6 text-sm text-gray-500 pb-6 border-b border-gray-200">
-            {parsedContent.effectiveDate && (
-              <div>
-                <span className="font-medium">Effective Date:</span>{' '}
-                {formatDate(parsedContent.effectiveDate)}
-              </div>
-            )}
-            {parsedContent.lastUpdated && (
-              <div>
-                <span className="font-medium">Last Updated:</span>{' '}
-                {formatDate(parsedContent.lastUpdated)}
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Introduction */}
         {parsedContent.introduction && (
           <div className="bg-blue-50 border border-blue-100 rounded-lg p-6">

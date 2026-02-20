@@ -1,5 +1,3 @@
-'use client';
-
 import { Shield, BarChart3, Megaphone, SlidersHorizontal, Cog } from 'lucide-react';
 
 interface CookieItem {

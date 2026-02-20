@@ -131,17 +131,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     });
   }
 
-  // Thank you page
-  if (!excludedSet.has('/thank-you')) {
-    const thankYouSeo = seoSettingsMap.get('/thank-you');
-    staticPages.push({
-      url: `${baseUrl}/thank-you`,
-      lastModified: thankYouSeo?.updatedAt || new Date(),
-      changeFrequency: (thankYouSeo?.sitemapFreq as 'daily' | 'weekly' | 'monthly' | 'yearly') || 'yearly',
-      priority: thankYouSeo?.sitemapPriority || 0.3,
-    });
-  }
-
   // Dynamic content pages from database
   const contentPages = await prisma.contentPage.findMany({
     where: {

@@ -70,11 +70,36 @@ async function getCookieCategories() {
   }
 }
 
+function getEffectiveDate(content: string | undefined | null): string | null {
+  if (!content) return null;
+  try {
+    const parsed = JSON.parse(content);
+    return parsed.effectiveDate || parsed.lastUpdated || null;
+  } catch {
+    return null;
+  }
+}
+
+function formatDate(dateString: string): string {
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  } catch {
+    return dateString;
+  }
+}
+
 export default async function CookiePolicyPage() {
   const [pageData, cookieCategories] = await Promise.all([
     getCookiePolicyPageContent(),
     getCookieCategories(),
   ]);
+
+  const effectiveDate = getEffectiveDate(pageData?.content);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -92,9 +117,11 @@ export default async function CookiePolicyPage() {
                 <h1 className="text-4xl font-bold text-gray-900">
                   {pageData?.title || 'Cookie Policy'}
                 </h1>
-                <p className="text-sm text-gray-500 mt-1">
-                  Last updated: January 1, 2025
-                </p>
+                {effectiveDate && (
+                  <p className="text-sm text-gray-500 mt-1">
+                    Effective Date: {formatDate(effectiveDate)}
+                  </p>
+                )}
               </div>
             </div>
           </div>
