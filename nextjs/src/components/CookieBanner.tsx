@@ -481,12 +481,15 @@ export function CookieBanner() {
               </div>
             </div>
 
-            {/* Buttons */}
+            {/* Buttons – EU compliance: all buttons must be identical in color, size, and font */}
             <div className="flex flex-wrap gap-3">
               <Button
                 onClick={handleAcceptAll}
-                className="text-white"
-                style={{ backgroundColor: settings.acceptButtonColor }}
+                variant="outline"
+                style={{
+                  borderColor: settings.textColor,
+                  color: settings.textColor,
+                }}
               >
                 {settings.acceptAllButtonText}
               </Button>
@@ -494,8 +497,8 @@ export function CookieBanner() {
                 onClick={handleRejectAll}
                 variant="outline"
                 style={{
-                  borderColor: settings.rejectButtonColor,
-                  color: settings.rejectButtonColor
+                  borderColor: settings.textColor,
+                  color: settings.textColor,
                 }}
               >
                 {settings.rejectAllButtonText}
@@ -505,8 +508,8 @@ export function CookieBanner() {
                   onClick={handleSavePreferences}
                   variant="outline"
                   style={{
-                    borderColor: settings.customizeButtonColor,
-                    color: settings.customizeButtonColor
+                    borderColor: settings.textColor,
+                    color: settings.textColor,
                   }}
                 >
                   {settings.savePreferencesText}
