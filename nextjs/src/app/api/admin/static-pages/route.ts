@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getSessionFromRequest, requireAdmin } from '@/lib/auth/session';
 
+export const dynamic = 'force-dynamic';
+
 // Static page slugs managed by this endpoint
 const STATIC_PAGE_SLUGS = ['about', 'terms', 'privacy', 'cookie-policy'];
 

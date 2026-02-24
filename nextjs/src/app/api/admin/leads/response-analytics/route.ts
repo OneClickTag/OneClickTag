@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getSessionFromRequest, requireAdmin } from '@/lib/auth/session';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/admin/leads/response-analytics
  * Get aggregated questionnaire response analytics - Admin only

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { exchangeCodeForTokens, storeOAuthTokens } from '@/lib/google/oauth';
 import prisma from '@/lib/prisma';
 
+export const dynamic = 'force-dynamic';
+
 interface StateData {
   nonce: string;
   userId: string;

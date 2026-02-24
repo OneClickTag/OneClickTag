@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionFromRequest, requireTenant } from '@/lib/auth/session';
 import { listContainers } from '@/lib/google/gtm';
 
+export const dynamic = 'force-dynamic';
+
 // GET /api/google/containers - List GTM containers for the authenticated user
 export async function GET(request: NextRequest) {
   try {

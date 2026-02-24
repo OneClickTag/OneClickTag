@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionFromRequest, requireAuth } from '@/lib/auth/session';
 import prisma from '@/lib/prisma';
 
+export const dynamic = 'force-dynamic';
+
 // GET /api/users - Get current user profile
 export async function GET(request: NextRequest) {
   try {

@@ -3,6 +3,8 @@ import prisma from '@/lib/prisma';
 import { getSessionFromRequest, requireAdmin } from '@/lib/auth/session';
 import { Prisma } from '@prisma/client';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/admin/leads
  * List all leads with pagination and filters - Admin only

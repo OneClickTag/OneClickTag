@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getSessionFromRequest, requireAdmin } from '@/lib/auth/session';
 
+export const dynamic = 'force-dynamic';
+
 // GET /api/admin/footer-content - Get footer content
 export async function GET(request: NextRequest) {
   try {

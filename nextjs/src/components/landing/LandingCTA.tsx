@@ -84,7 +84,7 @@ export function LandingCTA({ content, earlyAccessMode }: LandingCTAProps) {
           </div>
         )}
         <div
-          className={`flex flex-col sm:flex-row gap-4 justify-center transform transition-all duration-700 delay-[400ms] ${
+          className={`flex flex-col sm:flex-row gap-4 justify-center transform transition-all duration-700 delay-500 ${
             ctaInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
           }`}
         >

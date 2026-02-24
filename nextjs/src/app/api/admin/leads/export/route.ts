@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getSessionFromRequest, requireAdmin } from '@/lib/auth/session';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * Escape a value for CSV (handle commas, quotes, newlines)
  */

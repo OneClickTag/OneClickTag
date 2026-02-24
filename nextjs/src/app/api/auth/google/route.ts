@@ -3,6 +3,8 @@ import { jwtVerify } from 'jose';
 import { getAuthUrl } from '@/lib/google/oauth';
 import { randomUUID } from 'crypto';
 
+export const dynamic = 'force-dynamic';
+
 // JWT secret - should be at least 32 characters
 const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || 'your-secret-key-at-least-32-chars'

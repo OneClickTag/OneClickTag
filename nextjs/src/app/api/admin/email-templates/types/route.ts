@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionFromRequest, requireAdmin } from '@/lib/auth/session';
 import { EmailTemplateType } from '@prisma/client';
 
+export const dynamic = 'force-dynamic';
+
 // Template type options with labels
 const templateTypes = [
   {

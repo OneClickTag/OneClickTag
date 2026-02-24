@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionFromRequest, requireTenant } from '@/lib/auth/session';
 import { getCustomerStats } from '@/lib/api/customers/service';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     // Get session and verify tenant

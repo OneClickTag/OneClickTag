@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionFromRequest, requireTenant } from '@/lib/auth/session';
 import { listAccessibleAccounts } from '@/lib/google/ads';
 
+export const dynamic = 'force-dynamic';
+
 // GET /api/google/accounts - List Google Ads accounts for the authenticated user
 export async function GET(request: NextRequest) {
   try {
