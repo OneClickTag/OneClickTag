@@ -10,6 +10,9 @@ export async function GET(request: NextRequest) {
     const session = await getSessionFromRequest(request);
     requireTenant(session);
 
+    const userFilter = { tenantId: session.tenantId, userId: session.id };
+    const trackingUserFilter = { tenantId: session.tenantId, customer: { userId: session.id } };
+
     const [
       totalCustomers,
       activeCustomers,
@@ -20,28 +23,28 @@ export async function GET(request: NextRequest) {
     ] = await Promise.all([
       // Total customers
       prisma.customer.count({
-        where: { tenantId: session.tenantId },
+        where: userFilter,
       }),
       // Active customers (with Google connected)
       prisma.customer.count({
         where: {
-          tenantId: session.tenantId,
+          ...userFilter,
           googleAccountId: { not: null },
         },
       }),
       // Total trackings
       prisma.tracking.count({
-        where: { tenantId: session.tenantId },
+        where: trackingUserFilter,
       }),
       // Trackings by status
       prisma.tracking.groupBy({
         by: ['status'],
-        where: { tenantId: session.tenantId },
+        where: trackingUserFilter,
         _count: true,
       }),
       // Recent trackings (last 10)
       prisma.tracking.findMany({
-        where: { tenantId: session.tenantId },
+        where: trackingUserFilter,
         orderBy: { createdAt: 'desc' },
         take: 10,
         select: {
@@ -62,7 +65,7 @@ export async function GET(request: NextRequest) {
       prisma.customer.groupBy({
         by: ['createdAt'],
         where: {
-          tenantId: session.tenantId,
+          ...userFilter,
           createdAt: {
             gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
           },

@@ -16,7 +16,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Verify chain: tenant -> customer -> scan -> recommendation
     const scan = await prisma.siteScan.findFirst({
-      where: { id: scanId, customerId, tenantId: session.tenantId },
+      where: { id: scanId, customerId, tenantId: session.tenantId, customer: { userId: session.id } },
     });
     if (!scan) {
       return NextResponse.json({ error: 'Scan not found' }, { status: 404 });

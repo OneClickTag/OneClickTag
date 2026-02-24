@@ -96,9 +96,14 @@ export async function confirmNiche(
   scanId: string,
   niche: string,
   tenantId: string,
+  userId?: string,
 ): Promise<any> {
+  const where: any = { id: scanId, customerId, tenantId };
+  if (userId) {
+    where.customer = { userId };
+  }
   const scan = await prisma.siteScan.findFirst({
-    where: { id: scanId, customerId, tenantId },
+    where,
   });
   if (!scan) throw new Error('Scan not found');
 
@@ -122,9 +127,13 @@ export async function confirmNiche(
 /**
  * Cancel an active scan.
  */
-export async function cancelScan(customerId: string, scanId: string, tenantId: string): Promise<void> {
+export async function cancelScan(customerId: string, scanId: string, tenantId: string, userId?: string): Promise<void> {
+  const where: any = { id: scanId, customerId, tenantId };
+  if (userId) {
+    where.customer = { userId };
+  }
   const scan = await prisma.siteScan.findFirst({
-    where: { id: scanId, customerId, tenantId },
+    where,
   });
   if (!scan) throw new Error('Scan not found');
 
@@ -141,9 +150,13 @@ export async function cancelScan(customerId: string, scanId: string, tenantId: s
 /**
  * Get scan details with summary.
  */
-export async function getScan(customerId: string, scanId: string, tenantId: string): Promise<any> {
+export async function getScan(customerId: string, scanId: string, tenantId: string, userId?: string): Promise<any> {
+  const where: any = { id: scanId, customerId, tenantId };
+  if (userId) {
+    where.customer = { userId };
+  }
   const scan = await prisma.siteScan.findFirst({
-    where: { id: scanId, customerId, tenantId },
+    where,
     include: {
       pages: {
         select: {
@@ -191,9 +204,13 @@ export async function getScan(customerId: string, scanId: string, tenantId: stri
 /**
  * List scan history for a customer.
  */
-export async function listScans(customerId: string, tenantId: string): Promise<any[]> {
+export async function listScans(customerId: string, tenantId: string, userId?: string): Promise<any[]> {
+  const where: any = { customerId, tenantId };
+  if (userId) {
+    where.customer = { userId };
+  }
   const scans = await prisma.siteScan.findMany({
-    where: { customerId, tenantId },
+    where,
     orderBy: { createdAt: 'desc' },
     take: 20,
   });
@@ -224,10 +241,15 @@ export async function getRecommendations(
     funnelStage?: string;
   },
   tenantId: string,
+  userId?: string,
 ): Promise<any[]> {
   // Verify scan belongs to customer + tenant
+  const scanWhere: any = { id: scanId, customerId, tenantId };
+  if (userId) {
+    scanWhere.customer = { userId };
+  }
   const scan = await prisma.siteScan.findFirst({
-    where: { id: scanId, customerId, tenantId },
+    where: scanWhere,
   });
   if (!scan) throw new Error('Scan not found');
 
@@ -265,10 +287,15 @@ export async function acceptRecommendation(
   scanId: string,
   recommendationId: string,
   tenantId: string,
+  userId?: string,
 ): Promise<any> {
   // Verify chain: tenant -> customer -> scan -> recommendation
+  const scanWhere: any = { id: scanId, customerId, tenantId };
+  if (userId) {
+    scanWhere.customer = { userId };
+  }
   const scan = await prisma.siteScan.findFirst({
-    where: { id: scanId, customerId, tenantId },
+    where: scanWhere,
   });
   if (!scan) throw new Error('Scan not found');
 
@@ -293,9 +320,14 @@ export async function rejectRecommendation(
   scanId: string,
   recommendationId: string,
   tenantId: string,
+  userId?: string,
 ): Promise<any> {
+  const scanWhere: any = { id: scanId, customerId, tenantId };
+  if (userId) {
+    scanWhere.customer = { userId };
+  }
   const scan = await prisma.siteScan.findFirst({
-    where: { id: scanId, customerId, tenantId },
+    where: scanWhere,
   });
   if (!scan) throw new Error('Scan not found');
 
@@ -320,9 +352,14 @@ export async function bulkAcceptRecommendations(
   scanId: string,
   recommendationIds: string[],
   tenantId: string,
+  userId?: string,
 ): Promise<{ accepted: number }> {
+  const scanWhere: any = { id: scanId, customerId, tenantId };
+  if (userId) {
+    scanWhere.customer = { userId };
+  }
   const scan = await prisma.siteScan.findFirst({
-    where: { id: scanId, customerId, tenantId },
+    where: scanWhere,
   });
   if (!scan) throw new Error('Scan not found');
 

@@ -27,6 +27,7 @@ model User {
   tenant      Tenant?      @relation(fields: [tenantId], references: [id])
   plan        Plan?        @relation(fields: [planId], references: [id])
   oauthTokens OAuthToken[]
+  customers   Customer[]
 
   // Compliance relations
   cookieConsents       UserCookieConsent[]
@@ -135,6 +136,10 @@ model Customer {
   tenantId String
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
+  // User ownership
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // Compliance relations
   apiAuditLogs ApiAuditLog[]
 
@@ -149,6 +154,8 @@ model Customer {
   @@index([tenantId, email])
   @@index([tenantId, firstName, lastName])
   @@index([tenantId, company])
+  @@index([userId])
+  @@index([userId, tenantId])
   @@map("customers")
 }
 

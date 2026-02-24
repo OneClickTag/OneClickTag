@@ -52,11 +52,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const { force, syncGTM, syncAds } = validatedData.data;
 
-    // Get tracking with tenant check
+    // Get tracking with user ownership check
     const tracking = await prisma.tracking.findFirst({
       where: {
         id,
         tenantId: session.tenantId,
+        customer: { userId: session.id },
       },
       select: {
         id: true,
@@ -96,6 +97,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       where: {
         id: tracking.customerId,
         tenantId: session.tenantId,
+        userId: session.id,
       },
       select: {
         id: true,

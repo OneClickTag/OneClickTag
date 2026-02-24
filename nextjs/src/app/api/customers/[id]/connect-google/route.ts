@@ -21,7 +21,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Verify customer exists and belongs to tenant
     const customer = await prisma.customer.findFirst({
-      where: { id, tenantId: session.tenantId },
+      where: { id, tenantId: session.tenantId, userId: session.id },
     });
 
     if (!customer) {

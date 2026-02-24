@@ -13,11 +13,12 @@ export async function GET(
 
     const { customerId } = params;
 
-    // Verify customer belongs to tenant
+    // Verify customer belongs to user
     const customer = await prisma.customer.findFirst({
       where: {
         id: customerId,
         tenantId: session.tenantId,
+        userId: session.id,
       },
       include: {
         googleAdsAccounts: true,

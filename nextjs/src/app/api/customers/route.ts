@@ -167,7 +167,7 @@ export async function GET(request: NextRequest) {
     // Check if this is a stats request
     const { searchParams } = new URL(request.url);
     if (searchParams.get('stats') === 'true') {
-      const stats = await getCustomerStats(session.tenantId);
+      const stats = await getCustomerStats(session.tenantId, session.id);
       return NextResponse.json(stats);
     }
 
@@ -175,7 +175,7 @@ export async function GET(request: NextRequest) {
     const query = parseQueryParams(searchParams);
 
     // Fetch customers with multi-tenant filtering
-    const result = await findAllCustomers(query, session.tenantId);
+    const result = await findAllCustomers(query, session.tenantId, session.id);
 
     return NextResponse.json(result);
   } catch (error) {

@@ -26,7 +26,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Verify scan exists and belongs to customer
     const scan = await prisma.siteScan.findFirst({
-      where: { id: scanId, customerId, tenantId: session.tenantId },
+      where: { id: scanId, customerId, tenantId: session.tenantId, customer: { userId: session.id } },
       select: { id: true, status: true, websiteUrl: true, tenantId: true },
     });
 

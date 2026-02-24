@@ -17,7 +17,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Verify scan belongs to customer + tenant
     const scan = await prisma.siteScan.findFirst({
-      where: { id: scanId, customerId, tenantId: session.tenantId },
+      where: { id: scanId, customerId, tenantId: session.tenantId, customer: { userId: session.id } },
     });
 
     if (!scan) {
@@ -101,7 +101,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Dedup: Cross-reference recommendations against existing trackings
     const existingTrackings = await prisma.tracking.findMany({
-      where: { customerId, tenantId: session.tenantId, status: { not: 'FAILED' } },
+      where: { customerId, tenantId: session.tenantId, customer: { userId: session.id }, status: { not: 'FAILED' } },
       select: { id: true, type: true, selector: true, urlPattern: true },
     });
 

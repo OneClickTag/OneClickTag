@@ -113,7 +113,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Verify customer belongs to tenant and has Google connected
     const customer = await prisma.customer.findFirst({
-      where: { id: customerId, tenantId: session.tenantId },
+      where: { id: customerId, tenantId: session.tenantId, userId: session.id },
       select: { id: true, googleAccountId: true },
     });
 
@@ -130,7 +130,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Verify scan belongs to customer
     const scan = await prisma.siteScan.findFirst({
-      where: { id: scanId, customerId, tenantId: session.tenantId },
+      where: { id: scanId, customerId, tenantId: session.tenantId, customer: { userId: session.id } },
     });
 
     if (!scan) {

@@ -41,6 +41,26 @@ export async function listContainers(userId: string, tenantId: string) {
   return allContainers;
 }
 
+/**
+ * List all GTM accounts accessible by the authenticated user.
+ * Returns account ID and name for each.
+ */
+export async function listGtmAccounts(
+  userId: string,
+  tenantId: string
+): Promise<{ accountId: string; name: string }[]> {
+  const gtm = await getGTMClient(userId, tenantId);
+  const response = await gtm.accounts.list();
+  const accounts = response.data.account || [];
+
+  return accounts
+    .filter((a) => a.accountId && a.name)
+    .map((a) => ({
+      accountId: a.accountId!,
+      name: a.name!,
+    }));
+}
+
 export async function getOrCreateWorkspace(
   gtm: tagmanager_v2.Tagmanager,
   accountId: string,

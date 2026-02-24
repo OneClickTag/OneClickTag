@@ -150,6 +150,7 @@ export interface CustomerResponse {
   customFields?: Record<string, unknown> | null;
   googleAccountId?: string | null;
   googleEmail?: string | null;
+  gtmAccountId?: string | null;
   gtmContainerId?: string | null;
   gtmWorkspaceId?: string | null;
   gtmContainerName?: string | null;

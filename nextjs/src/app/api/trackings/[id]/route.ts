@@ -53,6 +53,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       where: {
         id,
         tenantId: session.tenantId,
+        customer: { userId: session.id },
       },
       include: {
         customer: {
@@ -126,11 +127,12 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Check tracking exists and belongs to tenant
+    // Check tracking exists and belongs to user
     const existingTracking = await prisma.tracking.findFirst({
       where: {
         id,
         tenantId: session.tenantId,
+        customer: { userId: session.id },
       },
       select: {
         id: true,
@@ -298,11 +300,12 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     const { id } = await params;
 
-    // Check tracking exists and belongs to tenant
+    // Check tracking exists and belongs to user
     const tracking = await prisma.tracking.findFirst({
       where: {
         id,
         tenantId: session.tenantId,
+        customer: { userId: session.id },
       },
       select: {
         id: true,

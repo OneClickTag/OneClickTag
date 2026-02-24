@@ -14,7 +14,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     requireTenant(session);
     const { id: customerId, scanId } = await params;
 
-    const scan = await getScan(customerId, scanId, session.tenantId);
+    const scan = await getScan(customerId, scanId, session.tenantId, session.id);
 
     return NextResponse.json(scan);
   } catch (error) {

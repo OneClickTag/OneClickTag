@@ -66,9 +66,10 @@ export async function GET(request: NextRequest) {
     const { customerId, status, type, page, limit, sortBy, sortOrder, search } = validatedQuery.data;
     const skip = (page - 1) * limit;
 
-    // Build where clause with multi-tenant filtering
+    // Build where clause with multi-tenant + user filtering
     const where: any = {
       tenantId: session.tenantId,
+      customer: { userId: session.id },
     };
 
     if (customerId) {
@@ -182,11 +183,12 @@ export async function POST(request: NextRequest) {
       customerId,
     } = validatedData.data;
 
-    // Verify customer belongs to tenant
+    // Verify customer belongs to user
     const customer = await prisma.customer.findFirst({
       where: {
         id: customerId,
         tenantId: session.tenantId,
+        userId: session.id,
       },
       select: {
         id: true,

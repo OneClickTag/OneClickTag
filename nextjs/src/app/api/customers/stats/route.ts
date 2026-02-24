@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     requireTenant(session);
 
     // Get customer statistics with multi-tenant filtering
-    const stats = await getCustomerStats(session.tenantId);
+    const stats = await getCustomerStats(session.tenantId, session.id);
 
     return NextResponse.json(stats);
   } catch (error) {

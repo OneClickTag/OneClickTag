@@ -137,7 +137,17 @@ export async function GET(request: NextRequest): Promise<NextResponse<CallbackSu
     try {
       tokens = await exchangeCodeForTokens(code, callbackUrl);
     } catch (error) {
-      console.error('Failed to exchange code for tokens:', error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error('Failed to exchange code for tokens:', errorMsg, error);
+
+      // If we have a redirect URL, redirect with the error so the user sees it
+      if (stateData.redirectUrl) {
+        const redirectUrl = new URL(stateData.redirectUrl);
+        redirectUrl.searchParams.set('error', 'token_exchange_failed');
+        redirectUrl.searchParams.set('error_description', errorMsg);
+        return NextResponse.redirect(redirectUrl.toString());
+      }
+
       return NextResponse.json(
         { error: 'Failed to exchange authorization code for tokens' },
         { status: 500 }
@@ -157,6 +167,19 @@ export async function GET(request: NextRequest): Promise<NextResponse<CallbackSu
 
     // If there's a customerId, update the customer with Google account info
     if (stateData.customerId) {
+      // Verify customer belongs to the user
+      const customerOwnership = await prisma.customer.findFirst({
+        where: { id: stateData.customerId, userId: stateData.userId, tenantId },
+        select: { id: true },
+      });
+
+      if (!customerOwnership) {
+        return NextResponse.json(
+          { error: 'Customer not found or access denied' },
+          { status: 403 }
+        );
+      }
+
       try {
         // Get Google user info from the tokens using properly configured client
         const { google } = await import('googleapis');

@@ -18,7 +18,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     // Verify customer belongs to tenant
     const customer = await prisma.customer.findFirst({
-      where: { id: customerId, tenantId: session.tenantId },
+      where: { id: customerId, tenantId: session.tenantId, userId: session.id },
       select: { id: true },
     });
     if (!customer) {
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Verify customer belongs to tenant
     const customer = await prisma.customer.findFirst({
-      where: { id: customerId, tenantId: session.tenantId },
+      where: { id: customerId, tenantId: session.tenantId, userId: session.id },
       select: { id: true },
     });
     if (!customer) {

@@ -11,7 +11,10 @@ const prismaClientSingleton = () => {
   // to prevent exhausting PgBouncer's session mode pool (MaxClientsInSessionMode)
   const params: string[] = [];
   if (!databaseUrl.includes('pgbouncer=true')) params.push('pgbouncer=true');
-  if (!databaseUrl.includes('connection_limit')) params.push('connection_limit=1');
+  if (!databaseUrl.includes('connection_limit')) {
+    const limit = process.env.NODE_ENV === 'development' ? '10' : '1';
+    params.push(`connection_limit=${limit}`);
+  }
 
   const separator = databaseUrl.includes('?') ? '&' : '?';
   const url = params.length > 0

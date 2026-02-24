@@ -66,6 +66,7 @@ function mapToResponseDto(customer: Record<string, unknown>): CustomerResponse {
     customFields: customer.customFields as Record<string, unknown> | null,
     googleAccountId: customer.googleAccountId as string | null,
     googleEmail: customer.googleEmail as string | null,
+    gtmAccountId: customer.gtmAccountId as string | null,
     gtmContainerId: customer.gtmContainerId as string | null,
     gtmWorkspaceId: customer.gtmWorkspaceId as string | null,
     gtmContainerName: customer.gtmContainerName as string | null,
@@ -85,7 +86,7 @@ function mapToResponseDto(customer: Record<string, unknown>): CustomerResponse {
           gtmError: null,
           ga4Error: null,
           adsError: null,
-          gtmAccountId: null,
+          gtmAccountId: customer.gtmAccountId as string | null,
           gtmContainerId: customer.gtmContainerId as string | null,
           ga4PropertyCount: (customer.ga4Properties as unknown[])?.length || 0,
           adsAccountCount: (customer.googleAdsAccounts as unknown[])?.length || 0,
@@ -101,9 +102,10 @@ function mapToResponseDto(customer: Record<string, unknown>): CustomerResponse {
 // Build where clause for customer queries
 function buildWhereClause(
   query: CustomerQueryParams,
-  tenantId: string
+  tenantId: string,
+  userId: string
 ): Record<string, unknown> {
-  const where: Record<string, unknown> = { tenantId };
+  const where: Record<string, unknown> = { tenantId, userId };
 
   // Search across multiple fields
   if (query.search) {
@@ -185,7 +187,7 @@ async function generateUniqueSlug(): Promise<string> {
 export async function createCustomer(
   input: CreateCustomerInput,
   tenantId: string,
-  createdBy?: string
+  userId: string
 ): Promise<CustomerResponse> {
   // Check if customer with email already exists in tenant
   const existingCustomer = await prisma.customer.findFirst({
@@ -208,7 +210,8 @@ export async function createCustomer(
       fullName,
       slug,
       tenantId,
-      createdBy,
+      userId,
+      createdBy: userId,
       tags: input.tags || [],
       customFields: (input.customFields || {}) as Prisma.InputJsonValue,
     },
@@ -224,12 +227,13 @@ export async function createCustomer(
 
 export async function findAllCustomers(
   query: CustomerQueryParams,
-  tenantId: string
+  tenantId: string,
+  userId: string
 ): Promise<PaginatedCustomerResponse> {
   const { page = 1, limit = 20, includeGoogleAds = false } = query;
   const skip = (page - 1) * limit;
 
-  const where = buildWhereClause(query, tenantId);
+  const where = buildWhereClause(query, tenantId, userId);
   const orderBy = buildOrderClause(query);
 
   const [customers, total] = await Promise.all([
@@ -280,10 +284,11 @@ export async function findAllCustomers(
 export async function findCustomerById(
   id: string,
   tenantId: string,
+  userId: string,
   includeGoogleAds = false
 ): Promise<CustomerResponse> {
   const customer = await prisma.customer.findFirst({
-    where: { id, tenantId },
+    where: { id, tenantId, userId },
     include: {
       googleAdsAccounts: includeGoogleAds,
       ga4Properties: true,
@@ -301,10 +306,11 @@ export async function findCustomerById(
 export async function findCustomerBySlug(
   slug: string,
   tenantId: string,
+  userId: string,
   includeGoogleAds = false
 ): Promise<CustomerResponse> {
   const customer = await prisma.customer.findFirst({
-    where: { slug, tenantId },
+    where: { slug, tenantId, userId },
     include: {
       googleAdsAccounts: includeGoogleAds,
       ga4Properties: true,
@@ -323,11 +329,12 @@ export async function updateCustomer(
   id: string,
   input: UpdateCustomerInput,
   tenantId: string,
+  userId: string,
   updatedBy?: string
 ): Promise<CustomerResponse> {
-  // Check if customer exists
+  // Check if customer exists and belongs to user
   const existingCustomer = await prisma.customer.findFirst({
-    where: { id, tenantId },
+    where: { id, tenantId, userId },
   });
 
   if (!existingCustomer) {
@@ -380,10 +387,11 @@ export async function updateCustomer(
 
 export async function deleteCustomer(
   id: string,
-  tenantId: string
+  tenantId: string,
+  userId: string
 ): Promise<void> {
   const customer = await prisma.customer.findFirst({
-    where: { id, tenantId },
+    where: { id, tenantId, userId },
   });
 
   if (!customer) {
@@ -400,23 +408,25 @@ export async function deleteCustomer(
 // ============================================
 
 export async function getCustomerStats(
-  tenantId: string
+  tenantId: string,
+  userId: string
 ): Promise<CustomerStatsResponse> {
   const [total, activeCount, inactiveCount, withGoogleAccount, recentCount] =
     await Promise.all([
-      prisma.customer.count({ where: { tenantId } }),
+      prisma.customer.count({ where: { tenantId, userId } }),
       prisma.customer.count({
-        where: { tenantId, status: CustomerStatus.ACTIVE },
+        where: { tenantId, userId, status: CustomerStatus.ACTIVE },
       }),
       prisma.customer.count({
-        where: { tenantId, status: CustomerStatus.INACTIVE },
+        where: { tenantId, userId, status: CustomerStatus.INACTIVE },
       }),
       prisma.customer.count({
-        where: { tenantId, googleAccountId: { not: null } },
+        where: { tenantId, userId, googleAccountId: { not: null } },
       }),
       prisma.customer.count({
         where: {
           tenantId,
+          userId,
           createdAt: {
             gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Last 30 days
           },
@@ -442,12 +452,13 @@ export async function getCustomerStats(
 export async function getCustomerTrackings(
   customerId: string,
   tenantId: string,
+  userId: string,
   page = 0,
   limit = 20
 ): Promise<CustomerTrackingsResponse> {
-  // Verify customer belongs to tenant
+  // Verify customer belongs to user
   const customer = await prisma.customer.findFirst({
-    where: { id: customerId, tenantId },
+    where: { id: customerId, tenantId, userId },
   });
 
   if (!customer) {
@@ -498,12 +509,13 @@ export async function getCustomerTrackings(
 export async function getCustomerAnalytics(
   customerId: string,
   tenantId: string,
+  userId: string,
   fromDate?: string,
   toDate?: string
 ): Promise<CustomerAnalyticsResponse> {
-  // Verify customer belongs to tenant
+  // Verify customer belongs to user
   const customer = await prisma.customer.findFirst({
-    where: { id: customerId, tenantId },
+    where: { id: customerId, tenantId, userId },
   });
 
   if (!customer) {
@@ -574,13 +586,13 @@ export async function getCustomerAnalytics(
 export async function bulkCreateCustomers(
   input: BulkCreateCustomerInput,
   tenantId: string,
-  createdBy?: string
+  userId: string
 ): Promise<BulkOperationResult[]> {
   const results: BulkOperationResult[] = [];
 
   for (const customerDto of input.customers) {
     try {
-      const customer = await createCustomer(customerDto, tenantId, createdBy);
+      const customer = await createCustomer(customerDto, tenantId, userId);
       results.push({
         success: true,
         customerId: customer.id,
@@ -601,6 +613,7 @@ export async function bulkCreateCustomers(
 export async function bulkUpdateCustomers(
   input: BulkUpdateCustomerInput,
   tenantId: string,
+  userId: string,
   updatedBy?: string
 ): Promise<BulkOperationResult[]> {
   const results: BulkOperationResult[] = [];
@@ -611,6 +624,7 @@ export async function bulkUpdateCustomers(
         update.id,
         update.data,
         tenantId,
+        userId,
         updatedBy
       );
       results.push({
@@ -632,13 +646,14 @@ export async function bulkUpdateCustomers(
 
 export async function bulkDeleteCustomers(
   input: BulkDeleteCustomerInput,
-  tenantId: string
+  tenantId: string,
+  userId: string
 ): Promise<BulkOperationResult[]> {
   const results: BulkOperationResult[] = [];
 
   for (const customerId of input.customerIds) {
     try {
-      await deleteCustomer(customerId, tenantId);
+      await deleteCustomer(customerId, tenantId, userId);
       results.push({
         success: true,
         customerId,

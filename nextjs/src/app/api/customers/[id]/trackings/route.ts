@@ -31,6 +31,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const result = await getCustomerTrackings(
       id,
       session.tenantId,
+      session.id,
       pageNum,
       limitNum
     );

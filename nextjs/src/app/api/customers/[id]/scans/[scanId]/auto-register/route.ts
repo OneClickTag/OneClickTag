@@ -29,6 +29,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         id: scanId,
         customerId,
         tenantId: session.tenantId,
+        customer: { userId: session.id },
       },
       select: {
         id: true,

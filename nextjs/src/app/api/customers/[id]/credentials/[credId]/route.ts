@@ -14,9 +14,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     requireTenant(session);
     const { id: customerId, credId } = await params;
 
-    // Verify credential belongs to customer + tenant
+    // Verify credential belongs to customer + user
     const credential = await prisma.siteCredential.findFirst({
-      where: { id: credId, customerId, tenantId: session.tenantId },
+      where: { id: credId, customerId, tenantId: session.tenantId, customer: { userId: session.id } },
     });
 
     if (!credential) {

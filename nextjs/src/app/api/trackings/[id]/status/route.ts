@@ -23,11 +23,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const { id } = await params;
 
-    // Get tracking with tenant check
+    // Get tracking with user ownership check
     const tracking = await prisma.tracking.findFirst({
       where: {
         id,
         tenantId: session.tenantId,
+        customer: { userId: session.id },
       },
       select: {
         id: true,

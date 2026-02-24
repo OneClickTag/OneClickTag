@@ -15,7 +15,7 @@ export async function POST(
     const { id } = await params;
 
     const customer = await prisma.customer.findFirst({
-      where: { id, tenantId: session.tenantId },
+      where: { id, tenantId: session.tenantId, userId: session.id },
       include: { stapeContainer: true },
     });
 

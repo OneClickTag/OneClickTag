@@ -190,6 +190,7 @@ export async function POST(request: NextRequest) {
       const results = await bulkUpdateCustomers(
         { updates: validation.updates },
         session.tenantId,
+        session.id,
         session.id
       );
 
@@ -206,7 +207,8 @@ export async function POST(request: NextRequest) {
       // Bulk delete customers
       const results = await bulkDeleteCustomers(
         { customerIds: validation.customerIds },
-        session.tenantId
+        session.tenantId,
+        session.id
       );
 
       return NextResponse.json(results);

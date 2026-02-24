@@ -28,6 +28,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const result = await getCustomerAnalytics(
       id,
       session.tenantId,
+      session.id,
       fromDate,
       toDate
     );

@@ -27,6 +27,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const customer = await findCustomerBySlug(
       slug,
       session.tenantId,
+      session.id,
       includeGoogleAds
     );
 

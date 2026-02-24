@@ -5,7 +5,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { useApi } from '@/hooks/use-api';
 import { useCustomerTrackings, useCreateTracking, type TrackingType, type TrackingDestination, type CreateTrackingInput } from '@/hooks/use-trackings';
-import { useConnectGoogleAccount, useDisconnectGoogleAccount, useUpdateCustomer } from '@/hooks/use-customers';
+import { useConnectGoogleAccount, useDisconnectGoogleAccount, useUpdateCustomer, useGtmAccounts, useSetupGtm } from '@/hooks/use-customers';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -215,6 +215,25 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to save';
       toast.error('Failed to select Ads account', { description: message });
+    }
+  };
+
+  // GTM account selector
+  const { data: gtmAccountsData, isLoading: gtmAccountsLoading, error: gtmAccountsError } = useGtmAccounts(
+    id,
+    activeTab === 'settings' && !!customer?.googleAccountId
+  );
+  const setupGtm = useSetupGtm();
+
+  const handleSelectGtmAccount = async (accountId: string) => {
+    try {
+      await setupGtm.mutateAsync({ customerId: id, gtmAccountId: accountId });
+      toast.success('GTM account configured', {
+        description: 'Container and workspace created successfully.',
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to setup GTM';
+      toast.error('Failed to configure GTM', { description: message });
     }
   };
 
@@ -763,7 +782,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                       {customer.gtmContainerId
                         ? `OneClickTag workspace ready`
                         : customer.googleAccountId
-                          ? 'No containers found'
+                          ? 'Select a GTM account below'
                           : 'Not connected'}
                     </p>
                   </div>
@@ -865,6 +884,52 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                   )}
                 </div>
               </div>
+
+              {/* GTM Account Selector */}
+              {customer.googleAccountId && (
+                <div className="mt-4">
+                  <h4 className="text-sm font-medium mb-2">GTM Account</h4>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Select which Google Tag Manager account to use. OneClickTag will create a container and workspace in this account.
+                  </p>
+                  {gtmAccountsError ? (
+                    <p className="text-xs text-red-600">
+                      Failed to load GTM accounts. Try disconnecting and reconnecting Google.
+                    </p>
+                  ) : gtmAccountsLoading ? (
+                    <Skeleton className="h-10 w-full" />
+                  ) : gtmAccountsData?.gtmAccounts && gtmAccountsData.gtmAccounts.length > 0 ? (
+                    <div className="flex items-center gap-2">
+                      <Select
+                        value={customer.gtmAccountId || ''}
+                        onValueChange={handleSelectGtmAccount}
+                        disabled={setupGtm.isPending}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select a GTM account..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {gtmAccountsData.gtmAccounts.map((account) => (
+                            <SelectItem key={account.accountId} value={account.accountId}>
+                              {account.name} ({account.accountId})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {setupGtm.isPending && (
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-yellow-600">
+                      No GTM accounts found. Create one at{' '}
+                      <a href="https://tagmanager.google.com" target="_blank" rel="noopener noreferrer" className="underline">
+                        tagmanager.google.com
+                      </a>
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Google Ads Account Selector */}
               {settingsCustomer?.googleAdsAccounts && settingsCustomer.googleAdsAccounts.length > 0 && (

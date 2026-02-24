@@ -19,7 +19,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Verify customer belongs to tenant and has Google connected
     const customer = await prisma.customer.findFirst({
-      where: { id, tenantId: session.tenantId },
+      where: { id, tenantId: session.tenantId, userId: session.id },
     });
 
     if (!customer) {

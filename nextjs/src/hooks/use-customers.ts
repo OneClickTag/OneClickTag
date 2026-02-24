@@ -136,3 +136,43 @@ export function useDisconnectGoogleAccount() {
     },
   });
 }
+
+export interface GtmAccount {
+  accountId: string;
+  name: string;
+}
+
+export function useGtmAccounts(customerId: string, enabled: boolean = true) {
+  const api = useApi();
+
+  return useQuery({
+    queryKey: ['gtm-accounts', customerId],
+    queryFn: () =>
+      api.get<{ gtmAccounts: GtmAccount[] }>(
+        `/api/customers/${customerId}/google-accounts`
+      ),
+    enabled: !!customerId && enabled,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    retry: false, // Don't retry on OAuth errors
+  });
+}
+
+export function useSetupGtm() {
+  const api = useApi();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      customerId,
+      gtmAccountId,
+    }: {
+      customerId: string;
+      gtmAccountId: string;
+    }) =>
+      api.post(`/api/customers/${customerId}/setup-gtm`, { gtmAccountId }),
+    onSuccess: (_, { customerId }) => {
+      queryClient.invalidateQueries({ queryKey: ['customer', customerId] });
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+    },
+  });
+}

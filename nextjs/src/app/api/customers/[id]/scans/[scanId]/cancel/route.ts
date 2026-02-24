@@ -15,7 +15,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { id: customerId, scanId } = await params;
 
     const scan = await prisma.siteScan.findFirst({
-      where: { id: scanId, customerId, tenantId: session.tenantId },
+      where: { id: scanId, customerId, tenantId: session.tenantId, customer: { userId: session.id } },
     });
 
     if (!scan) {

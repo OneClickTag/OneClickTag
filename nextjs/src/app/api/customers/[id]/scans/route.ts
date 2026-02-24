@@ -16,7 +16,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { id: customerId } = await params;
 
     const scans = await prisma.siteScan.findMany({
-      where: { customerId, tenantId: session.tenantId },
+      where: { customerId, tenantId: session.tenantId, customer: { userId: session.id } },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
@@ -48,9 +48,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     requireTenant(session);
     const { id: customerId } = await params;
 
-    // Verify customer belongs to tenant
+    // Verify customer belongs to user
     const customer = await prisma.customer.findFirst({
-      where: { id: customerId, tenantId: session.tenantId },
+      where: { id: customerId, tenantId: session.tenantId, userId: session.id },
     });
     if (!customer) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
@@ -68,6 +68,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       where: {
         customerId,
         tenantId: session.tenantId,
+        customer: { userId: session.id },
         status: { in: ['QUEUED', 'DISCOVERING', 'CRAWLING', 'NICHE_DETECTED', 'AWAITING_CONFIRMATION', 'DEEP_CRAWLING', 'ANALYZING'] },
       },
     });

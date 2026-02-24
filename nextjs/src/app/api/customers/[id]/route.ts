@@ -172,9 +172,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     let customer;
     if (isSlug) {
-      customer = await findCustomerBySlug(id, session.tenantId, includeGoogleAds);
+      customer = await findCustomerBySlug(id, session.tenantId, session.id, includeGoogleAds);
     } else {
-      customer = await findCustomerById(id, session.tenantId, includeGoogleAds);
+      customer = await findCustomerById(id, session.tenantId, session.id, includeGoogleAds);
     }
 
     // Augment with GTM fields via raw SQL (Prisma client may have stale schema cache)
@@ -252,6 +252,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       id,
       validation.data,
       session.tenantId,
+      session.id,
       session.id
     );
 
@@ -299,7 +300,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
 
     // Delete customer with multi-tenant context
-    await deleteCustomer(id, session.tenantId);
+    await deleteCustomer(id, session.tenantId, session.id);
 
     return new NextResponse(null, { status: 204 });
   } catch (error) {
