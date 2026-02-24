@@ -245,7 +245,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<CallbackSu
 
         // GA4: Create data stream in OCT property for customer's website
         (async () => {
-          const { createDataStream } = await import('@/lib/google/ga4');
+          const { getOrCreateDataStream } = await import('@/lib/google/ga4');
 
           const tenant = await prisma.tenant.findUnique({
             where: { id: tenantId },
@@ -278,7 +278,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<CallbackSu
           }
 
           const streamName = `${customer.fullName} - ${customer.websiteUrl}`;
-          const { streamId, measurementId } = await createDataStream(
+          const { measurementId } = await getOrCreateDataStream(
             user.id, tenantId, tenant.octGa4PropertyId, customer.websiteUrl, streamName
           );
 

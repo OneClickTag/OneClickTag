@@ -165,6 +165,62 @@ export async function createDataStream(
 }
 
 /**
+ * Find an existing web data stream for a GA4 property.
+ * Returns the first web data stream's measurement ID, or null if none found.
+ */
+export async function findExistingDataStream(
+  userId: string,
+  tenantId: string,
+  propertyId: string
+): Promise<{ streamId: string; measurementId: string } | null> {
+  const oauth2Client = await getOAuth2ClientWithTokens(userId, tenantId, 'ga4');
+  if (!oauth2Client) {
+    throw new Error('No GA4 OAuth token found');
+  }
+
+  const analyticsAdmin = google.analyticsadmin({ version: 'v1beta', auth: oauth2Client });
+
+  const response = await analyticsAdmin.properties.dataStreams.list({
+    parent: `properties/${propertyId}`,
+  });
+
+  const webStream = (response.data.dataStreams || []).find(
+    (s) => s.type === 'WEB_DATA_STREAM'
+  );
+
+  if (webStream?.name && webStream.webStreamData?.measurementId) {
+    return {
+      streamId: webStream.name.split('/').pop()!,
+      measurementId: webStream.webStreamData.measurementId,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Idempotent: get or create a web data stream for a GA4 property.
+ * First checks for existing streams, only creates if none found.
+ */
+export async function getOrCreateDataStream(
+  userId: string,
+  tenantId: string,
+  propertyId: string,
+  websiteUrl: string,
+  displayName: string
+): Promise<{ streamId: string; measurementId: string }> {
+  // Try to find existing stream first
+  const existing = await findExistingDataStream(userId, tenantId, propertyId);
+  if (existing) {
+    console.log(`[GA4] Found existing data stream: ${existing.measurementId}`);
+    return existing;
+  }
+
+  // Create new stream
+  return createDataStream(userId, tenantId, propertyId, websiteUrl, displayName);
+}
+
+/**
  * Idempotent: get or create the tenant-level OneClickTag GA4 property.
  * 1. Check if tenant already has octGa4PropertyId → return it
  * 2. List properties, check if one named "OneClickTag - {tenantName}" exists → store & return

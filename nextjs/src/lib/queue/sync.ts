@@ -516,12 +516,12 @@ async function ensureGA4MeasurementId(
   tenantId: string,
   customerId: string
 ): Promise<string> {
-  const { getOrCreateOctProperty, createDataStream } = await import('@/lib/google/ga4');
+  const { getOrCreateOctProperty, getOrCreateDataStream } = await import('@/lib/google/ga4');
 
   // Step 1: Ensure tenant has a GA4 property
   const { propertyId } = await getOrCreateOctProperty(userId, tenantId);
 
-  // Step 2: Check if a data stream already exists (maybe without measurementId stored)
+  // Step 2: Check if measurement ID is already stored in DB
   const existing = await prisma.gA4Property.findFirst({
     where: { customerId, tenantId, propertyId },
   });
@@ -544,9 +544,9 @@ async function ensureGA4MeasurementId(
     select: { name: true },
   });
 
-  // Step 4: Create the data stream
+  // Step 4: Get or create the data stream (finds existing first, creates only if needed)
   const streamName = `${customer.fullName} - ${customer.websiteUrl}`;
-  const { measurementId } = await createDataStream(
+  const { measurementId } = await getOrCreateDataStream(
     userId, tenantId, propertyId, customer.websiteUrl, streamName
   );
 
