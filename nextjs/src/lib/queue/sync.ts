@@ -82,11 +82,23 @@ export async function executeGTMSync(data: GTMSyncJob): Promise<{ success: boole
 
     if (action === 'create') {
       // Get customer's GA4 measurement ID for the tag
-      const ga4Property = await prisma.gA4Property.findFirst({
+      let ga4Property = await prisma.gA4Property.findFirst({
         where: { customerId, tenantId, isActive: true },
         select: { measurementId: true },
       });
-      const measurementId = ga4Property?.measurementId || undefined;
+      let measurementId = ga4Property?.measurementId || undefined;
+
+      // Self-healing: if no measurement ID, create GA4 data stream on-demand
+      if (!measurementId) {
+        console.log('[GTM] No GA4 measurement ID found — attempting on-demand creation...');
+        try {
+          measurementId = await ensureGA4MeasurementId(tokenUserId, tenantId, customerId);
+          console.log(`[GTM] On-demand GA4 data stream created: ${measurementId}`);
+        } catch (err) {
+          console.error('[GTM] On-demand GA4 setup failed:', err);
+          // Let it fall through — createTagForTracking will throw a clear error
+        }
+      }
 
       // Create trigger based on tracking type (same for both modes)
       const trigger = await createTriggerForTracking(gtm, accountId, containerId, workspaceId, tracking);
@@ -493,4 +505,74 @@ async function createTagForTracking(
     parameter: parameters,
     firingTriggerId: [triggerId],
   });
+}
+
+// ============================================================================
+// Self-Healing: Ensure GA4 measurement ID exists for a customer
+// ============================================================================
+
+async function ensureGA4MeasurementId(
+  userId: string,
+  tenantId: string,
+  customerId: string
+): Promise<string> {
+  const { getOrCreateOctProperty, createDataStream } = await import('@/lib/google/ga4');
+
+  // Step 1: Ensure tenant has a GA4 property
+  const { propertyId } = await getOrCreateOctProperty(userId, tenantId);
+
+  // Step 2: Check if a data stream already exists (maybe without measurementId stored)
+  const existing = await prisma.gA4Property.findFirst({
+    where: { customerId, tenantId, propertyId },
+  });
+  if (existing?.measurementId) {
+    return existing.measurementId;
+  }
+
+  // Step 3: Get customer info for the data stream
+  const customer = await prisma.customer.findUnique({
+    where: { id: customerId },
+    select: { websiteUrl: true, fullName: true },
+  });
+
+  if (!customer?.websiteUrl) {
+    throw new Error('Customer has no website URL — cannot create GA4 data stream');
+  }
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { name: true },
+  });
+
+  // Step 4: Create the data stream
+  const streamName = `${customer.fullName} - ${customer.websiteUrl}`;
+  const { measurementId } = await createDataStream(
+    userId, tenantId, propertyId, customer.websiteUrl, streamName
+  );
+
+  // Step 5: Store in DB
+  await prisma.gA4Property.upsert({
+    where: {
+      propertyId_tenantId: {
+        propertyId,
+        tenantId,
+      },
+    },
+    update: {
+      measurementId,
+      isActive: true,
+    },
+    create: {
+      googleAccountId: propertyId,
+      propertyId,
+      propertyName: `OneClickTag - ${tenant?.name || 'User'}`,
+      displayName: streamName,
+      measurementId,
+      isActive: true,
+      customerId,
+      tenantId,
+    },
+  });
+
+  return measurementId;
 }
