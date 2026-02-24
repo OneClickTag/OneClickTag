@@ -4,14 +4,15 @@ import {
   getOrCreateWorkspace,
   createTrigger,
   createTag,
-  listContainers,
   listTriggers,
   listTags,
+  createClientAdsConversionTag,
   createServerGA4Tag,
   createServerAdsConversionTag,
   createGA4Client,
+  setupWorkspaceEssentials,
 } from '@/lib/google/gtm';
-import { createConversionAction } from '@/lib/google/ads';
+import { createConversionAction, getOrCreateOctLabel } from '@/lib/google/ads';
 import type { GTMSyncJob, AdsSyncJob } from './index';
 
 // ============================================================================
@@ -46,38 +47,38 @@ export async function executeGTMSync(data: GTMSyncJob): Promise<{ success: boole
 
     const gtm = await getGTMClient(tokenUserId, tenantId);
 
-    // Get customer's GTM container
+    // Get customer's per-customer GTM container
     const customer = tracking.customer;
     if (!customer.googleAccountId) {
       throw new Error('Customer not connected to Google account');
     }
 
-    // Get container/account IDs - use stored ones or fetch from GTM
-    let containerId = tracking.gtmContainerId || customer.gtmContainerId;
-    // Fetch gtmAccountId via raw query since Prisma client may not have it cached
-    const accountIdResult = await prisma.$queryRawUnsafe<Array<{gtmAccountId: string | null}>>(
-      `SELECT "gtmAccountId" FROM customers WHERE id = $1`, customerId
-    );
-    let accountId = accountIdResult[0]?.gtmAccountId;
+    // Use customer's own container (per-customer architecture)
+    let accountId = customer.gtmAccountId || undefined;
+    let containerId = tracking.gtmContainerId || customer.gtmContainerId || undefined;
 
     if (!containerId || !accountId) {
-      const containers = await listContainers(tokenUserId, tenantId);
-      if (containers.length === 0) {
-        throw new Error('No GTM containers found for this Google account');
-      }
-      containerId = containers[0].containerId!;
-      accountId = containers[0].accountId!;
-
-      // Store the container/account IDs on the customer for future use
-      const containerName = containers[0].name || containers[0].publicId || containerId;
-      await prisma.$executeRawUnsafe(
-        `UPDATE customers SET "gtmAccountId" = $1, "gtmContainerId" = $2, "gtmContainerName" = $3 WHERE id = $4`,
-        accountId, containerId, containerName, customerId
-      );
+      // Fallback: create/find customer's dedicated container
+      const { getOrCreateCustomerContainer } = await import('@/lib/google/gtm');
+      const result = await getOrCreateCustomerContainer(tokenUserId, tenantId, customerId);
+      accountId = result.accountId;
+      containerId = result.containerId;
     }
 
-    // Get or create OneClickTag workspace
-    const workspaceId = await getOrCreateWorkspace(gtm, accountId, containerId);
+    // Use customer's workspace
+    let workspaceId = customer.gtmWorkspaceId || undefined;
+    if (!workspaceId) {
+      const workspaceName = `OneClickTag - ${customer.fullName}`;
+      workspaceId = await getOrCreateWorkspace(gtm, accountId, containerId, workspaceName);
+    }
+
+    // Ensure workspace has essential setup (built-in variables, Conversion Linker, etc.)
+    // This is idempotent — safe to call every time, skips items that already exist
+    try {
+      await setupWorkspaceEssentials(gtm, accountId, containerId, workspaceId);
+    } catch (error) {
+      console.warn('[GTM] Workspace essentials setup failed (non-blocking):', error);
+    }
 
     if (action === 'create') {
       // Get customer's GA4 measurement ID for the tag
@@ -96,11 +97,57 @@ export async function executeGTMSync(data: GTMSyncJob): Promise<{ success: boole
       });
       const isServerSide = customer.serverSideEnabled && stapeContainer?.status === 'ACTIVE';
 
-      // Create client-side tag
+      // Create client-side GA4 tag
       const tag = await createTagForTracking(
         gtm, accountId, containerId, workspaceId, tracking, trigger.triggerId!, measurementId,
         isServerSide ? `https://${stapeContainer!.serverDomain}` : undefined
       );
+
+      // Create client-side Google Ads Conversion tag (awct) if applicable
+      let clientAdsTagId: string | undefined;
+      if (tracking.destinations.includes('GOOGLE_ADS') || tracking.destinations.includes('BOTH')) {
+        // Re-read tracking to get fresh adsConversionLabel (set by Ads sync which ran first)
+        const freshTracking = await prisma.tracking.findUnique({
+          where: { id: trackingId },
+          select: { adsConversionLabel: true, adsConversionValue: true },
+        });
+        const conversionLabel = freshTracking?.adsConversionLabel;
+
+        if (conversionLabel) {
+          // Parse "AW-123456789/abcDEF" into numeric conversionId and conversionLabel
+          const slashIndex = conversionLabel.indexOf('/');
+          const rawConversionId = slashIndex > 0 ? conversionLabel.substring(0, slashIndex) : conversionLabel;
+          // Strip "AW-" prefix — GTM awct tag expects just the numeric ID
+          const conversionId = rawConversionId.replace(/^AW-/, '');
+          const conversionLabelPart = slashIndex > 0 ? conversionLabel.substring(slashIndex + 1) : '';
+
+          const adsTagName = `${tracking.name} - Ads Tag`;
+
+          // Check for existing tag (idempotent)
+          const existingTags = await listTags(gtm, accountId, containerId, workspaceId);
+          const existingAdsTag = existingTags.find((t) => t.name === adsTagName);
+
+          if (existingAdsTag) {
+            console.log(`[GTM] Found existing Ads tag "${adsTagName}" (${existingAdsTag.tagId})`);
+            clientAdsTagId = existingAdsTag.tagId || undefined;
+          } else {
+            const adsTag = await createClientAdsConversionTag(
+              gtm, accountId, containerId, workspaceId,
+              {
+                name: adsTagName,
+                conversionId,
+                conversionLabel: conversionLabelPart,
+                conversionValue: freshTracking?.adsConversionValue ? Number(freshTracking.adsConversionValue) : undefined,
+                firingTriggerId: [trigger.triggerId!],
+              }
+            );
+            clientAdsTagId = adsTag.tagId || undefined;
+            console.log(`[GTM] Created client Ads tag "${adsTagName}" (${clientAdsTagId})`);
+          }
+        } else {
+          console.warn('[GTM] No adsConversionLabel found — skipping client Ads tag creation');
+        }
+      }
 
       // Server-side GTM: create tags in the sGTM container
       let sgtmTriggerId: string | undefined;
@@ -154,9 +201,18 @@ export async function executeGTMSync(data: GTMSyncJob): Promise<{ success: boole
 
         // Create server-side Ads conversion tag if applicable
         if (tracking.adsConversionLabel && (tracking.destinations.includes('GOOGLE_ADS') || tracking.destinations.includes('BOTH'))) {
-          const adsAccount = await prisma.googleAdsAccount.findFirst({
-            where: { customerId, tenantId },
-          });
+          // Use customer's selected Ads account (preferred) or fall back to first available
+          let adsAccount;
+          if (customer.selectedAdsAccountId) {
+            adsAccount = await prisma.googleAdsAccount.findUnique({
+              where: { id: customer.selectedAdsAccountId },
+            });
+          }
+          if (!adsAccount) {
+            adsAccount = await prisma.googleAdsAccount.findFirst({
+              where: { customerId, tenantId },
+            });
+          }
           if (adsAccount) {
             const serverAdsTag = await createServerAdsConversionTag(
               gtm, serverAccountId, serverContainerId, serverWorkspaceId,
@@ -178,6 +234,8 @@ export async function executeGTMSync(data: GTMSyncJob): Promise<{ success: boole
         data: {
           gtmTriggerId: trigger.triggerId,
           gtmTagId: tag.tagId,
+          gtmTagIdGA4: tag.tagId,
+          gtmTagIdAds: clientAdsTagId || null,
           gtmContainerId: containerId,
           gtmWorkspaceId: workspaceId,
           trackingMode: isServerSide ? 'SERVER_SIDE' : 'CLIENT_SIDE',
@@ -233,7 +291,23 @@ export async function executeAdsSync(data: AdsSyncJob): Promise<{ success: boole
     const tokenUserId = oauthToken?.userId || userId;
 
     if (action === 'create' && (tracking.destinations.includes('GOOGLE_ADS') || tracking.destinations.includes('BOTH'))) {
-      const adsAccount = tracking.customer.googleAdsAccounts[0];
+      // Use customer's selected Ads account (preferred) or fall back to first available
+      const customer = tracking.customer;
+      let adsAccount;
+
+      if (customer.selectedAdsAccountId) {
+        adsAccount = customer.googleAdsAccounts.find(
+          (a) => a.id === customer.selectedAdsAccountId
+        );
+        if (!adsAccount) {
+          console.warn(`[Ads] Selected Ads account ${customer.selectedAdsAccountId} not found in customer's accounts`);
+        }
+      }
+
+      if (!adsAccount) {
+        adsAccount = customer.googleAdsAccounts[0];
+      }
+
       if (!adsAccount) {
         console.log('No Google Ads account found, skipping Ads sync');
         return { success: true, skipped: true };
@@ -266,6 +340,25 @@ export async function executeAdsSync(data: AdsSyncJob): Promise<{ success: boole
           adsConversionLabel: result.conversionLabel,
         },
       });
+
+      // Apply OCT label to the conversion action
+      try {
+        const tenant = await prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { name: true },
+        });
+        const labelResourceName = await getOrCreateOctLabel(
+          tokenUserId, tenantId, adsAccount.id, adsAccount.accountId, tenant?.name || 'User'
+        );
+        const { applyLabelToConversionAction } = await import('@/lib/google/ads');
+        await applyLabelToConversionAction(
+          tokenUserId, tenantId, adsAccount.accountId,
+          result.conversionActionId, labelResourceName
+        );
+        console.log(`[Ads] Applied OCT label to conversion action ${result.conversionActionId}`);
+      } catch (labelErr) {
+        console.warn('[Ads] Failed to apply OCT label (non-blocking):', labelErr);
+      }
     }
 
     return { success: true };

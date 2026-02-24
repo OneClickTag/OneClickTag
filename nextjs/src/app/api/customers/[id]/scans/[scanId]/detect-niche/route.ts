@@ -72,8 +72,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Gather content from multiple key pages for richer niche detection
     const keyPages = pages.filter(p =>
       p.pageType === 'homepage' || p.pageType === 'about' || p.pageType === 'services' ||
-      p.pageType === 'pricing' || p.pageType === 'features' || p.pageType === 'other'
-    ).slice(0, 8);
+      p.pageType === 'pricing' || p.pageType === 'features' || p.pageType === 'blog' ||
+      p.pageType === 'portfolio' || p.pageType === 'category' || p.pageType === 'product' ||
+      p.pageType === 'other'
+    ).slice(0, 15);
 
     const allPageContent = keyPages
       .filter(p => p.contentSummary && p.url !== homepage?.url)

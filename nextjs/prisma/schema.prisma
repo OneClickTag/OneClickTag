@@ -47,6 +47,13 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // OneClickTag-managed Google infrastructure (tenant-level)
+  octGtmAccountId   String? // GTM account used for OCT container
+  octGtmContainerId String? // OneClickTag container ID
+  octGtmPublicId    String? // GTM-XXXXXX (for snippet)
+  octGa4AccountId   String? // Analytics account used for OCT property
+  octGa4PropertyId  String? // OneClickTag GA4 property ID
+
   users       User[]
   oauthTokens OAuthToken[]
   customers   Customer[]
@@ -105,13 +112,14 @@ model Customer {
   websiteUrl String?
 
   // Google Account Connection
-  googleAccountId   String?
-  googleEmail       String?
-  gtmAccountId      String?
-  gtmContainerId    String?
-  gtmWorkspaceId    String?
-  gtmContainerName  String?
-  googleAdsAccounts GoogleAdsAccount[]
+  googleAccountId      String?
+  googleEmail          String?
+  gtmAccountId         String?
+  gtmContainerId       String?
+  gtmWorkspaceId       String?
+  gtmContainerName     String?
+  selectedAdsAccountId String? // User-chosen Ads account for this customer
+  googleAdsAccounts    GoogleAdsAccount[]
   ga4Properties     GA4Property[]
   campaigns         Campaign[]
   conversionActions ConversionAction[]
@@ -176,6 +184,9 @@ model GoogleAdsAccount {
   currency        String
   timeZone        String
   isActive        Boolean @default(true)
+
+  // OneClickTag label in this Ads account
+  octLabelId String? // Label resource name for "OneClickTag - {User}" label
 
   // Customer relation
   customerId String

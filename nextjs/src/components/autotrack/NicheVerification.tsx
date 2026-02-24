@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Brain, CheckCircle, Loader2 } from 'lucide-react';
+import { Brain, CheckCircle, Loader2, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
@@ -30,6 +30,8 @@ interface NicheVerificationProps {
   nicheData: ScanNicheData | null;
   onConfirm: (niche: string) => void;
   isConfirming: boolean;
+  onCancel?: () => void;
+  isCancelling?: boolean;
 }
 
 export function NicheVerification({
@@ -37,6 +39,8 @@ export function NicheVerification({
   nicheData,
   onConfirm,
   isConfirming,
+  onCancel,
+  isCancelling,
 }: NicheVerificationProps) {
   const detectedNiche = nicheData?.niche || scan?.detectedNiche || 'other';
   const confidence = nicheData?.confidence || scan?.nicheConfidence || 0;
@@ -142,23 +146,45 @@ export function NicheVerification({
         </Select>
       </div>
 
-      <Button
-        onClick={() => onConfirm(selectedNiche)}
-        disabled={isConfirming}
-        className="w-full"
-      >
-        {isConfirming ? (
-          <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Confirming...
-          </>
-        ) : (
-          <>
-            <CheckCircle className="mr-2 h-4 w-4" />
-            Confirm & Continue Analysis
-          </>
+      <div className="flex gap-2">
+        {onCancel && (
+          <Button
+            variant="outline"
+            onClick={onCancel}
+            disabled={isCancelling || isConfirming}
+            className="flex-shrink-0"
+          >
+            {isCancelling ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Cancelling...
+              </>
+            ) : (
+              <>
+                <XCircle className="mr-2 h-4 w-4" />
+                Cancel Scan
+              </>
+            )}
+          </Button>
         )}
-      </Button>
+        <Button
+          onClick={() => onConfirm(selectedNiche)}
+          disabled={isConfirming || isCancelling}
+          className="flex-1"
+        >
+          {isConfirming ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Confirming...
+            </>
+          ) : (
+            <>
+              <CheckCircle className="mr-2 h-4 w-4" />
+              Confirm & Continue Analysis
+            </>
+          )}
+        </Button>
+      </div>
     </div>
   );
 }

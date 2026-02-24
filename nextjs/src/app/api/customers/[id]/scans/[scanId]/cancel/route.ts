@@ -29,7 +29,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const updated = await prisma.siteScan.update({
       where: { id: scanId },
-      data: { status: 'CANCELLED' },
+      data: { status: 'CANCELLED', errorMessage: 'Cancelled by user' },
     });
 
     return NextResponse.json(updated);

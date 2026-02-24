@@ -72,6 +72,7 @@ export interface ScanPage {
   hasDownloadLink: boolean;
   importanceScore: number | null;
   contentSummary: string | null;
+  templateGroup: string | null;
 }
 
 export interface ScanHistory {

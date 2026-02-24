@@ -57,7 +57,11 @@ yarn-error.log*
 .playwright-mcp/
 
 # Screenshots (test/debug)
+screenshots/
 nextjs/screenshots/
+
+# Docs
+docs/
 
 # Turbo
 .turbo/

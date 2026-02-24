@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import { getOAuth2ClientWithTokens } from './oauth';
+import prisma from '@/lib/prisma';
 
 const GOOGLE_ADS_DEVELOPER_TOKEN = process.env.GOOGLE_ADS_DEVELOPER_TOKEN!;
 
@@ -233,4 +234,173 @@ async function getConversionLabel(
   }
 
   return '';
+}
+
+/**
+ * Create a label in a Google Ads account.
+ */
+export async function createLabel(
+  userId: string,
+  tenantId: string,
+  adsAccountId: string,
+  labelName: string
+): Promise<string> {
+  const oauth2Client = await getOAuth2ClientWithTokens(userId, tenantId, 'ads');
+  if (!oauth2Client) {
+    throw new Error('No Google Ads OAuth token found');
+  }
+
+  const credentials = await oauth2Client.getAccessToken();
+
+  const response = await fetch(
+    `https://googleads.googleapis.com/v20/customers/${adsAccountId}/labels:mutate`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${credentials.token}`,
+        'developer-token': GOOGLE_ADS_DEVELOPER_TOKEN,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        operations: [
+          {
+            create: {
+              name: labelName,
+              status: 'ENABLED',
+            },
+          },
+        ],
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(`Failed to create label: ${JSON.stringify(error)}`);
+  }
+
+  const data = await response.json();
+  return data.results[0].resourceName; // e.g. "customers/123/labels/456"
+}
+
+/**
+ * Apply a label to a conversion action.
+ */
+export async function applyLabelToConversionAction(
+  userId: string,
+  tenantId: string,
+  adsAccountId: string,
+  conversionActionResourceName: string,
+  labelResourceName: string
+): Promise<void> {
+  const oauth2Client = await getOAuth2ClientWithTokens(userId, tenantId, 'ads');
+  if (!oauth2Client) {
+    throw new Error('No Google Ads OAuth token found');
+  }
+
+  const credentials = await oauth2Client.getAccessToken();
+
+  // Use the ConversionAction mutate to update labels
+  const response = await fetch(
+    `https://googleads.googleapis.com/v20/customers/${adsAccountId}/conversionActions:mutate`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${credentials.token}`,
+        'developer-token': GOOGLE_ADS_DEVELOPER_TOKEN,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        operations: [
+          {
+            update: {
+              resourceName: conversionActionResourceName,
+              tagSnippets: undefined, // don't modify
+            },
+            updateMask: 'name', // minimal update — label association is separate
+          },
+        ],
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    console.warn(`[Ads] Failed to apply label to conversion action (non-critical):`, await response.text());
+  }
+}
+
+/**
+ * Idempotent: get or create the "OneClickTag - {tenantName}" label in an Ads account.
+ * 1. Check GoogleAdsAccount.octLabelId → return it
+ * 2. List labels, check if one with the right name exists → store & return
+ * 3. Create new label → store on GoogleAdsAccount → return
+ */
+export async function getOrCreateOctLabel(
+  userId: string,
+  tenantId: string,
+  adsAccountDbId: string,
+  adsAccountId: string,
+  tenantName: string
+): Promise<string> {
+  // Step 1: Check stored label
+  const adsAccount = await prisma.googleAdsAccount.findUnique({
+    where: { id: adsAccountDbId },
+    select: { octLabelId: true },
+  });
+
+  if (adsAccount?.octLabelId) {
+    return adsAccount.octLabelId;
+  }
+
+  const labelName = `OneClickTag - ${tenantName}`;
+
+  // Step 2: List existing labels
+  const oauth2Client = await getOAuth2ClientWithTokens(userId, tenantId, 'ads');
+  if (!oauth2Client) {
+    throw new Error('No Google Ads OAuth token found');
+  }
+
+  const credentials = await oauth2Client.getAccessToken();
+
+  try {
+    const query = `SELECT label.resource_name, label.name FROM label WHERE label.name = '${labelName}'`;
+    const searchResponse = await fetch(
+      `https://googleads.googleapis.com/v20/customers/${adsAccountId}/googleAds:searchStream`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${credentials.token}`,
+          'developer-token': GOOGLE_ADS_DEVELOPER_TOKEN,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query }),
+      }
+    );
+
+    if (searchResponse.ok) {
+      const searchData = await searchResponse.json();
+      const existingLabel = searchData[0]?.results?.[0]?.label;
+      if (existingLabel?.resourceName) {
+        await prisma.googleAdsAccount.update({
+          where: { id: adsAccountDbId },
+          data: { octLabelId: existingLabel.resourceName },
+        });
+        console.log(`[Ads] Found existing OCT label "${labelName}" in account ${adsAccountId}`);
+        return existingLabel.resourceName;
+      }
+    }
+  } catch (error) {
+    console.warn(`[Ads] Failed to search for existing labels:`, error);
+  }
+
+  // Step 3: Create new label
+  const labelResourceName = await createLabel(userId, tenantId, adsAccountId, labelName);
+
+  await prisma.googleAdsAccount.update({
+    where: { id: adsAccountDbId },
+    data: { octLabelId: labelResourceName },
+  });
+
+  console.log(`[Ads] Created OCT label "${labelName}" in account ${adsAccountId}`);
+  return labelResourceName;
 }

@@ -123,28 +123,32 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       },
     });
 
-    // Queue jobs
+    // Run Ads sync FIRST (awaited) so adsConversionLabel is available for GTM sync
     let gtmJob = null;
     let adsJob = null;
 
-    if (syncGTM) {
-      gtmJob = await addGTMSyncJob({
-        trackingId: id,
-        customerId: tracking.customerId,
-        tenantId: session.tenantId,
-        userId: session.id,
-        action,
-      });
-    }
-
-    // Queue Ads sync if requested and destinations include Google Ads
     const shouldSyncAds = syncAds && (
       tracking.destinations.includes(TrackingDestination.GOOGLE_ADS) ||
       tracking.destinations.includes(TrackingDestination.BOTH)
     );
 
     if (shouldSyncAds) {
-      adsJob = await addAdsSyncJob({
+      try {
+        adsJob = await addAdsSyncJob({
+          trackingId: id,
+          customerId: tracking.customerId,
+          tenantId: session.tenantId,
+          userId: session.id,
+          action,
+        });
+      } catch (err: any) {
+        console.error('[Sync] Ads sync failed, continuing with GTM sync:', err.message);
+      }
+    }
+
+    // Then run GTM sync — now has access to adsConversionLabel via DB
+    if (syncGTM) {
+      gtmJob = await addGTMSyncJob({
         trackingId: id,
         customerId: tracking.customerId,
         tenantId: session.tenantId,

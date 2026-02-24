@@ -12,6 +12,7 @@ import {
   useChunkedScan,
   useSaveCredential,
   useProvideCredentials,
+  useAutoRegister,
 } from '@/hooks/use-site-scanner';
 import { SiteScanStatus, TrackingRecommendation } from '@/types/site-scanner';
 import { ScanLauncher } from './ScanLauncher';
@@ -24,6 +25,7 @@ import { ScanHistoryList } from './ScanHistory';
 interface AutoTrackProps {
   customerId: string;
   customerWebsiteUrl?: string;
+  hasGoogleConnected?: boolean;
   onCreateTracking?: (recommendation: TrackingRecommendation) => void;
 }
 
@@ -31,9 +33,11 @@ const ACTIVE_STATUSES: SiteScanStatus[] = [
   'QUEUED', 'DISCOVERING', 'CRAWLING', 'NICHE_DETECTED', 'AWAITING_CONFIRMATION', 'DEEP_CRAWLING', 'ANALYZING',
 ];
 
-export function AutoTrack({ customerId, customerWebsiteUrl, onCreateTracking }: AutoTrackProps) {
+export function AutoTrack({ customerId, customerWebsiteUrl, hasGoogleConnected, onCreateTracking }: AutoTrackProps) {
   const [activeScanId, setActiveScanId] = useState<string | null>(null);
   const [showCredentialPrompt, setShowCredentialPrompt] = useState(false);
+  const [autoRegisterStatus, setAutoRegisterStatus] = useState<'idle' | 'finding_signup' | 'creating_account' | 'success' | 'failed'>('idle');
+  const [autoRegisterError, setAutoRegisterError] = useState<string | null>(null);
   const credentialSkippedRef = useRef(false);
   const phase1StartedRef = useRef(false);
 
@@ -48,6 +52,7 @@ export function AutoTrack({ customerId, customerWebsiteUrl, onCreateTracking }: 
   const cancelScan = useCancelScan();
   const saveCredential = useSaveCredential();
   const provideCredentials = useProvideCredentials();
+  const autoRegister = useAutoRegister();
 
   // Chunked scan orchestration
   const chunkedScan = useChunkedScan(customerId, activeScanId);
@@ -100,6 +105,8 @@ export function AutoTrack({ customerId, customerWebsiteUrl, onCreateTracking }: 
       phase1StartedRef.current = false;
       credentialSkippedRef.current = false;
       setShowCredentialPrompt(false);
+      setAutoRegisterStatus('idle');
+      setAutoRegisterError(null);
       const result = await startScan.mutateAsync({
         customerId,
         data: { websiteUrl, maxPages, maxDepth },
@@ -173,6 +180,8 @@ export function AutoTrack({ customerId, customerWebsiteUrl, onCreateTracking }: 
     phase1StartedRef.current = false;
     credentialSkippedRef.current = false;
     setShowCredentialPrompt(false);
+    setAutoRegisterStatus('idle');
+    setAutoRegisterError(null);
   };
 
   const handleSaveCredential = async (username: string, password: string, saveForFuture = true, mfaCode?: string) => {
@@ -196,6 +205,39 @@ export function AutoTrack({ customerId, customerWebsiteUrl, onCreateTracking }: 
       setShowCredentialPrompt(false);
     } catch (error) {
       console.error('Failed to provide credentials:', error);
+    }
+  };
+
+  const handleAutoRegister = async () => {
+    if (!activeScanId) return;
+    try {
+      setAutoRegisterStatus('finding_signup');
+      setAutoRegisterError(null);
+
+      // Brief delay then update to 'creating_account' for UX
+      setTimeout(() => setAutoRegisterStatus('creating_account'), 2000);
+
+      const result = await autoRegister.mutateAsync({
+        customerId,
+        scanId: activeScanId,
+      });
+
+      if (result.success && result.credentials) {
+        setAutoRegisterStatus('success');
+        // Use the auto-registered credentials for subsequent chunks
+        chunkedScan.setCredentials({
+          username: result.credentials.email,
+          password: result.credentials.password,
+        });
+        // Hide prompt after a brief success display
+        setTimeout(() => setShowCredentialPrompt(false), 2000);
+      } else {
+        setAutoRegisterStatus('failed');
+        setAutoRegisterError(result.error || 'Auto-registration failed');
+      }
+    } catch (error) {
+      setAutoRegisterStatus('failed');
+      setAutoRegisterError((error as Error)?.message || 'Auto-registration failed');
     }
   };
 
@@ -242,9 +284,14 @@ export function AutoTrack({ customerId, customerWebsiteUrl, onCreateTracking }: 
           }}
           isSavingCredential={provideCredentials.isPending}
           showCredentialPrompt={showCredentialPrompt}
+          onAutoRegister={handleAutoRegister}
+          isAutoRegistering={autoRegister.isPending}
+          autoRegisterStatus={autoRegisterStatus}
+          autoRegisterError={autoRegisterError}
           obstaclesDismissed={chunkedScan.obstaclesDismissed}
           totalInteractions={chunkedScan.totalInteractions}
           authenticatedPagesCount={chunkedScan.authenticatedPagesCount}
+          scanId={activeScanId}
         />
       )}
 
@@ -290,12 +337,14 @@ export function AutoTrack({ customerId, customerWebsiteUrl, onCreateTracking }: 
           nicheData={null}
           onConfirm={handleConfirmNiche}
           isConfirming={confirmNiche.isPending}
+          onCancel={handleCancelScan}
+          isCancelling={cancelScan.isPending}
         />
       )}
 
       {/* Results */}
       {isCompleted && scanDetail && (
-        <ScanResults customerId={customerId} scan={scanDetail} onCreateTracking={onCreateTracking} />
+        <ScanResults customerId={customerId} scan={scanDetail} onCreateTracking={onCreateTracking} hasGoogleConnected={hasGoogleConnected} />
       )}
 
       {/* Failed */}

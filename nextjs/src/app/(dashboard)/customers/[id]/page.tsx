@@ -5,7 +5,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { useApi } from '@/hooks/use-api';
 import { useCustomerTrackings, useCreateTracking, type TrackingType, type TrackingDestination, type CreateTrackingInput } from '@/hooks/use-trackings';
-import { useConnectGoogleAccount, useUpdateCustomer } from '@/hooks/use-customers';
+import { useConnectGoogleAccount, useDisconnectGoogleAccount, useUpdateCustomer } from '@/hooks/use-customers';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -49,6 +49,8 @@ import {
   Server,
   Copy,
   Mail,
+  Unlink,
+  AlertTriangle,
 } from 'lucide-react';
 import { Customer, StapeDnsRecord } from '@/types/customer';
 import { AutoTrack } from '@/components/autotrack/AutoTrack';
@@ -82,6 +84,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
 
   const [activeTab, setActiveTab] = useState('trackings');
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [disconnectDialogOpen, setDisconnectDialogOpen] = useState(false);
   const [trackingName, setTrackingName] = useState('');
   const [trackingType, setTrackingType] = useState<TrackingType>('BUTTON_CLICK');
   const [trackingSelector, setTrackingSelector] = useState('');
@@ -125,6 +128,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
 
   const { data: trackings, isLoading: trackingsLoading } = useCustomerTrackings(id);
   const connectGoogle = useConnectGoogleAccount();
+  const disconnectGoogle = useDisconnectGoogleAccount();
   const createTracking = useCreateTracking();
   const updateCustomer = useUpdateCustomer();
 
@@ -187,6 +191,32 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
       }).catch(() => {});
     }
   }, [customer?.stapeContainer?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Ads account selector state
+  const [selectedAdsAccountId, setSelectedAdsAccountId] = useState<string | null>(null);
+  const [adsAccountInitialized, setAdsAccountInitialized] = useState(false);
+
+  // Initialize selectedAdsAccountId from customer data
+  useEffect(() => {
+    if (settingsCustomer && !adsAccountInitialized) {
+      setSelectedAdsAccountId(settingsCustomer.selectedAdsAccountId || null);
+      setAdsAccountInitialized(true);
+    }
+  }, [settingsCustomer, adsAccountInitialized]);
+
+  const handleSaveAdsAccount = async (accountId: string) => {
+    setSelectedAdsAccountId(accountId);
+    try {
+      await updateCustomer.mutateAsync({
+        id,
+        data: { selectedAdsAccountId: accountId },
+      });
+      toast.success('Google Ads account selected');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to save';
+      toast.error('Failed to select Ads account', { description: message });
+    }
+  };
 
   // Settings form state
   const [settingsForm, setSettingsForm] = useState({
@@ -257,6 +287,17 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       toast.error('Failed to connect Google account', { description: message });
+    }
+  };
+
+  const handleDisconnectGoogle = async () => {
+    try {
+      await disconnectGoogle.mutateAsync(id);
+      queryClient.invalidateQueries({ queryKey: ['customer', id, 'google'] });
+      toast.success('Google account disconnected');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast.error('Failed to disconnect Google account', { description: message });
     }
   };
 
@@ -506,6 +547,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
             <AutoTrack
               customerId={id}
               customerWebsiteUrl={customer?.websiteUrl ?? undefined}
+              hasGoogleConnected={!!customer?.googleAccountId}
             />
           )}
         </TabsContent>
@@ -615,7 +657,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                   <CardTitle>Google Connection Status</CardTitle>
                   <CardDescription>Connection status to Google services</CardDescription>
                 </div>
-                {!customer.googleAccountId && (
+                {!customer.googleAccountId ? (
                   <Button onClick={handleConnectGoogle} disabled={connectGoogle.isPending}>
                     {connectGoogle.isPending ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -624,6 +666,54 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                     )}
                     Connect Google
                   </Button>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={handleConnectGoogle} disabled={connectGoogle.isPending}>
+                      {connectGoogle.isPending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                      )}
+                      Reconnect
+                    </Button>
+                    <Button variant="destructive" size="sm" disabled={disconnectGoogle.isPending} onClick={() => setDisconnectDialogOpen(true)}>
+                      {disconnectGoogle.isPending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Unlink className="mr-2 h-4 w-4" />
+                      )}
+                      Disconnect
+                    </Button>
+                    <Dialog open={disconnectDialogOpen} onOpenChange={setDisconnectDialogOpen}>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle className="flex items-center gap-2">
+                            <AlertTriangle className="h-5 w-5 text-destructive" />
+                            Disconnect Google Account
+                          </DialogTitle>
+                          <DialogDescription>
+                            This will remove the Google account connection and delete all synced Google Ads accounts and GA4 properties for this customer. Existing trackings will not be deleted from GTM but will no longer be managed by OneClickTag.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                          <Button variant="outline" onClick={() => setDisconnectDialogOpen(false)}>Cancel</Button>
+                          <Button
+                            variant="destructive"
+                            onClick={async () => {
+                              await handleDisconnectGoogle();
+                              setDisconnectDialogOpen(false);
+                            }}
+                            disabled={disconnectGoogle.isPending}
+                          >
+                            {disconnectGoogle.isPending ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : null}
+                            Disconnect
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
                 )}
               </div>
             </CardHeader>
@@ -663,6 +753,9 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                       <XCircle className="h-5 w-5 text-gray-400" />
                     )}
                     <span className="font-medium text-sm">Google Tag Manager</span>
+                    {customer.gtmContainerId && (
+                      <Badge variant="outline" className="text-[10px] px-1 py-0 border-blue-300 text-blue-600">Managed</Badge>
+                    )}
                   </div>
                   <div className="flex items-center gap-1">
                     <Tag className="h-3 w-3 text-muted-foreground" />
@@ -675,9 +768,19 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                     </p>
                   </div>
                   {customer.gtmContainerName && (
-                    <p className="text-xs text-muted-foreground mt-1 truncate">
-                      Container: {customer.gtmContainerName}
-                    </p>
+                    <div className="flex items-center gap-1 mt-1">
+                      <code className="text-xs bg-white/60 px-1.5 py-0.5 rounded font-mono">{customer.gtmContainerName}</code>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(customer.gtmContainerName!);
+                          toast.success('Container ID copied');
+                        }}
+                        className="text-muted-foreground hover:text-foreground"
+                        title="Copy container ID"
+                      >
+                        <Copy className="h-3 w-3" />
+                      </button>
+                    </div>
                   )}
                 </div>
 
@@ -698,6 +801,9 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                       <XCircle className="h-5 w-5 text-gray-400" />
                     )}
                     <span className="font-medium text-sm">Google Ads</span>
+                    {settingsCustomer?.googleAdsAccounts && settingsCustomer.googleAdsAccounts.length > 0 && (
+                      <Badge variant="outline" className="text-[10px] px-1 py-0 border-blue-300 text-blue-600">Managed</Badge>
+                    )}
                   </div>
                   <div className="flex items-center gap-1">
                     <MonitorSmartphone className="h-3 w-3 text-muted-foreground" />
@@ -728,6 +834,9 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                       <XCircle className="h-5 w-5 text-gray-400" />
                     )}
                     <span className="font-medium text-sm">Google Analytics 4</span>
+                    {settingsCustomer?.ga4Properties && settingsCustomer.ga4Properties.length > 0 && (
+                      <Badge variant="outline" className="text-[10px] px-1 py-0 border-blue-300 text-blue-600">Managed</Badge>
+                    )}
                   </div>
                   <div className="flex items-center gap-1">
                     <BarChart3 className="h-3 w-3 text-muted-foreground" />
@@ -739,40 +848,60 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                           : 'Not connected'}
                     </p>
                   </div>
+                  {settingsCustomer?.ga4Properties?.[0]?.measurementId && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <code className="text-xs bg-white/60 px-1.5 py-0.5 rounded font-mono">{settingsCustomer.ga4Properties[0].measurementId}</code>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(settingsCustomer.ga4Properties![0].measurementId!);
+                          toast.success('Measurement ID copied');
+                        }}
+                        className="text-muted-foreground hover:text-foreground"
+                        title="Copy measurement ID"
+                      >
+                        <Copy className="h-3 w-3" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Google Ads Accounts Detail */}
+              {/* Google Ads Account Selector */}
               {settingsCustomer?.googleAdsAccounts && settingsCustomer.googleAdsAccounts.length > 0 && (
                 <div className="mt-4">
-                  <h4 className="text-sm font-medium mb-2">Google Ads Accounts</h4>
-                  <div className="space-y-2">
-                    {settingsCustomer.googleAdsAccounts.map((account) => (
-                      <div key={account.id} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
-                        <div>
-                          <span className="font-medium">{account.accountName}</span>
-                          <span className="text-muted-foreground ml-2">({account.accountId})</span>
-                        </div>
-                        <Badge variant={account.isActive ? 'default' : 'secondary'}>
-                          {account.isActive ? 'Active' : 'Inactive'}
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
+                  <h4 className="text-sm font-medium mb-2">Google Ads Account</h4>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Select which Google Ads account to use for conversion tracking.
+                  </p>
+                  <Select
+                    value={selectedAdsAccountId || ''}
+                    onValueChange={handleSaveAdsAccount}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select an Ads account..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {settingsCustomer.googleAdsAccounts.map((account) => (
+                        <SelectItem key={account.id} value={account.id}>
+                          {account.accountName} ({account.accountId})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
 
               {/* GA4 Properties Detail */}
               {settingsCustomer?.ga4Properties && settingsCustomer.ga4Properties.length > 0 && (
                 <div className="mt-4">
-                  <h4 className="text-sm font-medium mb-2">GA4 Properties</h4>
+                  <h4 className="text-sm font-medium mb-2">GA4 Data Streams</h4>
                   <div className="space-y-2">
                     {settingsCustomer.ga4Properties.map((property) => (
                       <div key={property.id} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
                         <div>
-                          <span className="font-medium">{property.propertyName}</span>
+                          <span className="font-medium">{property.displayName || property.propertyName}</span>
                           {property.measurementId && (
-                            <span className="text-muted-foreground ml-2">({property.measurementId})</span>
+                            <code className="text-muted-foreground ml-2 bg-muted px-1.5 py-0.5 rounded text-xs font-mono">{property.measurementId}</code>
                           )}
                         </div>
                         <Badge variant={property.isActive ? 'default' : 'secondary'}>
@@ -781,6 +910,48 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* GTM Snippet Installation */}
+              {customer.gtmContainerName && (
+                <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
+                  <h4 className="text-sm font-medium mb-1">GTM Snippet Installation</h4>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Add this snippet to the customer&apos;s website &lt;head&gt; tag to enable tracking.
+                  </p>
+                  <div className="relative">
+                    <pre className="bg-white rounded border p-3 text-xs font-mono overflow-x-auto whitespace-pre-wrap">
+{`<!-- Google Tag Manager -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','${customer.gtmContainerName}');</script>
+<!-- End Google Tag Manager -->`}
+                    </pre>
+                    <button
+                      onClick={() => {
+                        const snippet = `<!-- Google Tag Manager -->\n<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':\nnew Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],\nj=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=\n'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);\n})(window,document,'script','dataLayer','${customer.gtmContainerName}');</script>\n<!-- End Google Tag Manager -->`;
+                        navigator.clipboard.writeText(snippet);
+                        toast.success('GTM snippet copied to clipboard');
+                      }}
+                      className="absolute top-2 right-2 p-1.5 rounded bg-white border hover:bg-gray-50"
+                      title="Copy snippet"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Managed infrastructure info */}
+              {customer.googleAccountId && (
+                <div className="mt-4 rounded-lg border border-muted p-4">
+                  <p className="text-xs text-muted-foreground">
+                    OneClickTag creates and manages its own GTM container, GA4 property, and Ads labels for this customer.
+                    All tracking tags and triggers are created in an isolated workspace, separate from any existing setup.
+                  </p>
                 </div>
               )}
             </CardContent>

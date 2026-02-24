@@ -13,7 +13,7 @@ import {
   ExtractedElement,
   SKIP_PATTERNS,
 } from '../interfaces';
-import { parsePage, discoverLinks, extractPriorityElements } from './html-crawler';
+import { fetchPage, parsePage, discoverLinks, extractPriorityElements, detectLoginPage as detectLoginPageHTML } from './html-crawler';
 import { detectFromHTML, summarizeTechnologies } from './html-technology-detector';
 import { extractElements } from './crawl-engine';
 import { detectOpportunities } from './tracking-detector';
@@ -23,6 +23,7 @@ import { dismissObstacles } from './obstacle-handler';
 import { simulateInteractions } from './interaction-simulator';
 import { detectLoginPage as detectLoginPagePlaywright, serializeCookies, restoreCookies } from './auth-handler';
 import { createBehavioralOpportunities } from '../constants/behavioral-tracking';
+import { broadcastScanProgress, pageCrawledEvent, chunkCompleteEvent } from '@/lib/supabase/scan-progress';
 
 // ========================================
 // Types
@@ -95,8 +96,9 @@ const TERMINAL_STATUSES: SiteScanStatus[] = ['COMPLETED', 'FAILED', 'CANCELLED']
 
 /**
  * Process a chunk of Phase 1 pages (Playwright-based crawling with obstacles and interactions).
+ * Primary Phase 1 implementation — renders full DOM to discover JS-rendered links.
  */
-export async function processPhase1Chunk(
+export async function processPhase1ChunkPlaywright(
   scanId: string,
   chunkSize: number = 8,
   credentials?: { username: string; password: string } | null,
@@ -250,7 +252,7 @@ export async function processPhase1Chunk(
         const hasDownloadLink = !!document.querySelector('a[href$=".pdf"], a[href$=".zip"], a[download]');
 
         const mainContent = document.querySelector('main, article, [role="main"], .content, #content');
-        const contentSummary = (mainContent?.textContent || document.body?.textContent || '').trim().slice(0, 500);
+        const contentSummary = (mainContent?.textContent || document.body?.textContent || '').trim().slice(0, 2000);
 
         // --- Enhanced link discovery ---
         const allLinks = new Set<string>();
@@ -420,6 +422,31 @@ export async function processPhase1Chunk(
         hasCTA: crawledPage.hasCTA,
       });
 
+      // Broadcast per-page progress (non-blocking)
+      broadcastScanProgress(scanId, pageCrawledEvent(
+        crawledPage.url,
+        crawledPage.title,
+        crawledPage.pageType,
+        crawledSet.size,
+        crawledSet.size + urlQueue.length,
+        crawledPage.hasForm,
+        crawledPage.hasCTA,
+      )).catch(() => {});
+
+      // Broadcast login detection
+      if (loginDetected && loginUrl === crawledPage.url) {
+        broadcastScanProgress(scanId, {
+          type: 'login_detected',
+          timestamp: new Date().toISOString(),
+          data: {
+            loginUrl: loginUrl,
+            pagesProcessed: crawledSet.size,
+            totalDiscovered: crawledSet.size + urlQueue.length,
+            phase: 'phase1',
+          },
+        }).catch(() => {});
+      }
+
       // Detect technologies (mainly on first few pages)
       if (crawledSet.size <= 3) {
         const html = await page.content();
@@ -488,6 +515,13 @@ export async function processPhase1Chunk(
       },
     });
 
+    // Broadcast chunk completion (non-blocking)
+    broadcastScanProgress(scanId, chunkCompleteEvent(
+      crawledSet.size,
+      discovery.totalUrlsDiscovered,
+      'phase1',
+    )).catch(() => {});
+
     return {
       pagesProcessed: newPages.length,
       hasMore,
@@ -502,6 +536,263 @@ export async function processPhase1Chunk(
   } finally {
     await browser.close();
   }
+}
+
+// ========================================
+// Phase 1 HTML-First Chunk Processing
+// ========================================
+
+/**
+ * Process a chunk of Phase 1 pages using fetch + node-html-parser (no Playwright).
+ * 10-50x faster than Playwright-based crawling. Processes 25 URLs per chunk.
+ */
+export async function processPhase1Chunk(
+  scanId: string,
+  chunkSize: number = 25,
+  credentials?: { username: string; password: string } | null,
+): Promise<ChunkResult> {
+  const scan = await prisma.siteScan.findUnique({
+    where: { id: scanId },
+    select: {
+      id: true,
+      status: true,
+      websiteUrl: true,
+      maxPages: true,
+      maxDepth: true,
+      urlQueue: true,
+      crawledUrls: true,
+      liveDiscovery: true,
+      totalUrlsFound: true,
+      loginDetected: true,
+      loginUrl: true,
+    },
+  });
+
+  if (!scan) throw new Error('Scan not found');
+  if (TERMINAL_STATUSES.includes(scan.status)) {
+    throw new Error(`Scan is in terminal state: ${scan.status}`);
+  }
+
+  // Deserialize state
+  const urlQueue: UrlQueueItem[] = (scan.urlQueue as unknown as UrlQueueItem[]) || [];
+  const crawledUrls: string[] = (scan.crawledUrls as unknown as string[]) || [];
+  const crawledSet = new Set(crawledUrls);
+  const discovery: LiveDiscovery = (scan.liveDiscovery as unknown as LiveDiscovery) || createEmptyDiscovery();
+
+  const baseUrl = new URL(scan.websiteUrl);
+  const baseDomain = getBaseDomain(baseUrl.hostname);
+
+  // Build a Set of queued URLs for O(1) lookup
+  const queuedUrls = new Set(urlQueue.map(q => q.url));
+
+  // Pop next N URLs from queue
+  const toProcess = urlQueue.splice(0, chunkSize);
+  for (const item of toProcess) queuedUrls.delete(item.url);
+
+  const newPages: ChunkResult['newPages'] = [];
+  let loginDetected = scan.loginDetected;
+  let loginUrl = scan.loginUrl;
+
+  // Edge case: empty queue
+  if (toProcess.length === 0) {
+    return {
+      pagesProcessed: 0,
+      hasMore: false,
+      discovery,
+      newPages: [],
+      loginDetected: loginDetected || undefined,
+      loginUrl: loginUrl || undefined,
+    };
+  }
+
+  let consecutiveFailures = 0;
+
+  for (const item of toProcess) {
+    // Check cancellation
+    if (await isScanCancelled(scanId)) {
+      break;
+    }
+
+    // Skip if already crawled, over max pages, or non-HTML resource
+    if (crawledSet.has(item.url)) continue;
+    if (crawledSet.size >= scan.maxPages) break;
+    if (item.depth > scan.maxDepth) continue;
+    if (shouldSkipCrawlUrl(item.url)) continue;
+
+    crawledSet.add(item.url);
+
+    // Wrap page crawl in try/catch for error resilience
+    try {
+      // Fetch page HTML (no Playwright)
+      const fetchResult = await fetchPage(item.url);
+      if (!fetchResult) {
+        // Fetch failed — skip but don't break the loop
+        consecutiveFailures++;
+        if (consecutiveFailures >= 3) {
+          console.warn(`3 consecutive page failures detected in scan ${scanId}, continuing...`);
+        }
+        continue;
+      }
+
+      const finalUrl = fetchResult.redirectUrl || item.url;
+      if (finalUrl !== item.url) {
+        crawledSet.add(finalUrl);
+      }
+
+      // Parse the HTML into a CrawledPage
+      const crawledPage = parsePage(finalUrl, fetchResult.html, item.depth, fetchResult.headers);
+
+      // Detect login page from HTML
+      if (!loginDetected) {
+        const loginResult = detectLoginPageHTML(fetchResult.html, finalUrl);
+        if (loginResult.isLogin) {
+          loginDetected = true;
+          loginUrl = loginResult.loginUrl || finalUrl;
+        }
+      }
+
+      // Save to DB
+      await prisma.scanPage.create({
+        data: {
+          scanId,
+          url: crawledPage.url,
+          title: crawledPage.title,
+          depth: crawledPage.depth,
+          pageType: crawledPage.pageType,
+          hasForm: crawledPage.hasForm,
+          hasCTA: crawledPage.hasCTA,
+          hasVideo: crawledPage.hasVideo,
+          hasPhoneLink: crawledPage.hasPhoneLink,
+          hasEmailLink: crawledPage.hasEmailLink,
+          hasDownloadLink: crawledPage.hasDownloadLink,
+          importanceScore: crawledPage.importanceScore,
+          metaTags: crawledPage.metaTags as any,
+          headings: crawledPage.headings as any,
+          contentSummary: crawledPage.contentSummary,
+          isAuthenticated: false,
+          templateGroup: detectTemplateGroup(finalUrl),
+        },
+      });
+
+      newPages.push({
+        url: crawledPage.url,
+        title: crawledPage.title,
+        pageType: crawledPage.pageType,
+        hasForm: crawledPage.hasForm,
+        hasCTA: crawledPage.hasCTA,
+      });
+
+      // Broadcast per-page progress (non-blocking)
+      broadcastScanProgress(scanId, pageCrawledEvent(
+        crawledPage.url,
+        crawledPage.title,
+        crawledPage.pageType,
+        crawledSet.size,
+        crawledSet.size + urlQueue.length,
+        crawledPage.hasForm,
+        crawledPage.hasCTA,
+      )).catch(() => {});
+
+      // Broadcast login detection
+      if (loginDetected && loginUrl === (crawledPage.url)) {
+        broadcastScanProgress(scanId, {
+          type: 'login_detected',
+          timestamp: new Date().toISOString(),
+          data: {
+            loginUrl: loginUrl,
+            pagesProcessed: crawledSet.size,
+            totalDiscovered: crawledSet.size + urlQueue.length,
+            phase: 'phase1',
+          },
+        }).catch(() => {});
+      }
+
+      // Detect technologies (mainly on first few pages)
+      if (crawledSet.size <= 3) {
+        const techResult = detectFromHTML(fetchResult.html, fetchResult.headers);
+        const summary = summarizeTechnologies(techResult);
+        mergeTechnologies(discovery, summary, techResult);
+      }
+
+      // Extract priority elements from HTML
+      const root = parse(fetchResult.html, { comment: false, blockTextElements: { script: false, style: false } });
+      const priorityEls = extractPriorityElements(finalUrl, root);
+      mergePriorityElements(discovery, priorityEls, crawledPage);
+
+      // Update page types count
+      const pageType = crawledPage.pageType || 'other';
+      discovery.pageTypes[pageType] = (discovery.pageTypes[pageType] || 0) + 1;
+
+      // Add discovered URLs from page links
+      for (const link of crawledPage.links || []) {
+        const normalized = normalizeCrawlUrl(link);
+        if (!normalized) continue;
+        if (crawledSet.has(normalized) || queuedUrls.has(normalized)) continue;
+        if (shouldSkipCrawlUrl(normalized)) continue;
+        try {
+          const linkDomain = getBaseDomain(new URL(normalized).hostname);
+          if (linkDomain === baseDomain) {
+            urlQueue.push({ url: normalized, depth: item.depth + 1, source: 'crawl' });
+            queuedUrls.add(normalized);
+          }
+        } catch { /* skip */ }
+      }
+
+      // Update URL patterns (sample)
+      if (discovery.urlPatterns.length < 30) {
+        try {
+          discovery.urlPatterns.push(new URL(finalUrl).pathname);
+        } catch { /* skip */ }
+      }
+
+      // Reset consecutive failures counter on success
+      consecutiveFailures = 0;
+    } catch (error: any) {
+      // Log per-page error and continue with next page
+      console.warn(`Error processing page ${item.url} in scan ${scanId}: ${error?.message || String(error)}`);
+      consecutiveFailures++;
+      if (consecutiveFailures >= 3) {
+        console.warn(`3 consecutive page failures detected in scan ${scanId}, continuing with remaining pages...`);
+      }
+      // Continue with next page without throwing
+      continue;
+    }
+  }
+
+  // Determine if there are more pages to process
+  const hasMore = urlQueue.length > 0 && crawledSet.size < scan.maxPages;
+  discovery.totalUrlsDiscovered = crawledSet.size + urlQueue.length;
+
+  // Save state back to DB
+  await prisma.siteScan.update({
+    where: { id: scanId },
+    data: {
+      urlQueue: urlQueue as any,
+      crawledUrls: Array.from(crawledSet) as any,
+      liveDiscovery: discovery as any,
+      totalUrlsFound: discovery.totalUrlsDiscovered,
+      loginDetected,
+      loginUrl,
+      totalPagesScanned: crawledSet.size,
+      status: 'CRAWLING',
+    },
+  });
+
+  // Broadcast chunk completion (non-blocking)
+  broadcastScanProgress(scanId, chunkCompleteEvent(
+    crawledSet.size,
+    discovery.totalUrlsDiscovered,
+    'phase1',
+  )).catch(() => {});
+
+  return {
+    pagesProcessed: newPages.length,
+    hasMore,
+    discovery,
+    newPages,
+    loginDetected: loginDetected || undefined,
+    loginUrl: loginUrl || undefined,
+  };
 }
 
 // ========================================
@@ -539,10 +830,37 @@ export async function processPhase2Chunk(
     orderBy: { depth: 'asc' },
   });
 
-  const unanalyzedPages = allPages.filter(p => p.importanceScore === null);
+  // Deduplicate by template group — only analyze one representative per template
+  const analyzedTemplates = new Set(
+    allPages.filter(p => p.importanceScore !== null && p.templateGroup)
+      .map(p => p.templateGroup!)
+  );
+
+  const unanalyzedPages = allPages.filter(p => {
+    if (p.importanceScore !== null) return false;
+    // Skip pages whose template group was already analyzed
+    if (p.templateGroup && analyzedTemplates.has(p.templateGroup)) return false;
+    return true;
+  });
+
   const pagesToProcess = unanalyzedPages.slice(0, chunkSize);
 
+  // Track templates being processed in this chunk to avoid duplicates within chunk
+  for (const page of pagesToProcess) {
+    if (page.templateGroup) analyzedTemplates.add(page.templateGroup);
+  }
+
   if (pagesToProcess.length === 0) {
+    // Mark all remaining template-duplicate pages as analyzed
+    const templateDupes = allPages.filter(p =>
+      p.importanceScore === null && p.templateGroup && analyzedTemplates.has(p.templateGroup)
+    );
+    if (templateDupes.length > 0) {
+      await prisma.scanPage.updateMany({
+        where: { id: { in: templateDupes.map(p => p.id) } },
+        data: { importanceScore: 0 },
+      });
+    }
     return { pagesProcessed: 0, hasMore: false, newRecommendations: 0 };
   }
 
@@ -769,12 +1087,31 @@ function classifyPageType(url: string, pageData: any): string | null {
 
 function detectTemplateGroup(url: string): string | undefined {
   try {
-    const path = new URL(url).pathname;
+    const parsed = new URL(url);
+    // Handle hash-based routing (e.g. /#/product/shoe-1)
+    const path = parsed.hash.startsWith('#/') ? parsed.hash.slice(1) : parsed.pathname;
     const segments = path.split('/').filter(Boolean);
-    if (segments.length >= 2) {
-      return `/${segments[0]}/`;
-    }
-    return undefined;
+    if (segments.length < 2) return undefined;
+
+    // Replace likely dynamic segments with {param}
+    const normalized = segments.map((seg, i) => {
+      if (i === 0) return seg; // Keep first segment literal (e.g., "product", "blog")
+      // UUID pattern
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}/i.test(seg)) return '{id}';
+      // Numeric ID
+      if (/^\d+$/.test(seg)) return '{id}';
+      // Slug-like with numbers (e.g., "shoe-123", "product-abc-456")
+      if (/\d/.test(seg) && /^[a-z0-9][\w-]*$/i.test(seg)) return '{slug}';
+      // Very long slugs (likely dynamic content)
+      if (/^[a-z0-9-]+$/i.test(seg) && seg.length > 30) return '{slug}';
+      return seg;
+    });
+
+    const result = '/' + normalized.join('/');
+    // Only return template group if at least one segment was parameterized
+    if (result !== '/' + segments.join('/')) return result;
+    // Still return the pattern for multi-segment paths (enables grouping by prefix)
+    return '/' + segments.join('/');
   } catch {
     return undefined;
   }

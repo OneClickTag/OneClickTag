@@ -1,14 +1,15 @@
 'use client';
 
 import { useRef, useEffect, useState } from 'react';
-import { Globe, Loader2, X, Radio, Shield, MousePointerClick } from 'lucide-react';
+import { Globe, Loader2, X, Radio, Shield, MousePointerClick, ArrowRight } from 'lucide-react';
+import { useScanProgress } from '@/hooks/use-scan-progress';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { LiveDiscovery } from '@/types/site-scanner';
 import { TechPanel } from './discovery/TechPanel';
 import { PriorityElementsPanel } from './discovery/PriorityElementsPanel';
 import { UrlDiscoveryFeed } from './discovery/UrlDiscoveryFeed';
-import { CredentialPrompt } from './CredentialPrompt';
+import { AuthPrompt } from './AuthPrompt';
 
 interface ScanDiscoveryDashboardProps {
   websiteUrl: string;
@@ -28,6 +29,13 @@ interface ScanDiscoveryDashboardProps {
   obstaclesDismissed?: number;
   totalInteractions?: number;
   authenticatedPagesCount?: number;
+  /** Scan ID for Supabase Realtime subscription */
+  scanId?: string | null;
+  // Auto-register props
+  onAutoRegister?: () => void;
+  isAutoRegistering?: boolean;
+  autoRegisterStatus?: 'idle' | 'finding_signup' | 'creating_account' | 'success' | 'failed';
+  autoRegisterError?: string | null;
 }
 
 /**
@@ -94,7 +102,15 @@ export function ScanDiscoveryDashboard({
   obstaclesDismissed = 0,
   totalInteractions = 0,
   authenticatedPagesCount = 0,
+  scanId,
+  onAutoRegister,
+  isAutoRegistering = false,
+  autoRegisterStatus = 'idle',
+  autoRegisterError,
 }: ScanDiscoveryDashboardProps) {
+  // Supabase Realtime progress for per-URL live updates
+  const liveProgress = useScanProgress(scanId || null);
+
   let domain = '';
   try {
     domain = new URL(websiteUrl).hostname;
@@ -142,6 +158,14 @@ export function ScanDiscoveryDashboard({
         <SmoothProgress current={pagesProcessed} total={totalPages} />
       )}
 
+      {/* Currently crawling indicator (live via Supabase) */}
+      {!isDetectingNiche && liveProgress.currentUrl && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-blue-50 rounded px-3 py-1.5">
+          <ArrowRight className="h-3 w-3 text-blue-500 animate-pulse" />
+          <span className="truncate">Crawling: {liveProgress.currentUrl}</span>
+        </div>
+      )}
+
       {/* Obstacle and Interaction Counters */}
       {!isDetectingNiche && (obstaclesDismissed > 0 || totalInteractions > 0) && (
         <div className="flex items-center gap-4 text-xs">
@@ -173,14 +197,18 @@ export function ScanDiscoveryDashboard({
         </div>
       )}
 
-      {/* Credential prompt */}
+      {/* Auth prompt (credentials / auto-register / skip) */}
       {showCredentialPrompt && loginDetected && onSaveCredential && onSkipCredential && (
-        <CredentialPrompt
+        <AuthPrompt
           loginUrl={loginUrl}
           domain={domain}
-          onSave={onSaveCredential}
+          onSaveCredential={onSaveCredential}
+          isSavingCredential={isSavingCredential || false}
+          onAutoRegister={onAutoRegister || (() => {})}
+          isAutoRegistering={isAutoRegistering}
+          autoRegisterStatus={autoRegisterStatus}
+          autoRegisterError={autoRegisterError}
           onSkip={onSkipCredential}
-          isSaving={isSavingCredential || false}
         />
       )}
 

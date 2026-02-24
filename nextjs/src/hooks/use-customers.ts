@@ -21,6 +21,7 @@ export interface Customer {
   gtmContainerId?: string;
   gtmWorkspaceId?: string;
   gtmContainerName?: string;
+  selectedAdsAccountId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -118,6 +119,20 @@ export function useConnectGoogleAccount() {
       api.post<{ authUrl: string }>(`/api/customers/${customerId}/connect-google`),
     onSuccess: (_, customerId) => {
       queryClient.invalidateQueries({ queryKey: ['customer', customerId] });
+    },
+  });
+}
+
+export function useDisconnectGoogleAccount() {
+  const api = useApi();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (customerId: string) =>
+      api.post<{ message: string }>(`/api/customers/${customerId}/disconnect-google`),
+    onSuccess: (_, customerId) => {
+      queryClient.invalidateQueries({ queryKey: ['customer', customerId] });
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
     },
   });
 }

@@ -3,15 +3,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApi } from '@/hooks/use-api';
-import { useAuth } from '@/components/providers/auth-provider';
 import {
   StartScanRequest,
   ConfirmNicheRequest,
   RecommendationFilters,
   BulkAcceptRequest,
-  ScanProgressData,
-  ScanNicheData,
-  ScanCompletedData,
   SiteScanStatus,
   ScanSummary,
   ScanHistory,
@@ -180,6 +176,38 @@ export const useBulkAcceptRecommendations = () => {
   });
 };
 
+interface BulkCreateTrackingsResult {
+  created: number;
+  failed: number;
+  trackingIds: string[];
+  errors: string[];
+  total: number;
+}
+
+export const useBulkCreateTrackings = () => {
+  const queryClient = useQueryClient();
+  const api = useApi();
+  return useMutation({
+    mutationFn: ({
+      customerId,
+      scanId,
+      recommendationIds,
+    }: {
+      customerId: string;
+      scanId: string;
+      recommendationIds: string[];
+    }) =>
+      api.post<BulkCreateTrackingsResult>(
+        `/api/customers/${customerId}/scans/${scanId}/recommendations/bulk-create-trackings`,
+        { recommendationIds },
+      ),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [RECOMMENDATIONS_KEY, variables.customerId, variables.scanId] });
+      queryClient.invalidateQueries({ queryKey: ['trackings'] });
+    },
+  });
+};
+
 export const useProcessChunk = () => {
   const api = useApi();
   return useMutation({
@@ -288,6 +316,21 @@ export const useDeleteCredential = () => {
   });
 };
 
+interface AutoRegisterResult {
+  success: boolean;
+  credentials?: { email: string; password: string };
+  error?: string;
+  needsEmailVerification?: boolean;
+}
+
+export const useAutoRegister = () => {
+  const api = useApi();
+  return useMutation({
+    mutationFn: ({ customerId, scanId }: { customerId: string; scanId: string }) =>
+      api.post<AutoRegisterResult>(`/api/customers/${customerId}/scans/${scanId}/auto-register`),
+  });
+};
+
 // ========================================
 // Chunked Scan Orchestration Hook
 // ========================================
@@ -325,11 +368,14 @@ export const useChunkedScan = (customerId: string, scanId: string | null) => {
     credentials: null,
   });
   const abortRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const queryClient = useQueryClient();
   const api = useApi();
 
   const stopProcessing = useCallback(() => {
     abortRef.current = true;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
   }, []);
 
   const startPhase1 = useCallback(async (resume = false) => {
@@ -362,13 +408,17 @@ export const useChunkedScan = (customerId: string, scanId: string | null) => {
       let totalProcessed = startingPageCount;
 
       while (hasMore && !abortRef.current) {
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+
         const result = await api.post<ChunkResult>(
           `/api/customers/${customerId}/scans/${scanId}/process-chunk`,
           {
             phase: 'phase1',
-            chunkSize: 10,
+            chunkSize: 8,
             credentials: currentCredentials || undefined,
           },
+          { signal: controller.signal },
         );
 
         totalProcessed += result.pagesProcessed;
@@ -399,6 +449,8 @@ export const useChunkedScan = (customerId: string, scanId: string | null) => {
       queryClient.invalidateQueries({ queryKey: [SCAN_DETAIL_KEY, customerId, scanId] });
       setState(prev => ({ ...prev, isProcessing: false, phase: 'done' }));
     } catch (err) {
+      // Ignore abort errors — they're expected on cancel
+      if (err instanceof DOMException && err.name === 'AbortError') return;
       const message = err instanceof Error ? err.message : 'Scan failed';
       setState(prev => ({ ...prev, isProcessing: false, error: message }));
     }
@@ -421,9 +473,13 @@ export const useChunkedScan = (customerId: string, scanId: string | null) => {
       let totalProcessed = 0;
 
       while (hasMore && !abortRef.current) {
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+
         const result = await api.post<Phase2ChunkResult>(
           `/api/customers/${customerId}/scans/${scanId}/process-chunk`,
           { phase: 'phase2', chunkSize: 5 },
+          { signal: controller.signal },
         );
 
         totalProcessed += result.pagesProcessed;
@@ -446,6 +502,8 @@ export const useChunkedScan = (customerId: string, scanId: string | null) => {
       queryClient.invalidateQueries({ queryKey: [RECOMMENDATIONS_KEY, customerId, scanId] });
       setState(prev => ({ ...prev, isProcessing: false, phase: 'done' }));
     } catch (err) {
+      // Ignore abort errors — they're expected on cancel
+      if (err instanceof DOMException && err.name === 'AbortError') return;
       const message = err instanceof Error ? err.message : 'Analysis failed';
       setState(prev => ({ ...prev, isProcessing: false, error: message }));
     }
@@ -484,163 +542,5 @@ export const useChunkedScan = (customerId: string, scanId: string | null) => {
   };
 };
 
-// ========================================
-// SSE Hook for Scan Progress (legacy/fallback)
-// ========================================
-
-interface ScanSSEState {
-  status: SiteScanStatus | null;
-  progress: ScanProgressData | null;
-  nicheData: ScanNicheData | null;
-  completedData: ScanCompletedData | null;
-  error: string | null;
-}
-
-export const useScanSSE = (
-  customerId: string | undefined,
-  scanId: string | null,
-  enabled = true,
-) => {
-  const [state, setState] = useState<ScanSSEState>({
-    status: null,
-    progress: null,
-    nicheData: null,
-    completedData: null,
-    error: null,
-  });
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const queryClient = useQueryClient();
-  const { getToken } = useAuth();
-
-  const disconnect = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!enabled || !customerId || !scanId) {
-      disconnect();
-      return;
-    }
-
-    const setupSSE = async () => {
-      const token = await getToken();
-      if (!token) return;
-
-      const url = `/api/customers/${customerId}/scans/${scanId}/events?token=${encodeURIComponent(token)}`;
-      const eventSource = new EventSource(url);
-      eventSourceRef.current = eventSource;
-
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-
-          // Only process events for our scan
-          if (data.data?.scanId && data.data.scanId !== scanId) return;
-
-          const eventType = data.type || data.event;
-          const eventData = data.data || data;
-
-          switch (eventType) {
-            case 'scan.started':
-              setState(prev => ({
-                ...prev,
-                status: 'CRAWLING',
-                progress: eventData,
-              }));
-              break;
-
-            case 'scan.page_crawled':
-              setState(prev => ({
-                ...prev,
-                // Only set status to CRAWLING if not already past that phase
-                status: prev.status && !['CRAWLING', 'QUEUED'].includes(prev.status)
-                  ? prev.status : 'CRAWLING',
-                progress: eventData,
-              }));
-              break;
-
-            case 'scan.ai_analyzing':
-              setState(prev => ({
-                ...prev,
-                status: 'ANALYZING',
-                progress: eventData,
-              }));
-              break;
-
-            case 'scan.niche_detected':
-              setState(prev => ({
-                ...prev,
-                status: 'NICHE_DETECTED',
-                nicheData: eventData,
-              }));
-              queryClient.invalidateQueries({
-                queryKey: [SCAN_DETAIL_KEY, customerId, scanId],
-              });
-              break;
-
-            case 'scan.deep_crawl.progress':
-              setState(prev => ({
-                ...prev,
-                status: 'DEEP_CRAWLING',
-                progress: eventData,
-              }));
-              break;
-
-            case 'scan.completed':
-              setState(prev => ({
-                ...prev,
-                status: 'COMPLETED',
-                completedData: eventData,
-              }));
-              queryClient.invalidateQueries({
-                queryKey: [SCAN_DETAIL_KEY, customerId, scanId],
-              });
-              queryClient.invalidateQueries({
-                queryKey: [SCANS_QUERY_KEY, customerId],
-              });
-              queryClient.invalidateQueries({
-                queryKey: [RECOMMENDATIONS_KEY, customerId, scanId],
-              });
-              break;
-
-            case 'scan.failed':
-              setState(prev => ({
-                ...prev,
-                status: 'FAILED',
-                error: eventData.error || 'Scan failed',
-              }));
-              queryClient.invalidateQueries({
-                queryKey: [SCAN_DETAIL_KEY, customerId, scanId],
-              });
-              break;
-          }
-        } catch {
-          // Ignore parse errors for heartbeat/other events
-        }
-      };
-
-      eventSource.onerror = () => {
-        // Will auto-reconnect
-      };
-    };
-
-    setupSSE();
-
-    return () => disconnect();
-  }, [enabled, customerId, scanId, disconnect, queryClient, getToken]);
-
-  const reset = useCallback(() => {
-    setState({
-      status: null,
-      progress: null,
-      nicheData: null,
-      completedData: null,
-      error: null,
-    });
-  }, []);
-
-  return { ...state, disconnect, reset };
-};
+// SSE Hook removed — replaced by useScanProgress (Supabase Realtime).
+// See: nextjs/src/hooks/use-scan-progress.ts

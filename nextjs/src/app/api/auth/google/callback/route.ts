@@ -178,15 +178,146 @@ export async function GET(request: NextRequest): Promise<NextResponse<CallbackSu
         // Non-blocking - tokens are still stored
       }
 
-      // Non-blocking: Sync all Google services in parallel
-      const [adsResult, gtmResult, ga4Result] = await Promise.allSettled([
-        // Google Ads sync
+      // ================================================================
+      // STEP 1: Tenant-level setup (idempotent, awaited — critical)
+      // Discovers GTM account + creates GA4 property if they don't exist yet
+      // ================================================================
+      try {
+        const { discoverGtmAccountId } = await import('@/lib/google/gtm');
+        const { getOrCreateOctProperty } = await import('@/lib/google/ga4');
+
+        const [gtmAccountResult, ga4PropertyResult] = await Promise.allSettled([
+          discoverGtmAccountId(user.id, tenantId),
+          getOrCreateOctProperty(user.id, tenantId),
+        ]);
+
+        if (gtmAccountResult.status === 'rejected') {
+          console.warn('[OCT] GTM account discovery failed:', gtmAccountResult.reason);
+        }
+        if (ga4PropertyResult.status === 'rejected') {
+          console.warn('[OCT] Tenant GA4 property setup failed:', ga4PropertyResult.reason);
+        }
+      } catch (error) {
+        console.warn('[OCT] Tenant-level setup failed (non-blocking):', error);
+      }
+
+      // ================================================================
+      // STEP 2: Customer-level setup (non-blocking)
+      // Creates per-customer GTM container + workspace, data stream, syncs Ads accounts + labels
+      // ================================================================
+      const customerId = stateData.customerId!;
+
+      const [gtmResult, ga4Result, adsResult] = await Promise.allSettled([
+        // GTM: Create per-customer container + workspace + essentials
         (async () => {
-          const { listAccessibleAccounts } = await import('@/lib/google/ads');
+          const { getOrCreateCustomerContainer, getGTMClient, getOrCreateWorkspace, setupWorkspaceEssentials } = await import('@/lib/google/gtm');
+
+          // 1. Create or find the customer's dedicated container
+          const { accountId, containerId } = await getOrCreateCustomerContainer(user.id, tenantId, customerId);
+
+          // 2. Get the customer name for workspace naming
+          const customer = await prisma.customer.findUnique({
+            where: { id: customerId },
+            select: { fullName: true },
+          });
+          const workspaceName = `OneClickTag - ${customer?.fullName || customerId}`;
+
+          // 3. Create or find workspace inside the customer's container
+          const gtm = await getGTMClient(user.id, tenantId);
+          const workspaceId = await getOrCreateWorkspace(gtm, accountId, containerId, workspaceName);
+
+          // 4. Set up workspace essentials (built-in variables, All Pages trigger,
+          //    Conversion Linker tag, Page Title variable)
+          await setupWorkspaceEssentials(gtm, accountId, containerId, workspaceId);
+
+          // 5. Store workspace ID on customer
+          await prisma.customer.update({
+            where: { id: customerId },
+            data: { gtmWorkspaceId: workspaceId },
+          });
+
+          console.log(`[GTM] Customer container + workspace ready: ${containerId} / ${workspaceId}`);
+        })(),
+
+        // GA4: Create data stream in OCT property for customer's website
+        (async () => {
+          const { createDataStream } = await import('@/lib/google/ga4');
+
+          const tenant = await prisma.tenant.findUnique({
+            where: { id: tenantId },
+            select: { octGa4PropertyId: true, name: true },
+          });
+
+          if (!tenant?.octGa4PropertyId) {
+            console.warn('[GA4] No OCT property found on tenant — skipping data stream creation');
+            return;
+          }
+
+          const customer = await prisma.customer.findUnique({
+            where: { id: customerId },
+            select: { websiteUrl: true, fullName: true },
+          });
+
+          if (!customer?.websiteUrl) {
+            console.warn('[GA4] Customer has no website URL — skipping data stream creation');
+            return;
+          }
+
+          // Check if a GA4 property record already exists for this customer
+          const existingProp = await prisma.gA4Property.findFirst({
+            where: { customerId, tenantId, propertyId: tenant.octGa4PropertyId },
+          });
+
+          if (existingProp?.measurementId) {
+            console.log(`[GA4] Customer already has data stream (${existingProp.measurementId})`);
+            return;
+          }
+
+          const streamName = `${customer.fullName} - ${customer.websiteUrl}`;
+          const { streamId, measurementId } = await createDataStream(
+            user.id, tenantId, tenant.octGa4PropertyId, customer.websiteUrl, streamName
+          );
+
+          // Store as GA4Property record linked to this customer
+          await prisma.gA4Property.upsert({
+            where: {
+              propertyId_tenantId: {
+                propertyId: tenant.octGa4PropertyId,
+                tenantId,
+              },
+            },
+            update: {
+              measurementId,
+              isActive: true,
+            },
+            create: {
+              googleAccountId: tenant.octGa4PropertyId,
+              propertyId: tenant.octGa4PropertyId,
+              propertyName: `OneClickTag - ${tenant.name}`,
+              displayName: streamName,
+              measurementId,
+              isActive: true,
+              customerId,
+              tenantId,
+            },
+          });
+
+          console.log(`[GA4] Created data stream for ${customer.websiteUrl} → ${measurementId}`);
+        })(),
+
+        // Google Ads: Sync accounts + create OCT labels
+        (async () => {
+          const { listAccessibleAccounts, getOrCreateOctLabel } = await import('@/lib/google/ads');
           const adsAccounts = await listAccessibleAccounts(user.id, tenantId);
+
+          const tenant = await prisma.tenant.findUnique({
+            where: { id: tenantId },
+            select: { name: true },
+          });
+
           for (const account of adsAccounts) {
             try {
-              await prisma.googleAdsAccount.upsert({
+              const dbAccount = await prisma.googleAdsAccount.upsert({
                 where: {
                   accountId_tenantId: {
                     accountId: account.customerId,
@@ -206,94 +337,36 @@ export async function GET(request: NextRequest): Promise<NextResponse<CallbackSu
                   currency: account.currencyCode,
                   timeZone: account.timeZone,
                   isActive: true,
-                  customerId: stateData.customerId!,
+                  customerId,
                   tenantId,
                 },
               });
+
+              // Create OCT label in each Ads account
+              try {
+                await getOrCreateOctLabel(
+                  user.id, tenantId, dbAccount.id, account.customerId, tenant?.name || 'User'
+                );
+              } catch (labelErr) {
+                console.warn(`[Ads] Failed to create OCT label in account ${account.customerId}:`, labelErr);
+              }
             } catch (err) {
               console.error(`Failed to sync account ${account.customerId}:`, err);
             }
           }
           console.log(`Synced ${adsAccounts.length} Google Ads accounts`);
         })(),
-
-        // GTM workspace setup
-        (async () => {
-          const { getGTMClient, listContainers, getOrCreateWorkspace } = await import('@/lib/google/gtm');
-          const gtm = await getGTMClient(user.id, tenantId);
-          const containers = await listContainers(user.id, tenantId);
-          if (containers.length > 0) {
-            const container = containers[0];
-            const containerId = container.containerId!;
-            const containerName = container.name || container.publicId || containerId;
-            const accountId = container.accountId!;
-            const workspaceId = await getOrCreateWorkspace(gtm, accountId, containerId);
-
-            // Store GTM container/workspace info on the customer
-            await prisma.$executeRawUnsafe(
-              `UPDATE customers SET "gtmAccountId" = $1, "gtmContainerId" = $2, "gtmWorkspaceId" = $3, "gtmContainerName" = $4 WHERE id = $5`,
-              accountId, containerId, workspaceId, containerName, stateData.customerId
-            );
-
-            console.log(`GTM workspace ready: ${workspaceId} in container ${containerId} (${containerName})`);
-          } else {
-            console.warn('No GTM containers found for customer');
-          }
-        })(),
-
-        // GA4 properties sync
-        (async () => {
-          const { listGA4Properties } = await import('@/lib/google/ga4');
-          const ga4Properties = await listGA4Properties(user.id, tenantId);
-          for (const property of ga4Properties) {
-            try {
-              await prisma.gA4Property.upsert({
-                where: {
-                  propertyId_tenantId: {
-                    propertyId: property.propertyId,
-                    tenantId,
-                  },
-                },
-                update: {
-                  propertyName: property.propertyName,
-                  displayName: property.displayName,
-                  timeZone: property.timeZone,
-                  currency: property.currency,
-                  industryCategory: property.industryCategory,
-                  measurementId: property.measurementId || undefined,
-                  isActive: true,
-                },
-                create: {
-                  googleAccountId: property.propertyId,
-                  propertyId: property.propertyId,
-                  propertyName: property.propertyName,
-                  displayName: property.displayName,
-                  timeZone: property.timeZone,
-                  currency: property.currency,
-                  industryCategory: property.industryCategory,
-                  measurementId: property.measurementId || undefined,
-                  isActive: true,
-                  customerId: stateData.customerId!,
-                  tenantId,
-                },
-              });
-            } catch (err) {
-              console.error(`Failed to sync GA4 property ${property.propertyId}:`, err);
-            }
-          }
-          console.log(`Synced ${ga4Properties.length} GA4 properties`);
-        })(),
       ]);
 
       // Log any failures
-      if (adsResult.status === 'rejected') {
-        console.warn('Google Ads sync failed (non-blocking):', adsResult.reason);
-      }
       if (gtmResult.status === 'rejected') {
         console.warn('GTM workspace setup failed (non-blocking):', gtmResult.reason);
       }
       if (ga4Result.status === 'rejected') {
-        console.warn('GA4 properties sync failed (non-blocking):', ga4Result.reason);
+        console.warn('GA4 data stream setup failed (non-blocking):', ga4Result.reason);
+      }
+      if (adsResult.status === 'rejected') {
+        console.warn('Google Ads sync failed (non-blocking):', adsResult.reason);
       }
     }
 

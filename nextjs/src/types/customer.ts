@@ -25,6 +25,7 @@ export interface Customer {
   gtmContainerId?: string | null;
   gtmWorkspaceId?: string | null;
   gtmContainerName?: string | null;
+  selectedAdsAccountId?: string | null;
   serverSideEnabled?: boolean;
   stapeContainer?: StapeContainer | null;
   tenantId: string;
@@ -114,6 +115,7 @@ export interface UpdateCustomerInput {
   tags?: string[];
   notes?: string | null;
   trackingSettings?: Record<string, unknown> | null;
+  selectedAdsAccountId?: string | null;
 }
 
 // Import Tracking type for relation

@@ -10,6 +10,40 @@ import {
  * Converted from NestJS service to plain TypeScript functions with tenantId parameter.
  */
 
+// ========================================
+// State Machine Validation
+// ========================================
+
+/**
+ * Valid state transitions for SiteScanStatus.
+ * Terminal states (COMPLETED, FAILED, CANCELLED) cannot transition to any state.
+ */
+const VALID_TRANSITIONS: Record<string, string[]> = {
+  QUEUED: ['DISCOVERING', 'CRAWLING', 'CANCELLED', 'FAILED'],
+  DISCOVERING: ['CRAWLING', 'CANCELLED', 'FAILED'],
+  CRAWLING: ['NICHE_DETECTED', 'AWAITING_CONFIRMATION', 'CANCELLED', 'FAILED'],
+  NICHE_DETECTED: ['AWAITING_CONFIRMATION', 'DEEP_CRAWLING', 'CANCELLED', 'FAILED'],
+  AWAITING_CONFIRMATION: ['DEEP_CRAWLING', 'CANCELLED', 'FAILED'],
+  DEEP_CRAWLING: ['ANALYZING', 'COMPLETED', 'CANCELLED', 'FAILED'],
+  ANALYZING: ['COMPLETED', 'CANCELLED', 'FAILED'],
+  // Terminal states cannot transition
+  COMPLETED: [],
+  FAILED: [],
+  CANCELLED: [],
+};
+
+/**
+ * Check if a state transition is valid.
+ * @param from Current state
+ * @param to Target state
+ * @returns true if transition is allowed, false otherwise
+ */
+function isValidTransition(from: string, to: string): boolean {
+  const validTargets = VALID_TRANSITIONS[from];
+  if (!validTargets) return false;
+  return validTargets.includes(to);
+}
+
 /**
  * Start a new site scan for a customer.
  */
@@ -126,6 +160,7 @@ export async function getScan(customerId: string, scanId: string, tenantId: stri
           hasDownloadLink: true,
           importanceScore: true,
           contentSummary: true,
+          templateGroup: true,
         },
         orderBy: { importanceScore: 'desc' },
       },
@@ -476,13 +511,35 @@ export async function markScanFailed(scanId: string, errorMessage: string): Prom
 }
 
 /**
- * Update scan status (won't overwrite terminal states).
+ * Update scan status (won't overwrite terminal states, validates state transitions).
  */
 export async function updateScanStatus(scanId: string, status: SiteScanStatus): Promise<void> {
   if (await isScanTerminal(scanId)) {
     console.log(`Scan ${scanId} already terminal, skipping status update to ${status}`);
     return;
   }
+
+  // Get current status to validate transition
+  const scan = await prisma.siteScan.findUnique({
+    where: { id: scanId },
+    select: { status: true },
+  });
+
+  if (!scan) {
+    console.warn(`Scan ${scanId} not found, cannot update status`);
+    return;
+  }
+
+  const currentStatus = scan.status;
+
+  // Validate state transition
+  if (!isValidTransition(currentStatus, status)) {
+    console.warn(
+      `Invalid state transition for scan ${scanId}: ${currentStatus} -> ${status}. Skipping update.`
+    );
+    return;
+  }
+
   await prisma.siteScan.update({
     where: { id: scanId },
     data: { status },

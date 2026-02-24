@@ -99,6 +99,40 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       });
     }
 
+    // Dedup: Cross-reference recommendations against existing trackings
+    const existingTrackings = await prisma.tracking.findMany({
+      where: { customerId, tenantId: session.tenantId, status: { not: 'FAILED' } },
+      select: { id: true, type: true, selector: true, urlPattern: true },
+    });
+
+    if (existingTrackings.length > 0) {
+      const typeMap: Record<string, string> = {
+        'BUTTON_CLICK': 'BUTTON_CLICK', 'LINK_CLICK': 'LINK_CLICK',
+        'PAGE_VIEW': 'PAGE_VIEW', 'FORM_SUBMIT': 'FORM_SUBMIT',
+        'SCROLL_DEPTH': 'SCROLL_DEPTH', 'ADD_TO_CART': 'ADD_TO_CART',
+        'PURCHASE': 'PURCHASE', 'CHECKOUT_START': 'CHECKOUT_START',
+        'PRODUCT_VIEW': 'PRODUCT_VIEW', 'PHONE_CALL_CLICK': 'PHONE_CALL_CLICK',
+        'EMAIL_CLICK': 'EMAIL_CLICK', 'VIDEO_PLAY': 'VIDEO_PLAY',
+        'SIGNUP': 'SIGNUP', 'DOWNLOAD': 'DOWNLOAD',
+      };
+
+      for (const rec of recommendations) {
+        if (rec.status !== 'PENDING') continue;
+        const recType = rec.trackingType;
+        const match = existingTrackings.find(t =>
+          t.type === recType &&
+          t.selector === rec.selector &&
+          (t.urlPattern === rec.urlPattern || (!t.urlPattern && !rec.urlPattern))
+        );
+        if (match) {
+          await prisma.trackingRecommendation.update({
+            where: { id: rec.id },
+            data: { status: 'CREATED', trackingId: match.id },
+          });
+        }
+      }
+    }
+
     // Mark scan as completed
     const updated = await prisma.siteScan.update({
       where: { id: scanId },

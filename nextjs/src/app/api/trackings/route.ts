@@ -245,31 +245,35 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Add GTM sync job to queue
+    // Update tracking status to CREATING
+    await prisma.tracking.update({
+      where: { id: tracking.id },
+      data: { status: TrackingStatus.CREATING },
+    });
+
+    // Run Ads sync FIRST (awaited) so adsConversionLabel is available for GTM sync
+    let adsJob = null;
+    if (destinations.includes(TrackingDestination.GOOGLE_ADS) || destinations.includes(TrackingDestination.BOTH)) {
+      try {
+        adsJob = await addAdsSyncJob({
+          trackingId: tracking.id,
+          customerId,
+          tenantId: session.tenantId,
+          userId: session.id,
+          action: 'create',
+        });
+      } catch (err: any) {
+        console.error('[Tracking] Ads sync failed, continuing with GTM sync:', err.message);
+      }
+    }
+
+    // Then run GTM sync — now has access to adsConversionLabel via DB
     const gtmJob = await addGTMSyncJob({
       trackingId: tracking.id,
       customerId,
       tenantId: session.tenantId,
       userId: session.id,
       action: 'create',
-    });
-
-    // If destinations include GOOGLE_ADS, add Ads sync job
-    let adsJob = null;
-    if (destinations.includes(TrackingDestination.GOOGLE_ADS) || destinations.includes(TrackingDestination.BOTH)) {
-      adsJob = await addAdsSyncJob({
-        trackingId: tracking.id,
-        customerId,
-        tenantId: session.tenantId,
-        userId: session.id,
-        action: 'create',
-      });
-    }
-
-    // Update tracking status to CREATING
-    await prisma.tracking.update({
-      where: { id: tracking.id },
-      data: { status: TrackingStatus.CREATING },
     });
 
     return NextResponse.json(

@@ -144,6 +144,14 @@ function validateUpdateInput(
     updateData.customFields = input.customFields as Record<string, unknown> | undefined;
   }
 
+  // Selected Ads account validation
+  if (input.selectedAdsAccountId !== undefined) {
+    if (input.selectedAdsAccountId !== null && typeof input.selectedAdsAccountId !== 'string') {
+      return { valid: false, error: 'Selected Ads account ID must be a string or null' };
+    }
+    updateData.selectedAdsAccountId = input.selectedAdsAccountId as string | undefined;
+  }
+
   return { valid: true, data: updateData };
 }
 

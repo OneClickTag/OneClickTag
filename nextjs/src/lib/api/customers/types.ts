@@ -48,6 +48,7 @@ export interface UpdateCustomerInput {
   tags?: string[];
   notes?: string;
   customFields?: Record<string, unknown>;
+  selectedAdsAccountId?: string;
 }
 
 export interface CustomerQueryParams {
@@ -152,6 +153,7 @@ export interface CustomerResponse {
   gtmContainerId?: string | null;
   gtmWorkspaceId?: string | null;
   gtmContainerName?: string | null;
+  selectedAdsAccountId?: string | null;
   serverSideEnabled?: boolean;
   stapeContainer?: StapeContainerResponse | null;
   googleAccount?: GoogleAccountInfo;

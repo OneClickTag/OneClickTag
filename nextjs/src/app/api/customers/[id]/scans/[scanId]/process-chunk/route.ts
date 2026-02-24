@@ -17,7 +17,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const body = await request.json().catch(() => ({}));
     const phase: 'phase1' | 'phase2' = body.phase || 'phase1';
-    const chunkSize: number = Math.min(body.chunkSize || 8, 15); // Cap at 15
+    // Phase 1 (Playwright): default 8, cap at 10. Phase 2 (Playwright): default 5, cap at 15.
+    const maxChunk = phase === 'phase1' ? 10 : 15;
+    const defaultChunk = phase === 'phase1' ? 8 : 5;
+    const chunkSize: number = Math.min(body.chunkSize || defaultChunk, maxChunk);
 
     // Verify scan belongs to customer + tenant
     const scan = await prisma.siteScan.findFirst({
@@ -35,12 +38,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // Dynamic import to avoid loading heavy deps on every request
-    const { processPhase1Chunk, processPhase2Chunk } = await import(
+    const { processPhase1ChunkPlaywright, processPhase2Chunk } = await import(
       '@/lib/site-scanner/services/chunk-processor'
     );
 
     if (phase === 'phase1') {
-      const result = await processPhase1Chunk(scanId, chunkSize);
+      const credentials = body.credentials || null;
+      const result = await processPhase1ChunkPlaywright(scanId, chunkSize, credentials);
       return NextResponse.json(result);
     } else {
       const result = await processPhase2Chunk(scanId, chunkSize);

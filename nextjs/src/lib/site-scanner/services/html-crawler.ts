@@ -133,25 +133,82 @@ export function discoverLinks(html: string, baseUrl: string, root?: HTMLElement)
 
   const baseDomain = getBaseDomain(baseUrlObj.hostname);
 
-  for (const a of doc.querySelectorAll('a[href]')) {
-    const href = a.getAttribute('href');
-    if (!href) continue;
-
+  const addLink = (href: string) => {
     try {
       const resolved = new URL(href, baseUrl).href;
       const resolvedUrl = new URL(resolved);
-
-      // Only internal links (same base domain)
       const linkDomain = getBaseDomain(resolvedUrl.hostname);
-      if (linkDomain !== baseDomain) continue;
-
-      // Skip non-HTML resources and patterns
-      if (shouldSkipUrl(resolved)) continue;
-
+      if (linkDomain !== baseDomain) return;
+      if (shouldSkipUrl(resolved)) return;
       links.add(normalizeUrl(resolved));
-    } catch {
-      // Invalid URL, skip
-    }
+    } catch { /* invalid URL */ }
+  };
+
+  // 1. Standard <a href> links
+  for (const a of doc.querySelectorAll('a[href]')) {
+    const href = a.getAttribute('href');
+    if (href) addLink(href);
+  }
+
+  // 2. <link rel="alternate/canonical"> and <link rel="prerender">
+  for (const link of doc.querySelectorAll(
+    'link[rel="alternate"][href], link[rel="canonical"][href], link[rel="prerender"][href]'
+  )) {
+    const href = link.getAttribute('href');
+    if (href) addLink(href);
+  }
+
+  // 3. data-href, data-url, data-link attributes
+  for (const el of doc.querySelectorAll('[data-href], [data-url], [data-link]')) {
+    const href = el.getAttribute('data-href') || el.getAttribute('data-url') || el.getAttribute('data-link');
+    if (href) addLink(href);
+  }
+
+  // 4. <area href> image maps
+  for (const area of doc.querySelectorAll('area[href]')) {
+    const href = area.getAttribute('href');
+    if (href) addLink(href);
+  }
+
+  // 5. URLs in JSON-LD structured data
+  for (const script of doc.querySelectorAll('script[type="application/ld+json"]')) {
+    try {
+      const jsonText = script.textContent || '';
+      const extractUrls = (obj: any, depth: number) => {
+        if (depth > 4 || !obj) return;
+        if (typeof obj === 'string' && (obj.startsWith('/') || obj.startsWith('http'))) {
+          addLink(obj);
+        }
+        if (Array.isArray(obj)) {
+          for (const item of obj) extractUrls(item, depth + 1);
+        } else if (typeof obj === 'object') {
+          for (const key of ['url', '@id', 'mainEntityOfPage', 'sameAs', 'relatedLink', 'significantLink']) {
+            if (obj[key]) {
+              if (typeof obj[key] === 'string') addLink(obj[key]);
+              else if (Array.isArray(obj[key])) obj[key].forEach((u: string) => typeof u === 'string' && addLink(u));
+            }
+          }
+          for (const val of Object.values(obj)) {
+            extractUrls(val, depth + 1);
+          }
+        }
+      };
+      extractUrls(JSON.parse(jsonText), 0);
+    } catch { /* invalid JSON-LD */ }
+  }
+
+  // 6. Sitemap references in <link> tags
+  for (const link of doc.querySelectorAll('link[rel="sitemap"][href]')) {
+    const href = link.getAttribute('href');
+    if (href) addLink(href);
+  }
+
+  // 7. Meta refresh redirects
+  const metaRefresh = doc.querySelector('meta[http-equiv="refresh"]');
+  if (metaRefresh) {
+    const content = metaRefresh.getAttribute('content') || '';
+    const urlMatch = content.match(/url=(.+)/i);
+    if (urlMatch) addLink(urlMatch[1].trim());
   }
 
   return Array.from(links);
@@ -342,7 +399,13 @@ function normalizeUrl(url: string): string {
     if (parsed.hash && !parsed.hash.startsWith('#/')) {
       parsed.hash = '';
     }
+    // Normalize trailing slashes
     parsed.pathname = parsed.pathname.replace(/\/+$/, '') || '/';
+    // Remove tracking/session query params
+    const trackingParams = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'fbclid', 'gclid', 'ref', 'mc_cid', 'mc_eid'];
+    for (const param of trackingParams) {
+      parsed.searchParams.delete(param);
+    }
     return parsed.toString();
   } catch {
     return url;

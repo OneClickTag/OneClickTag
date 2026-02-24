@@ -105,11 +105,14 @@ export async function addGTMSyncJob(data: GTMSyncJob) {
 }
 
 export async function addAdsSyncJob(data: AdsSyncJob) {
-  console.log('[Queue] Running Ads sync inline:', data.trackingId);
+  console.log('[Queue] Running Ads sync inline (awaited):', data.trackingId);
   const { executeAdsSync } = await import('./sync');
-  executeAdsSync(data).catch((err) => {
+  try {
+    await executeAdsSync(data);
+  } catch (err: any) {
     console.error('[Queue] Inline Ads sync failed:', err.message);
-  });
+    throw err;
+  }
   return { id: `inline-${Date.now()}`, name: 'sync', data };
 }
 

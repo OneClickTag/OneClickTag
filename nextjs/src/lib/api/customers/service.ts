@@ -69,6 +69,7 @@ function mapToResponseDto(customer: Record<string, unknown>): CustomerResponse {
     gtmContainerId: customer.gtmContainerId as string | null,
     gtmWorkspaceId: customer.gtmWorkspaceId as string | null,
     gtmContainerName: customer.gtmContainerName as string | null,
+    selectedAdsAccountId: customer.selectedAdsAccountId as string | null,
     googleAdsAccounts: customer.googleAdsAccounts as CustomerResponse['googleAdsAccounts'],
     ga4Properties: customer.ga4Properties as CustomerResponse['ga4Properties'],
     serverSideEnabled: customer.serverSideEnabled as boolean | undefined,
