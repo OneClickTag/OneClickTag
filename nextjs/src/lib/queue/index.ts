@@ -95,12 +95,17 @@ export interface BulkImportJob {
 }
 
 // Add jobs - always execute inline in Next.js (no separate worker process)
+// IMPORTANT: Must await on Vercel serverless — fire-and-forget gets killed when response is sent
 export async function addGTMSyncJob(data: GTMSyncJob) {
-  console.log('[Queue] Running GTM sync inline:', data.trackingId);
+  console.log('[Queue] Running GTM sync inline (awaited):', data.trackingId);
   const { executeGTMSync } = await import('./sync');
-  executeGTMSync(data).catch((err) => {
+  try {
+    await executeGTMSync(data);
+  } catch (err: any) {
     console.error('[Queue] Inline GTM sync failed:', err.message);
-  });
+    // Don't re-throw — GTM sync failure shouldn't block the response
+    // The tracking status is already set to FAILED inside executeGTMSync
+  }
   return { id: `inline-${Date.now()}`, name: 'sync', data };
 }
 
