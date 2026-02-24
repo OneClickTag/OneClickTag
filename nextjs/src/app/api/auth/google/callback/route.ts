@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { exchangeCodeForTokens, storeOAuthTokens } from '@/lib/google/oauth';
+import { exchangeCodeForTokens, storeOAuthTokens, buildCallbackUrl } from '@/lib/google/oauth';
 import prisma from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
@@ -131,9 +131,11 @@ export async function GET(request: NextRequest): Promise<NextResponse<CallbackSu
     }
 
     // Exchange authorization code for tokens
+    // Use the same origin-derived callback URL that was used to generate the auth URL
+    const callbackUrl = buildCallbackUrl(request.nextUrl.origin);
     let tokens;
     try {
-      tokens = await exchangeCodeForTokens(code);
+      tokens = await exchangeCodeForTokens(code, callbackUrl);
     } catch (error) {
       console.error('Failed to exchange code for tokens:', error);
       return NextResponse.json(

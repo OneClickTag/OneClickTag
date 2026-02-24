@@ -3,7 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionFromRequest, requireTenant } from '@/lib/auth/session';
 import prisma from '@/lib/prisma';
-import { getAuthUrl } from '@/lib/google/oauth';
+import { getAuthUrl, buildCallbackUrl } from '@/lib/google/oauth';
 import { CustomerNotFoundError } from '@/lib/api/customers/service';
 import crypto from 'crypto';
 
@@ -41,8 +41,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Base64url-encode the state
     const encodedState = Buffer.from(JSON.stringify(state)).toString('base64url');
 
-    // Generate Google OAuth URL
-    const authUrl = getAuthUrl(encodedState);
+    // Generate Google OAuth URL using request origin for callback
+    const callbackUrl = buildCallbackUrl(request.nextUrl.origin);
+    const authUrl = getAuthUrl(encodedState, callbackUrl);
 
     return NextResponse.json({ authUrl });
   } catch (error) {

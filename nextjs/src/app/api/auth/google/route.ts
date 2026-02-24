@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
-import { getAuthUrl } from '@/lib/google/oauth';
+import { getAuthUrl, buildCallbackUrl } from '@/lib/google/oauth';
 import { randomUUID } from 'crypto';
 
 export const dynamic = 'force-dynamic';
@@ -78,8 +78,9 @@ export async function GET(request: NextRequest): Promise<NextResponse<OAuthIniti
     // Encode state as base64 JSON
     const state = Buffer.from(JSON.stringify(stateData)).toString('base64url');
 
-    // Generate OAuth URL with all required scopes
-    const authUrl = getAuthUrl(state);
+    // Generate OAuth URL using request origin for callback
+    const callbackUrl = buildCallbackUrl(request.nextUrl.origin);
+    const authUrl = getAuthUrl(state, callbackUrl);
 
     return NextResponse.json({
       authUrl,

@@ -24,16 +24,25 @@ export const GOOGLE_SCOPES = {
   ],
 };
 
-export function createOAuth2Client(): OAuth2Client {
+export function createOAuth2Client(redirectUri?: string): OAuth2Client {
   return new google.auth.OAuth2(
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET,
-    GOOGLE_CALLBACK_URL
+    redirectUri || GOOGLE_CALLBACK_URL
   );
 }
 
-export function getAuthUrl(state: string): string {
-  const oauth2Client = createOAuth2Client();
+/**
+ * Build the callback URL from request origin.
+ * This ensures the redirect_uri always matches the actual deployment URL,
+ * avoiding unauthorized_client errors on Vercel preview/production deployments.
+ */
+export function buildCallbackUrl(origin: string): string {
+  return `${origin}/api/auth/google/callback`;
+}
+
+export function getAuthUrl(state: string, redirectUri?: string): string {
+  const oauth2Client = createOAuth2Client(redirectUri);
 
   const scopes = [
     ...GOOGLE_SCOPES.userinfo,
@@ -50,8 +59,8 @@ export function getAuthUrl(state: string): string {
   });
 }
 
-export async function exchangeCodeForTokens(code: string) {
-  const oauth2Client = createOAuth2Client();
+export async function exchangeCodeForTokens(code: string, redirectUri?: string) {
+  const oauth2Client = createOAuth2Client(redirectUri);
   const { tokens } = await oauth2Client.getToken(code);
   return tokens;
 }
