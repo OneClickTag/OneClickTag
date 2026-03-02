@@ -1,4 +1,4 @@
-import { chromium, Browser, Page, BrowserContext } from 'playwright-core';
+import { Browser, Page, BrowserContext } from 'playwright-core';
 import {
   CrawlOptions,
   CrawledPage,
@@ -9,6 +9,7 @@ import {
   DEFAULT_CRAWL_OPTIONS,
 } from '../interfaces';
 import { detectTechnologyAndTracking } from './technology-detector';
+import { createStealthBrowser, createStealthContext } from './stealth-config';
 
 /**
  * Crawl Engine Service - BFS website crawling with Playwright.
@@ -51,15 +52,7 @@ export async function crawl(
 
   try {
     try {
-      browser = await chromium.launch({
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-        ],
-      });
+      browser = await createStealthBrowser();
     } catch (launchError: any) {
       throw new Error(
         `Failed to launch browser. Ensure Playwright browsers are installed. ` +
@@ -67,11 +60,7 @@ export async function crawl(
       );
     }
 
-    context = await browser.newContext({
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      viewport: { width: 1920, height: 1080 },
-      ignoreHTTPSErrors: true,
-    });
+    context = await createStealthContext(browser);
 
     const visited = new Set<string>();
     const queue: Array<{ url: string; depth: number }> = [{ url: websiteUrl, depth: 0 }];
@@ -154,16 +143,9 @@ export async function extractElements(
   const results = new Map<string, ExtractedElement[]>();
 
   try {
-    browser = await chromium.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-    });
+    browser = await createStealthBrowser();
 
-    context = await browser.newContext({
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      viewport: { width: 1920, height: 1080 },
-      ignoreHTTPSErrors: true,
-    });
+    context = await createStealthContext(browser);
 
     for (const url of pageUrls) {
       try {

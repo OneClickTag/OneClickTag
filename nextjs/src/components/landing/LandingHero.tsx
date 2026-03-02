@@ -85,21 +85,12 @@ interface HeroContent {
 
 interface LandingHeroProps {
   content: HeroContent;
-  earlyAccessMode: boolean;
 }
 
-export function LandingHero({ content, earlyAccessMode }: LandingHeroProps) {
+export function LandingHero({ content }: LandingHeroProps) {
   const [heroRef, heroInView] = useInView<HTMLElement>({ threshold: 0.3 });
 
-  // Override CTAs when in early access mode
-  const hero = earlyAccessMode
-    ? {
-        ...content,
-        primaryCTA: { url: '/early-access', text: 'Join Waitlist' },
-        secondaryCTA: undefined,
-        trustIndicators: 'Be the first to know when we launch • Limited spots available',
-      }
-    : content;
+  const hero = content;
 
   // Get badge icon
   const BadgeIcon = iconMap[hero.badge?.icon || 'Zap'] || Zap;

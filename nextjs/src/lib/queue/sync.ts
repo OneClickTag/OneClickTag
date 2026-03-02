@@ -13,6 +13,8 @@ import {
   setupWorkspaceEssentials,
 } from '@/lib/google/gtm';
 import { createConversionAction, getOrCreateOctLabel } from '@/lib/google/ads';
+import { getConversionCategory, getDefaultValueSettings } from '@/lib/tracking-config';
+import type { TrackingType } from '@/hooks/use-trackings';
 import type { GTMSyncJob, AdsSyncJob } from './index';
 
 // ============================================================================
@@ -157,7 +159,9 @@ export async function executeGTMSync(data: GTMSyncJob): Promise<{ success: boole
             console.log(`[GTM] Created client Ads tag "${adsTagName}" (${clientAdsTagId})`);
           }
         } else {
-          console.warn('[GTM] No adsConversionLabel found — skipping client Ads tag creation');
+          throw new Error(
+            'Google Ads conversion label not found on tracking — Ads sync may have failed or conversion label could not be retrieved. Retry should resolve this.'
+          );
         }
       }
 
@@ -321,20 +325,36 @@ export async function executeAdsSync(data: AdsSyncJob): Promise<{ success: boole
       }
 
       if (!adsAccount) {
-        console.log('No Google Ads account found, skipping Ads sync');
-        return { success: true, skipped: true };
+        throw new Error(
+          'No Google Ads account found. Connect a Google Ads account to this customer before creating trackings with Ads destination.'
+        );
       }
 
-      // Create conversion action
+      // Create conversion action with type-specific category
       const result = await createConversionAction(tokenUserId, tenantId, adsAccount.accountId, {
         name: tracking.name,
-        category: 'PURCHASE',
+        category: getConversionCategory(tracking.type as TrackingType),
         type: 'WEBPAGE',
+        valueSettings: getDefaultValueSettings(
+          tracking.type as TrackingType,
+          tracking.adsConversionValue ? Number(tracking.adsConversionValue) : undefined,
+          tracking.config as Record<string, unknown> | null
+        ),
       });
 
-      // Create conversion action in DB
-      await prisma.conversionAction.create({
-        data: {
+      // Upsert conversion action in DB (handles duplicate from retries or reused actions)
+      await prisma.conversionAction.upsert({
+        where: {
+          googleConversionActionId_tenantId: {
+            googleConversionActionId: result.conversionActionId,
+            tenantId,
+          },
+        },
+        update: {
+          name: tracking.name,
+          status: 'ENABLED',
+        },
+        create: {
           name: tracking.name,
           type: 'WEBPAGE',
           status: 'ENABLED',
@@ -440,6 +460,15 @@ async function createTriggerForTracking(
 
     default:
       triggerConfig.type = 'CUSTOM_EVENT';
+      triggerConfig.customEventFilter = [
+        {
+          type: 'EQUALS',
+          parameter: [
+            { type: 'TEMPLATE', key: 'arg0', value: '{{_event}}' },
+            { type: 'TEMPLATE', key: 'arg1', value: tracking.name.toLowerCase().replace(/\s+/g, '_') },
+          ],
+        },
+      ];
   }
 
   // Check for existing trigger with the same name (idempotent)

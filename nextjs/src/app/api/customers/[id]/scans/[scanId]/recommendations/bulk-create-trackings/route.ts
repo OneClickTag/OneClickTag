@@ -1,15 +1,16 @@
 // POST /api/customers/[id]/scans/[scanId]/recommendations/bulk-create-trackings
-// Creates real trackings from selected recommendations and queues Google sync
+// Creates real trackings from selected recommendations and queues them for async processing
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import prisma from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 import { getSessionFromRequest, requireTenant } from '@/lib/auth/session';
-import { addGTMSyncJob, addAdsSyncJob } from '@/lib/queue';
 import { TrackingType, TrackingDestination, TrackingStatus } from '@prisma/client';
 
 const BulkCreateSchema = z.object({
   recommendationIds: z.array(z.string()).min(1, 'At least one recommendation required'),
+  destination: z.enum(['GA4', 'GOOGLE_ADS', 'BOTH']).optional().default('BOTH'),
 });
 
 interface RouteParams {
@@ -137,111 +138,139 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Scan not found' }, { status: 404 });
     }
 
-    // Fetch the selected recommendations
+    // Fetch the selected recommendations (PENDING, REPAIR, FAILED, or CREATED — all re-triggerable)
     const recommendations = await prisma.trackingRecommendation.findMany({
       where: {
         id: { in: parsed.data.recommendationIds },
         scanId,
-        status: 'PENDING', // Only create from PENDING recommendations
+        status: { in: ['PENDING', 'REPAIR', 'FAILED', 'CREATED'] },
       },
     });
 
     if (recommendations.length === 0) {
       return NextResponse.json(
-        { error: 'No pending recommendations found for the given IDs' },
+        { error: 'No actionable recommendations found for the given IDs' },
         { status: 400 }
       );
     }
 
-    const created: string[] = [];
-    const errors: string[] = [];
+    // Validate all recommendations upfront and prepare tracking data
+    const validRecs: Array<{
+      rec: typeof recommendations[0];
+      trackingType: TrackingType;
+      destinations: TrackingDestination[];
+      ga4EventName: string;
+    }> = [];
+    const skipped: string[] = [];
 
-    // Process sequentially (each needs Ads sync before GTM sync)
+    // Map user-chosen destination to TrackingDestination array
+    const chosenDestination = parsed.data.destination;
+    const destinations: TrackingDestination[] =
+      chosenDestination === 'BOTH'
+        ? [TrackingDestination.GA4, TrackingDestination.GOOGLE_ADS]
+        : chosenDestination === 'GA4'
+        ? [TrackingDestination.GA4]
+        : [TrackingDestination.GOOGLE_ADS];
+
     for (const rec of recommendations) {
-      try {
-        const trackingType = mapTrackingType(rec.trackingType);
-        if (!trackingType) {
-          errors.push(`${rec.name}: Unknown tracking type "${rec.trackingType}"`);
-          continue;
-        }
+      const trackingType = mapTrackingType(rec.trackingType);
+      if (!trackingType) {
+        skipped.push(`${rec.name}: Unknown tracking type "${rec.trackingType}"`);
+        continue;
+      }
+      const ga4EventName = rec.suggestedGA4EventName || getDefaultGA4EventName(trackingType);
+      validRecs.push({ rec, trackingType, destinations, ga4EventName });
+    }
 
-        const destinations = mapDestinations(rec.suggestedDestinations as string[] | null);
-        const ga4EventName = rec.suggestedGA4EventName || getDefaultGA4EventName(trackingType);
+    if (validRecs.length === 0) {
+      return NextResponse.json(
+        { error: 'No valid recommendations to create', skipped },
+        { status: 400 }
+      );
+    }
 
-        // Create the tracking record with CREATING status
-        const tracking = await prisma.tracking.create({
-          data: {
-            name: rec.name,
-            type: trackingType,
-            description: rec.description,
-            selector: rec.selector,
-            urlPattern: rec.urlPattern,
-            selectorConfig: rec.selectorConfig || undefined,
-            config: rec.suggestedConfig || undefined,
-            destinations,
-            ga4EventName,
-            status: TrackingStatus.CREATING,
-            customerId,
-            tenantId: session.tenantId,
-            createdBy: session.id,
-            updatedBy: session.id,
-            isAutoCrawled: true,
-            crawlMetadata: {
-              scanId,
-              recommendationId: rec.id,
-              pageUrl: rec.pageUrl,
-              severity: rec.severity,
-            },
-            selectorConfidence: rec.selectorConfidence,
-          },
-        });
-
-        // Run Ads sync first (awaited) so adsConversionLabel is available for GTM
-        if (destinations.includes(TrackingDestination.GOOGLE_ADS) || destinations.includes(TrackingDestination.BOTH)) {
-          try {
-            await addAdsSyncJob({
-              trackingId: tracking.id,
-              customerId,
-              tenantId: session.tenantId,
-              userId: session.id,
-              action: 'create',
-            });
-          } catch (err: any) {
-            console.error(`[BulkCreate] Ads sync failed for ${rec.name}:`, err.message);
-          }
-        }
-
-        // Then GTM sync (non-blocking)
-        addGTMSyncJob({
-          trackingId: tracking.id,
+    // Create everything in a single transaction using bulk operations (not a loop)
+    // This avoids transaction timeout issues with many recommendations
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Create the batch
+      const batch = await tx.trackingBatch.create({
+        data: {
+          scanId,
           customerId,
           tenantId: session.tenantId,
           userId: session.id,
-          action: 'create',
-        }).catch((err: any) => {
-          console.error(`[BulkCreate] GTM sync failed for ${rec.name}:`, err.message);
-        });
+          totalJobs: validRecs.length,
+        },
+      });
 
-        // Update recommendation to CREATED
-        await prisma.trackingRecommendation.update({
-          where: { id: rec.id },
-          data: { status: 'CREATED', trackingId: tracking.id },
-        });
+      // 2. Bulk-create all trackings at once and get their IDs back
+      const trackings = await tx.tracking.createManyAndReturn({
+        data: validRecs.map(({ rec, trackingType, destinations, ga4EventName }) => ({
+          name: rec.name,
+          type: trackingType,
+          description: rec.description,
+          selector: rec.selector,
+          urlPattern: rec.urlPattern,
+          selectorConfig: rec.selectorConfig || undefined,
+          config: rec.suggestedConfig || undefined,
+          destinations,
+          ga4EventName,
+          status: TrackingStatus.PENDING,
+          customerId,
+          tenantId: session.tenantId,
+          createdBy: session.id,
+          updatedBy: session.id,
+          isAutoCrawled: true,
+          crawlMetadata: {
+            scanId,
+            recommendationId: rec.id,
+            pageUrl: rec.pageUrl,
+            severity: rec.severity,
+          },
+          selectorConfidence: rec.selectorConfidence,
+        })),
+        select: { id: true },
+      });
 
-        created.push(tracking.id);
-      } catch (err: any) {
-        const msg = `${rec.name}: ${err.message || 'Unknown error'}`;
-        errors.push(msg);
-        console.error(`[BulkCreate] Failed to create tracking from recommendation ${rec.id}:`, err);
+      // 3. Bulk-create all queue jobs at once
+      await tx.trackingQueueJob.createMany({
+        data: trackings.map((tracking, i) => ({
+          batchId: batch.id,
+          trackingId: tracking.id,
+          recommendationId: validRecs[i].rec.id,
+        })),
+      });
+
+      // 4. Bulk-update all recommendations to CREATING with their tracking IDs
+      // Single raw SQL UPDATE with CASE — avoids N sequential queries that cause transaction timeout
+      // Status is CREATING (not CREATED) — it becomes CREATED only after Google sync succeeds
+      if (trackings.length > 0) {
+        const caseClause = trackings
+          .map((tracking, i) => `WHEN id = '${validRecs[i].rec.id}' THEN '${tracking.id}'`)
+          .join(' ');
+        const recIds = trackings.map((_, i) => `'${validRecs[i].rec.id}'`).join(',');
+
+        await tx.$executeRaw(Prisma.sql`
+          UPDATE tracking_recommendations
+          SET status = 'CREATING',
+              "trackingId" = CASE ${Prisma.raw(caseClause)} END,
+              "updatedAt" = NOW()
+          WHERE id IN (${Prisma.raw(recIds)})
+        `);
       }
-    }
+
+      return { batchId: batch.id, trackingIds: trackings.map(t => t.id) };
+    });
+
+    // Jobs are now processed by the cron (runs every minute).
+    // No fire-and-forget — Vercel kills the function after response is sent.
 
     return NextResponse.json({
-      created: created.length,
-      failed: errors.length,
-      trackingIds: created,
-      errors,
+      batchId: result.batchId,
+      queued: validRecs.length,
+      trackingIds: result.trackingIds,
       total: recommendations.length,
+      skipped,
     });
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') {
@@ -255,3 +284,4 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+

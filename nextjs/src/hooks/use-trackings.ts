@@ -50,6 +50,14 @@ export type TrackingStatus =
 
 export type TrackingDestination = 'GA4' | 'GOOGLE_ADS' | 'BOTH';
 
+export type GoogleHealth =
+  | 'HEALTHY'
+  | 'MISSING_TRIGGER'
+  | 'MISSING_TAG'
+  | 'MISSING_CONVERSION'
+  | 'WORKSPACE_GONE'
+  | 'UNCHECKED';
+
 export interface Tracking {
   id: string;
   name: string;
@@ -62,11 +70,17 @@ export interface Tracking {
   destinations: TrackingDestination[];
   gtmTriggerId?: string;
   gtmTagId?: string;
+  gtmTagIdGA4?: string;
+  gtmTagIdAds?: string;
   ga4EventName?: string;
   adsConversionLabel?: string;
+  conversionActionId?: string;
   customerId: string;
   lastError?: string;
   lastSyncAt?: string;
+  trackingMode?: 'CLIENT_SIDE' | 'SERVER_SIDE';
+  googleHealth?: GoogleHealth;
+  lastHealthCheckAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -98,6 +112,7 @@ export interface CreateTrackingInput {
   config?: Record<string, unknown>;
   destinations?: TrackingDestination[];
   ga4EventName?: string;
+  adsConversionValue?: number;
   customerId: string;
 }
 

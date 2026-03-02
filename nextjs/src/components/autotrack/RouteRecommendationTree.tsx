@@ -26,6 +26,9 @@ import {
   FormInput,
   ArrowDown,
   LinkIcon,
+  Loader2,
+  AlertCircle,
+  Wrench,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -76,6 +79,9 @@ interface GroupedRecommendations {
     optional: number;
   };
   trackedCount: number;
+  syncingCount: number;
+  failedCount: number;
+  repairCount: number;
 }
 
 const pageTypeIcons: Record<string, React.ElementType> = {
@@ -194,6 +200,9 @@ export function RouteRecommendationTree({
           recommendations: [],
           counts: { critical: 0, important: 0, recommended: 0, optional: 0 },
           trackedCount: 0,
+          syncingCount: 0,
+          failedCount: 0,
+          repairCount: 0,
         };
       }
 
@@ -202,9 +211,15 @@ export function RouteRecommendationTree({
       // Count by status and severity
       if (rec.status === 'CREATED') {
         groups[groupKey].trackedCount++;
+      } else if (rec.status === 'CREATING') {
+        groups[groupKey].syncingCount++;
+      } else if (rec.status === 'FAILED') {
+        groups[groupKey].failedCount++;
+      } else if (rec.status === 'REPAIR') {
+        groups[groupKey].repairCount++;
       }
 
-      if (rec.status === 'PENDING') {
+      if (rec.status === 'PENDING' || rec.status === 'REPAIR' || rec.status === 'FAILED') {
         const severity = rec.severity.toLowerCase() as keyof typeof groups[typeof groupKey]['counts'];
         groups[groupKey].counts[severity]++;
       }
@@ -296,7 +311,7 @@ export function RouteRecommendationTree({
           group.counts.recommended +
           group.counts.optional;
 
-        const pendingRecs = group.recommendations.filter((r) => r.status === 'PENDING');
+        const pendingRecs = group.recommendations.filter((r) => r.status === 'PENDING' || r.status === 'REPAIR' || r.status === 'FAILED' || r.status === 'CREATED');
         const allPendingSelected = pendingRecs.length > 0 && pendingRecs.every((r) => selectedIds.has(r.id));
         const somePendingSelected = pendingRecs.some((r) => selectedIds.has(r.id)) && !allPendingSelected;
 
@@ -387,7 +402,22 @@ export function RouteRecommendationTree({
                       )}
                     </div>
 
-                    {pendingCount === 0 && totalCount > 0 && (
+                    {group.repairCount > 0 && (
+                      <span className="text-sm text-orange-600">
+                        {group.repairCount} needs repair
+                      </span>
+                    )}
+                    {group.syncingCount > 0 && (
+                      <span className="text-sm text-yellow-600">
+                        {group.syncingCount} syncing
+                      </span>
+                    )}
+                    {group.failedCount > 0 && (
+                      <span className="text-sm text-red-500">
+                        {group.failedCount} failed
+                      </span>
+                    )}
+                    {pendingCount === 0 && totalCount > 0 && group.trackedCount > 0 && (
                       <span className="text-sm text-gray-500">
                         {group.trackedCount} tracked
                       </span>
@@ -417,10 +447,13 @@ export function RouteRecommendationTree({
                   {/* Recommendation cards */}
                   <div className="space-y-2">
                     {group.recommendations.map((rec) => {
-                      const isActionable = rec.status === 'PENDING';
+                      const isActionable = rec.status === 'PENDING' || rec.status === 'REPAIR' || rec.status === 'FAILED' || rec.status === 'CREATED';
                       const isAccepting = acceptingId === rec.id;
                       const isRejecting = rejectingId === rec.id;
                       const isTracked = rec.status === 'CREATED';
+                      const isCreating = rec.status === 'CREATING';
+                      const isFailed = rec.status === 'FAILED';
+                      const isRepair = rec.status === 'REPAIR';
                       const isRejected = rec.status === 'REJECTED';
                       const isSelected = selectedIds.has(rec.id);
 
@@ -432,6 +465,12 @@ export function RouteRecommendationTree({
                           className={`bg-white border rounded-lg relative transition-colors ${
                             isTracked
                               ? 'border-green-200 bg-green-50/50'
+                              : isRepair
+                              ? 'border-orange-200 bg-orange-50/50'
+                              : isCreating
+                              ? 'border-yellow-200 bg-yellow-50/50'
+                              : isFailed
+                              ? 'border-red-200 bg-red-50/50'
                               : isRejected
                               ? 'border-gray-200 bg-gray-50 opacity-60'
                               : 'hover:border-gray-300'
@@ -447,13 +486,12 @@ export function RouteRecommendationTree({
                                 <Checkbox
                                   checked={isSelected}
                                   onCheckedChange={() => onToggleSelection(rec.id)}
+                                  className={isTracked ? 'data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600' : ''}
                                 />
-                              ) : isTracked ? (
-                                <Checkbox
-                                  checked={true}
-                                  disabled
-                                  className="data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
-                                />
+                              ) : isCreating ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-yellow-600" />
+                              ) : isFailed ? (
+                                <AlertCircle className="h-4 w-4 text-red-500" />
                               ) : (
                                 <Checkbox checked={false} disabled className="opacity-50" />
                               )}
@@ -469,6 +507,21 @@ export function RouteRecommendationTree({
                                   {isTracked && (
                                     <Badge variant="outline" className="bg-green-100 text-green-700 text-xs">
                                       <Check className="h-3 w-3 mr-0.5" /> Tracked
+                                    </Badge>
+                                  )}
+                                  {isCreating && (
+                                    <Badge variant="outline" className="bg-yellow-100 text-yellow-700 text-xs">
+                                      <Loader2 className="h-3 w-3 mr-0.5 animate-spin" /> Syncing...
+                                    </Badge>
+                                  )}
+                                  {isFailed && (
+                                    <Badge variant="outline" className="bg-red-100 text-red-700 text-xs">
+                                      <AlertCircle className="h-3 w-3 mr-0.5" /> Failed
+                                    </Badge>
+                                  )}
+                                  {isRepair && (
+                                    <Badge variant="outline" className="bg-orange-100 text-orange-700 text-xs">
+                                      <Wrench className="h-3 w-3 mr-0.5" /> Needs Repair
                                     </Badge>
                                   )}
                                   {isRejected && (

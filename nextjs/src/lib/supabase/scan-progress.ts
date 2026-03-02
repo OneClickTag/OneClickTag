@@ -10,6 +10,10 @@ export type ScanProgressEventType =
   | 'phase_change'
   | 'niche_detected'
   | 'login_detected'
+  | 'auth_success'
+  | 'auth_failed'
+  | 'mfa_required'
+  | 'captcha_detected'
   | 'chunk_complete'
   | 'error'
   | 'completed';
@@ -21,12 +25,13 @@ export interface ScanProgressEvent {
     url?: string;
     title?: string | null;
     pageType?: string | null;
-    pagesProcessed: number;
-    totalDiscovered: number;
-    phase: 'phase1' | 'phase2' | 'detecting_niche' | 'finalizing' | 'completed';
+    pagesProcessed?: number;
+    totalDiscovered?: number;
+    phase?: 'phase1' | 'phase2' | 'detecting_niche' | 'finalizing' | 'completed';
     hasForm?: boolean;
     hasCTA?: boolean;
     loginUrl?: string;
+    redirectUrl?: string;
     error?: string;
   };
 }

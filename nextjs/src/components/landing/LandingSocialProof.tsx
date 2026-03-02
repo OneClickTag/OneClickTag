@@ -1,7 +1,62 @@
 'use client';
 
 import { useInView } from '@/hooks/use-in-view';
-import { Star } from 'lucide-react';
+import {
+  Star,
+  Zap,
+  Sparkles,
+  Tag,
+  Shield,
+  Globe,
+  MousePointerClick,
+  Link2,
+  Rocket,
+  CheckCircle2,
+  Users,
+  Clock,
+  TrendingUp,
+  Target,
+  BarChart3,
+  LucideIcon,
+} from 'lucide-react';
+
+// Icon mapping for dynamic icons from database
+const iconMap: Record<string, LucideIcon> = {
+  Zap,
+  Target,
+  BarChart3,
+  Sparkles,
+  Tag,
+  Shield,
+  Globe,
+  MousePointerClick,
+  Link2,
+  Rocket,
+  CheckCircle2,
+  Users,
+  Clock,
+  TrendingUp,
+  Star,
+  zap: Zap,
+  target: Target,
+  'bar-chart-3': BarChart3,
+  barchart3: BarChart3,
+  sparkles: Sparkles,
+  tag: Tag,
+  shield: Shield,
+  globe: Globe,
+  'mouse-pointer-click': MousePointerClick,
+  mousepointerclick: MousePointerClick,
+  link2: Link2,
+  rocket: Rocket,
+  'check-circle-2': CheckCircle2,
+  checkcircle2: CheckCircle2,
+  users: Users,
+  clock: Clock,
+  'trending-up': TrendingUp,
+  trendingup: TrendingUp,
+  star: Star,
+};
 
 interface TestimonialItem {
   id?: string;
@@ -79,6 +134,32 @@ export function LandingSocialProof({ content }: LandingSocialProofProps) {
           ))}
         </div>
       </div>
+
+      {/* Stats */}
+      {content.stats &&
+        content.stats.filter((s) => s.isActive !== false).length > 0 && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-12 sm:mt-16">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 pt-12 border-t border-gray-200">
+              {content.stats
+                .filter((s) => s.isActive !== false)
+                .map((stat, index) => {
+                  const Icon = iconMap[stat.icon || 'Users'] || Users;
+                  return (
+                    <div key={index} className="text-center">
+                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <Icon className="w-5 h-5 text-blue-600" />
+                      </div>
+                      <div className="text-3xl font-bold text-gray-900">{stat.value}</div>
+                      <div className="text-gray-600 font-medium">{stat.label}</div>
+                      {stat.description && (
+                        <div className="text-sm text-gray-500 mt-1">{stat.description}</div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
     </section>
   );
 }

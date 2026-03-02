@@ -97,9 +97,9 @@ export function useScanProgress(scanId: string | null): ScanProgressState {
                 return {
                   ...prev,
                   currentUrl: event.data.url || null,
-                  pagesProcessed: event.data.pagesProcessed,
-                  totalDiscovered: event.data.totalDiscovered,
-                  phase: event.data.phase,
+                  pagesProcessed: event.data.pagesProcessed ?? prev.pagesProcessed,
+                  totalDiscovered: event.data.totalDiscovered ?? prev.totalDiscovered,
+                  phase: event.data.phase ?? prev.phase,
                   recentPages: [
                     {
                       url: event.data.url || '',
@@ -123,16 +123,16 @@ export function useScanProgress(scanId: string | null): ScanProgressState {
               case 'chunk_complete':
                 return {
                   ...prev,
-                  pagesProcessed: event.data.pagesProcessed,
-                  totalDiscovered: event.data.totalDiscovered,
-                  phase: event.data.phase,
+                  pagesProcessed: event.data.pagesProcessed ?? prev.pagesProcessed,
+                  totalDiscovered: event.data.totalDiscovered ?? prev.totalDiscovered,
+                  phase: event.data.phase ?? prev.phase,
                   currentUrl: null,
                 };
 
               case 'phase_change':
                 return {
                   ...prev,
-                  phase: event.data.phase,
+                  phase: event.data.phase ?? prev.phase,
                 };
 
               case 'completed':

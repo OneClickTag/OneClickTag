@@ -110,10 +110,9 @@ interface FeaturesContent {
 
 interface LandingFeaturesProps {
   content: FeaturesContent;
-  earlyAccessMode: boolean;
 }
 
-export function LandingFeatures({ content, earlyAccessMode }: LandingFeaturesProps) {
+export function LandingFeatures({ content }: LandingFeaturesProps) {
   const [featuresRef, featuresInView] = useInView<HTMLElement>({ threshold: 0.25 });
 
   const features = (content.features || []).filter((f) => f.isActive !== false);
@@ -179,14 +178,10 @@ export function LandingFeatures({ content, earlyAccessMode }: LandingFeaturesPro
           <div className="text-center mt-12">
             <p className="text-gray-600 mb-4">{content.bottomCTA.text}</p>
             <Link
-              href={
-                earlyAccessMode ? '/early-access' : content.bottomCTA.linkUrl || '/register'
-              }
+              href={content.bottomCTA.linkUrl || '/register'}
             >
               <Button variant="outline">
-                {earlyAccessMode
-                  ? 'Join Waitlist'
-                  : content.bottomCTA.linkText || 'Get started'}
+                {content.bottomCTA.linkText || 'Get started'}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>

@@ -5,6 +5,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { useApi } from '@/hooks/use-api';
 import { useCustomerTrackings, useCreateTracking, type TrackingType, type TrackingDestination, type CreateTrackingInput } from '@/hooks/use-trackings';
+import { TRACKING_TYPE_FIELD_CONFIG } from '@/lib/tracking-config';
 import { useConnectGoogleAccount, useDisconnectGoogleAccount, useUpdateCustomer, useGtmAccounts, useSetupGtm } from '@/hooks/use-customers';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -54,6 +55,9 @@ import {
 } from 'lucide-react';
 import { Customer, StapeDnsRecord } from '@/types/customer';
 import { AutoTrack } from '@/components/autotrack/AutoTrack';
+import { TrackingDetailModal } from '@/components/tracking/TrackingDetailModal';
+import { useHealthProgress } from '@/hooks/use-health-progress';
+import type { Tracking } from '@/hooks/use-trackings';
 
 const TRACKING_TYPES: { value: TrackingType; label: string }[] = [
   { value: 'BUTTON_CLICK', label: 'Button Click' },
@@ -90,6 +94,25 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
   const [trackingSelector, setTrackingSelector] = useState('');
   const [trackingUrlPattern, setTrackingUrlPattern] = useState('');
   const [trackingDestination, setTrackingDestination] = useState<TrackingDestination>('BOTH');
+  const [trackingConversionValue, setTrackingConversionValue] = useState<number | undefined>();
+  const [trackingConfig, setTrackingConfig] = useState<Record<string, unknown>>({});
+  const [selectedTracking, setSelectedTracking] = useState<Tracking | null>(null);
+
+  // Subscribe to real-time health check updates
+  useHealthProgress(id);
+
+  // Reset type-specific fields when tracking type changes
+  useEffect(() => {
+    setTrackingConversionValue(undefined);
+    const fieldConfig = TRACKING_TYPE_FIELD_CONFIG[trackingType];
+    const defaults: Record<string, unknown> = {};
+    for (const field of fieldConfig.configFields) {
+      if (field.defaultValue !== undefined) {
+        defaults[field.key] = field.defaultValue;
+      }
+    }
+    setTrackingConfig(defaults);
+  }, [trackingType]);
 
   // Handle OAuth redirect query params
   useEffect(() => {
@@ -334,6 +357,8 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
         destinations: [trackingDestination],
         ...(trackingSelector && { selector: trackingSelector }),
         ...(trackingUrlPattern && { urlPattern: trackingUrlPattern }),
+        ...(trackingConversionValue != null && { adsConversionValue: trackingConversionValue }),
+        ...(Object.keys(trackingConfig).length > 0 && { config: trackingConfig }),
       };
 
       await createTracking.mutateAsync(input);
@@ -345,6 +370,8 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
       setTrackingSelector('');
       setTrackingUrlPattern('');
       setTrackingDestination('BOTH');
+      setTrackingConversionValue(undefined);
+      setTrackingConfig({});
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create tracking';
       toast.error('Failed to create tracking', { description: message });
@@ -452,24 +479,73 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="tracking-selector">CSS Selector</Label>
-                    <Input
-                      id="tracking-selector"
-                      placeholder="e.g., #buy-now-btn, .cta-button"
-                      value={trackingSelector}
-                      onChange={(e) => setTrackingSelector(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="tracking-url">URL Pattern</Label>
-                    <Input
-                      id="tracking-url"
-                      placeholder="e.g., /thank-you, /checkout/*"
-                      value={trackingUrlPattern}
-                      onChange={(e) => setTrackingUrlPattern(e.target.value)}
-                    />
-                  </div>
+                  {TRACKING_TYPE_FIELD_CONFIG[trackingType].showSelector && (
+                    <div className="space-y-2">
+                      <Label htmlFor="tracking-selector">CSS Selector</Label>
+                      <Input
+                        id="tracking-selector"
+                        placeholder={TRACKING_TYPE_FIELD_CONFIG[trackingType].selectorPlaceholder || 'e.g., #buy-now-btn, .cta-button'}
+                        value={trackingSelector}
+                        onChange={(e) => setTrackingSelector(e.target.value)}
+                      />
+                    </div>
+                  )}
+                  {TRACKING_TYPE_FIELD_CONFIG[trackingType].showUrlPattern && (
+                    <div className="space-y-2">
+                      <Label htmlFor="tracking-url">URL Pattern</Label>
+                      <Input
+                        id="tracking-url"
+                        placeholder={TRACKING_TYPE_FIELD_CONFIG[trackingType].urlPatternPlaceholder || 'e.g., /thank-you, /checkout/*'}
+                        value={trackingUrlPattern}
+                        onChange={(e) => setTrackingUrlPattern(e.target.value)}
+                      />
+                    </div>
+                  )}
+                  {TRACKING_TYPE_FIELD_CONFIG[trackingType].showConversionValue && (
+                    <div className="space-y-2">
+                      <Label htmlFor="tracking-value">Conversion Value</Label>
+                      <Input
+                        id="tracking-value"
+                        type="number"
+                        placeholder="e.g., 29.99"
+                        value={trackingConversionValue ?? ''}
+                        onChange={(e) => setTrackingConversionValue(e.target.value ? Number(e.target.value) : undefined)}
+                      />
+                    </div>
+                  )}
+                  {TRACKING_TYPE_FIELD_CONFIG[trackingType].configFields.map((field) => (
+                    <div key={field.key} className="space-y-2">
+                      <Label htmlFor={`tracking-config-${field.key}`}>{field.label}</Label>
+                      {field.type === 'select' && field.options ? (
+                        <Select
+                          value={String(trackingConfig[field.key] ?? field.defaultValue ?? '')}
+                          onValueChange={(v) => setTrackingConfig((prev) => ({ ...prev, [field.key]: v }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {field.options.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          id={`tracking-config-${field.key}`}
+                          type={field.type === 'number' ? 'number' : 'text'}
+                          placeholder={field.placeholder}
+                          value={String(trackingConfig[field.key] ?? '')}
+                          onChange={(e) => setTrackingConfig((prev) => ({
+                            ...prev,
+                            [field.key]: field.type === 'number' ? (e.target.value ? Number(e.target.value) : undefined) : e.target.value,
+                          }))}
+                        />
+                      )}
+                    </div>
+                  ))}
                   <div className="space-y-2">
                     <Label>Destination</Label>
                     <Select value={trackingDestination} onValueChange={(v) => setTrackingDestination(v as TrackingDestination)}>
@@ -508,12 +584,25 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
               ))}
             </div>
           ) : trackings?.trackings && trackings.trackings.length > 0 ? (
+            <>
             <div className="grid gap-4">
               {trackings.trackings.map((tracking) => (
-                <Card key={tracking.id}>
+                <Card
+                  key={tracking.id}
+                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => setSelectedTracking(tracking as Tracking)}
+                >
                   <CardHeader className="pb-2">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg">{tracking.name}</CardTitle>
+                      <div className="flex items-center gap-2">
+                        <CardTitle className="text-lg">{tracking.name}</CardTitle>
+                        {tracking.googleHealth === 'HEALTHY' && (
+                          <span className="h-2 w-2 rounded-full bg-green-500" title="Verified on Google" />
+                        )}
+                        {tracking.googleHealth && tracking.googleHealth !== 'HEALTHY' && tracking.googleHealth !== 'UNCHECKED' && (
+                          <span className="h-2 w-2 rounded-full bg-red-500" title="Health issue detected" />
+                        )}
+                      </div>
                       <Badge
                         className={
                           tracking.status === 'ACTIVE'
@@ -546,6 +635,13 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                 </Card>
               ))}
             </div>
+
+            <TrackingDetailModal
+              tracking={selectedTracking}
+              open={!!selectedTracking}
+              onOpenChange={(open) => { if (!open) setSelectedTracking(null); }}
+            />
+            </>
           ) : (
             <Card>
               <CardContent className="py-12 text-center">

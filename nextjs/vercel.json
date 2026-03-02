@@ -12,6 +12,14 @@
     {
       "path": "/api/cron/analytics",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/process-queue",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/health-check",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

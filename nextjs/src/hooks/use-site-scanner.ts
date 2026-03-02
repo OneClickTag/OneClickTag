@@ -52,6 +52,7 @@ export const useRecommendations = (
   customerId: string,
   scanId: string | null,
   filters?: RecommendationFilters,
+  poll = false,
 ) => {
   const api = useApi();
   return useQuery({
@@ -61,7 +62,8 @@ export const useRecommendations = (
         params: filters as any,
       }),
     enabled: !!customerId && !!scanId,
-    staleTime: 30 * 1000,
+    staleTime: poll ? 2000 : 30 * 1000,
+    refetchInterval: poll ? 5000 : false,
   });
 };
 
@@ -177,11 +179,11 @@ export const useBulkAcceptRecommendations = () => {
 };
 
 interface BulkCreateTrackingsResult {
-  created: number;
-  failed: number;
+  batchId: string;
+  queued: number;
   trackingIds: string[];
-  errors: string[];
   total: number;
+  skipped: string[];
 }
 
 export const useBulkCreateTrackings = () => {
@@ -192,14 +194,16 @@ export const useBulkCreateTrackings = () => {
       customerId,
       scanId,
       recommendationIds,
+      destination,
     }: {
       customerId: string;
       scanId: string;
       recommendationIds: string[];
+      destination?: 'GA4' | 'GOOGLE_ADS' | 'BOTH';
     }) =>
       api.post<BulkCreateTrackingsResult>(
         `/api/customers/${customerId}/scans/${scanId}/recommendations/bulk-create-trackings`,
-        { recommendationIds },
+        { recommendationIds, destination },
       ),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: [RECOMMENDATIONS_KEY, variables.customerId, variables.scanId] });
@@ -369,6 +373,8 @@ export const useChunkedScan = (customerId: string, scanId: string | null) => {
   });
   const abortRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  // Use a ref for credentials so the running loop always sees the latest value
+  const credentialsRef = useRef<{ username: string; password: string } | null>(null);
   const queryClient = useQueryClient();
   const api = useApi();
 
@@ -382,11 +388,9 @@ export const useChunkedScan = (customerId: string, scanId: string | null) => {
     if (!customerId || !scanId) return;
     abortRef.current = false;
 
-    let currentCredentials: { username: string; password: string } | null = null;
     let startingPageCount = 0;
 
     setState(prev => {
-      currentCredentials = prev.credentials;
       startingPageCount = resume ? prev.pagesProcessed : 0;
       return {
         ...prev,
@@ -410,6 +414,9 @@ export const useChunkedScan = (customerId: string, scanId: string | null) => {
       while (hasMore && !abortRef.current) {
         const controller = new AbortController();
         abortControllerRef.current = controller;
+
+        // Read credentials from ref — always gets latest value even if set mid-scan
+        const currentCredentials = credentialsRef.current;
 
         const result = await api.post<ChunkResult>(
           `/api/customers/${customerId}/scans/${scanId}/process-chunk`,
@@ -511,6 +518,7 @@ export const useChunkedScan = (customerId: string, scanId: string | null) => {
 
   const reset = useCallback(() => {
     abortRef.current = true;
+    credentialsRef.current = null;
     setState({
       isProcessing: false,
       phase: 'idle',
@@ -529,6 +537,8 @@ export const useChunkedScan = (customerId: string, scanId: string | null) => {
   }, []);
 
   const setCredentials = useCallback((credentials: { username: string; password: string } | null) => {
+    // Update ref immediately so the running loop picks it up on the next chunk
+    credentialsRef.current = credentials;
     setState(prev => ({ ...prev, credentials }));
   }, []);
 

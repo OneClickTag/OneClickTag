@@ -10,8 +10,14 @@ import {
   PageHeading,
   SKIP_PATTERNS,
 } from '../interfaces';
+import {
+  isLoginUrl,
+  hasLoginContent as checkLoginContent,
+} from '../constants/login-patterns';
 
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+import { BROWSER_FINGERPRINT } from './stealth-config';
+
+const USER_AGENT = BROWSER_FINGERPRINT.userAgent;
 const PAGE_TIMEOUT = 8000; // 8s per page
 
 export interface FetchResult {
@@ -216,13 +222,13 @@ export function discoverLinks(html: string, baseUrl: string, root?: HTMLElement)
 
 /**
  * Detect if a page is a login page.
+ * Uses comprehensive URL patterns, content analysis, and form detection.
  */
 export function detectLoginPage(html: string, url: string): LoginDetection {
-  const urlLower = url.toLowerCase();
   const root = parse(html, { comment: false, blockTextElements: { script: false, style: false } });
 
-  // URL-based detection
-  const isLoginUrl = /\/(login|signin|sign-in|auth|authenticate|sso)(\/?$|\?)/i.test(urlLower);
+  // URL-based detection (comprehensive patterns)
+  const urlMatch = isLoginUrl(url);
 
   // Form-based detection: look for password field in a form
   const forms = root.querySelectorAll('form');
@@ -238,11 +244,11 @@ export function detectLoginPage(html: string, url: string): LoginDetection {
     }
   }
 
-  // Content-based detection
-  const bodyText = (root.querySelector('body')?.textContent || '').toLowerCase();
-  const hasLoginContent = /\b(sign in|log in|login|enter your password|forgot password)\b/i.test(bodyText);
+  // Content-based detection (comprehensive patterns)
+  const bodyText = (root.querySelector('body')?.textContent || '').slice(0, 5000);
+  const hasLoginText = checkLoginContent(bodyText);
 
-  const isLogin = isLoginUrl || (hasPasswordField && hasLoginContent);
+  const isLogin = urlMatch || (hasPasswordField && hasLoginText);
 
   return {
     isLogin,
@@ -368,7 +374,7 @@ function classifyPageType(url: string, title: string | null, headings: PageHeadi
     ['features', [/\/features/i]],
     ['faq', [/\/faq/i, /\/help/i]],
     ['terms', [/\/terms/i, /\/privacy/i, /\/legal/i, /\/cookie/i]],
-    ['login', [/\/login/i, /\/signin/i, /\/sign-in/i]],
+    ['login', [/\/log[-_]?in/i, /\/sign[-_]?in/i, /\/auth(?:enticate)?(?:\/|$)/i, /\/sso(?:\/|$)/i, /\/log[-_]?on/i, /\/wp-login/i, /\/users?\/(?:log[-_]?in|sign[-_]?in)/i, /\/accounts?\/(?:log[-_]?in|sign[-_]?in)/i, /\/members?\/(?:log[-_]?in|sign[-_]?in)/i, /\/customer\/account\/login/i, /\/my-account/i, /\/session\/new/i, /\/connexion/i, /\/anmelden/i, /\/accedi/i, /\/entrar/i, /\/iniciar[-_]?sesion/i, /\/inloggen/i, /\/entrance/i, /\/portal\/login/i]],
     ['signup', [/\/signup/i, /\/register/i, /\/sign-up/i, /\/get-started/i]],
     ['services', [/\/services/i]],
     ['portfolio', [/\/portfolio/i, /\/work/i, /\/case-stud/i]],

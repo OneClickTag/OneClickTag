@@ -160,8 +160,6 @@ export default async function LandingPage() {
     getFooterContent(),
   ]);
 
-  const EARLY_ACCESS_MODE = process.env.NEXT_PUBLIC_EARLY_ACCESS_MODE === 'true';
-
   // Get content with fallbacks
   const heroContent = content?.hero || defaultHero;
   const featuresContent = content?.features || defaultFeatures;
@@ -188,10 +186,10 @@ export default async function LandingPage() {
       <Navbar />
 
       {/* Hero Section */}
-      <LandingHero content={heroContent} earlyAccessMode={EARLY_ACCESS_MODE} />
+      <LandingHero content={heroContent} />
 
       {/* Features Section */}
-      <LandingFeatures content={featuresContent} earlyAccessMode={EARLY_ACCESS_MODE} />
+      <LandingFeatures content={featuresContent} />
 
       {/* How It Works Section */}
       <LandingHowItWorks content={howItWorksContent} />
@@ -200,7 +198,7 @@ export default async function LandingPage() {
       <LandingSocialProof content={socialProofContent} />
 
       {/* CTA Section */}
-      <LandingCTA content={ctaContent} earlyAccessMode={EARLY_ACCESS_MODE} />
+      <LandingCTA content={ctaContent} />
 
       {/* Footer */}
       <Footer config={footerConfig} />

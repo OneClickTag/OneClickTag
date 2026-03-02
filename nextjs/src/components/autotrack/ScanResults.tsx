@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { Loader2, MapIcon, ListChecks, Zap } from 'lucide-react';
+import { Loader2, MapIcon, ListChecks, Zap, Wrench } from 'lucide-react';
 import { ScanSummary, TrackingRecommendation } from '@/types/site-scanner';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   useRecommendations,
   useAcceptRecommendation,
@@ -15,9 +16,20 @@ import { TechnologyDetection } from './TechnologyDetection';
 import { RecommendationsList } from './RecommendationsList';
 import { RouteRecommendationTree } from './RouteRecommendationTree';
 import { RecommendationFilters, FilterState } from './RecommendationFilters';
+import { BulkCreateProgress } from './BulkCreateProgress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
 
 interface ScanResultsProps {
   customerId: string;
@@ -27,6 +39,7 @@ interface ScanResultsProps {
 }
 
 export function ScanResults({ customerId, scan, onCreateTracking, hasGoogleConnected }: ScanResultsProps) {
+  const queryClient = useQueryClient();
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>({
@@ -36,11 +49,25 @@ export function ScanResults({ customerId, scan, onCreateTracking, hasGoogleConne
     search: '',
   });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [bulkCreateProgress, setBulkCreateProgress] = useState<{ current: number; total: number } | null>(null);
 
+  // Destination dialog state
+  const [showDestinationDialog, setShowDestinationDialog] = useState(false);
+  const [selectedDestination, setSelectedDestination] = useState<'GA4' | 'GOOGLE_ADS' | 'BOTH'>('BOTH');
+
+  // Batch progress tracking — persists across navigations via localStorage
+  const batchStorageKey = `batch:${scan.id}`;
+  const [activeBatchId, setActiveBatchId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem(batchStorageKey);
+  });
+
+  // Poll recommendations while a batch is processing so statuses update live
+  const shouldPoll = !!activeBatchId;
   const { data: recommendations, isLoading: loadingRecs } = useRecommendations(
     customerId,
     scan.id,
+    undefined,
+    shouldPoll,
   );
 
   const handleFilterChange = useCallback((newFilters: FilterState) => {
@@ -69,16 +96,16 @@ export function ScanResults({ customerId, scan, onCreateTracking, hasGoogleConne
   const bulkAcceptMutation = useBulkAcceptRecommendations();
   const bulkCreateMutation = useBulkCreateTrackings();
 
-  // Auto-select all PENDING recommendations when they load
+  // Auto-select all actionable recommendations when they load
   useEffect(() => {
     if (recommendations && selectedIds.size === 0) {
-      const pendingIds = new Set(
+      const selectableIds = new Set(
         recommendations
-          .filter(r => r.status === 'PENDING')
+          .filter(r => r.status === 'PENDING' || r.status === 'REPAIR' || r.status === 'FAILED')
           .map(r => r.id)
       );
-      if (pendingIds.size > 0) {
-        setSelectedIds(pendingIds);
+      if (selectableIds.size > 0) {
+        setSelectedIds(selectableIds);
       }
     }
   }, [recommendations, selectedIds.size]);
@@ -137,41 +164,57 @@ export function ScanResults({ customerId, scan, onCreateTracking, hasGoogleConne
 
   const handleSelectAll = useCallback(() => {
     if (!recommendations) return;
-    const pendingIds = recommendations.filter(r => r.status === 'PENDING').map(r => r.id);
-    setSelectedIds(new Set(pendingIds));
+    const selectableIds = recommendations
+      .filter(r => r.status === 'PENDING' || r.status === 'REPAIR' || r.status === 'FAILED' || r.status === 'CREATED')
+      .map(r => r.id);
+    setSelectedIds(new Set(selectableIds));
   }, [recommendations]);
 
   const handleDeselectAll = useCallback(() => {
     setSelectedIds(new Set());
   }, []);
 
-  const handleBulkCreate = useCallback(async () => {
+  const handleBulkCreate = useCallback(() => {
     if (selectedIds.size === 0) return;
+    setShowDestinationDialog(true);
+  }, [selectedIds]);
+
+  const handleConfirmCreate = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+    setShowDestinationDialog(false);
 
     const ids = Array.from(selectedIds);
-    setBulkCreateProgress({ current: 0, total: ids.length });
 
     try {
       const result = await bulkCreateMutation.mutateAsync({
         customerId,
         scanId: scan.id,
         recommendationIds: ids,
+        destination: selectedDestination,
       });
 
-      setBulkCreateProgress(null);
+      // Store batchId and show progress overlay
+      const batchId = result.batchId;
+      setActiveBatchId(batchId);
+      localStorage.setItem(batchStorageKey, batchId);
       setSelectedIds(new Set());
-
-      alert(`Successfully created ${result.created} tracking${result.created !== 1 ? 's' : ''}${result.failed > 0 ? `. ${result.failed} failed.` : '.'}`);
     } catch (err) {
-      setBulkCreateProgress(null);
-      alert(`Failed to create trackings: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      alert(`Failed to queue trackings: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
-  }, [selectedIds, customerId, scan.id, bulkCreateMutation]);
+  }, [selectedIds, customerId, scan.id, bulkCreateMutation, batchStorageKey, selectedDestination]);
+
+  const handleBatchClose = useCallback(() => {
+    setActiveBatchId(null);
+    localStorage.removeItem(batchStorageKey);
+    // Force-refresh recommendations so the UI reflects final statuses immediately
+    queryClient.invalidateQueries({ queryKey: ['scan-recommendations', customerId, scan.id] });
+    queryClient.invalidateQueries({ queryKey: ['trackings'] });
+  }, [batchStorageKey, queryClient, customerId, scan.id]);
 
   const counts = scan.recommendationCounts || { critical: 0, important: 0, recommended: 0, optional: 0 };
 
-  const pendingCount = useMemo(() =>
-    recommendations?.filter(r => r.status === 'PENDING').length || 0,
+  const actionableCount = useMemo(() =>
+    recommendations?.filter(r => r.status === 'PENDING' || r.status === 'REPAIR' || r.status === 'FAILED' || r.status === 'CREATED').length || 0,
     [recommendations]
   );
 
@@ -179,6 +222,27 @@ export function ScanResults({ customerId, scan, onCreateTracking, hasGoogleConne
     recommendations?.filter(r => r.status === 'CREATED').length || 0,
     [recommendations]
   );
+
+  const syncingCount = useMemo(() =>
+    recommendations?.filter(r => r.status === 'CREATING').length || 0,
+    [recommendations]
+  );
+
+  const failedCount = useMemo(() =>
+    recommendations?.filter(r => r.status === 'FAILED').length || 0,
+    [recommendations]
+  );
+
+  const repairCount = useMemo(() =>
+    recommendations?.filter(r => r.status === 'REPAIR').length || 0,
+    [recommendations]
+  );
+
+  // Count how many CREATED (tracked) items are currently selected — drives button text
+  const selectedTrackedCount = useMemo(() => {
+    if (!recommendations) return 0;
+    return recommendations.filter(r => r.status === 'CREATED' && selectedIds.has(r.id)).length;
+  }, [recommendations, selectedIds]);
 
   // Calculate coverage
   const scanPages = scan.pages || [];
@@ -309,13 +373,13 @@ export function ScanResults({ customerId, scan, onCreateTracking, hasGoogleConne
               />
 
               {/* Floating action bar */}
-              {pendingCount > 0 && (
+              {actionableCount > 0 && (
                 <div className="sticky bottom-4 z-10">
                   <div className="bg-white border-2 border-gray-200 rounded-xl shadow-lg p-4 mx-auto max-w-2xl">
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex items-center gap-3">
                         <Checkbox
-                          checked={selectedIds.size > 0 && selectedIds.size === pendingCount}
+                          checked={selectedIds.size > 0 && selectedIds.size === actionableCount}
                           onCheckedChange={(checked) => {
                             if (checked) handleSelectAll();
                             else handleDeselectAll();
@@ -325,9 +389,14 @@ export function ScanResults({ customerId, scan, onCreateTracking, hasGoogleConne
                           <span className="text-sm font-medium">
                             {selectedIds.size} selected
                           </span>
-                          {trackedCount > 0 && (
+                          {(trackedCount > 0 || syncingCount > 0 || failedCount > 0 || repairCount > 0) && (
                             <span className="text-xs text-muted-foreground ml-2">
-                              ({trackedCount} already tracked)
+                              ({[
+                                trackedCount > 0 && `${trackedCount} tracked`,
+                                syncingCount > 0 && `${syncingCount} syncing`,
+                                repairCount > 0 && `${repairCount} needs repair`,
+                                failedCount > 0 && `${failedCount} failed`,
+                              ].filter(Boolean).join(', ')})
                             </span>
                           )}
                         </div>
@@ -354,19 +423,26 @@ export function ScanResults({ customerId, scan, onCreateTracking, hasGoogleConne
                         <Button
                           onClick={handleBulkCreate}
                           disabled={selectedIds.size === 0 || bulkCreateMutation.isPending || !hasGoogleConnected}
-                          className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-md"
+                          className={`shadow-md text-white ${
+                            selectedTrackedCount > 0
+                              ? 'bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700'
+                              : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700'
+                          }`}
                           size="lg"
                           title={!hasGoogleConnected ? 'Connect Google account first' : undefined}
                         >
                           {bulkCreateMutation.isPending ? (
                             <>
                               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Creating...
+                              {selectedTrackedCount > 0 ? 'Repairing...' : 'Creating...'}
                             </>
                           ) : (
                             <>
-                              <Zap className="h-4 w-4 mr-2" />
-                              OneClickTag ({selectedIds.size})
+                              {selectedTrackedCount > 0 ? (
+                                <><Wrench className="h-4 w-4 mr-2" />Repair & Sync ({selectedIds.size})</>
+                              ) : (
+                                <><Zap className="h-4 w-4 mr-2" />OneClickTag ({selectedIds.size})</>
+                              )}
                             </>
                           )}
                         </Button>
@@ -432,6 +508,75 @@ export function ScanResults({ customerId, scan, onCreateTracking, hasGoogleConne
           </div>
         </div>
       )}
+
+      {/* Batch progress overlay */}
+      {activeBatchId && (
+        <BulkCreateProgress
+          batchId={activeBatchId}
+          onClose={handleBatchClose}
+        />
+      )}
+
+      {/* Destination selection dialog */}
+      <Dialog open={showDestinationDialog} onOpenChange={setShowDestinationDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Choose Tracking Destination</DialogTitle>
+            <DialogDescription>
+              Where should these {selectedIds.size} tracking{selectedIds.size !== 1 ? 's' : ''} be sent?
+            </DialogDescription>
+          </DialogHeader>
+          <RadioGroup
+            value={selectedDestination}
+            onValueChange={(val) => setSelectedDestination(val as 'GA4' | 'GOOGLE_ADS' | 'BOTH')}
+            className="space-y-3 py-4"
+          >
+            <div className="flex items-center space-x-3">
+              <RadioGroupItem value="BOTH" id="dest-both" />
+              <Label htmlFor="dest-both" className="font-medium cursor-pointer">
+                Both GA4 + Google Ads
+                <span className="block text-xs text-muted-foreground font-normal">Send to both platforms for full tracking coverage</span>
+              </Label>
+            </div>
+            <div className="flex items-center space-x-3">
+              <RadioGroupItem value="GA4" id="dest-ga4" />
+              <Label htmlFor="dest-ga4" className="font-medium cursor-pointer">
+                GA4 Only
+                <span className="block text-xs text-muted-foreground font-normal">Analytics tracking only — no conversion actions</span>
+              </Label>
+            </div>
+            <div className="flex items-center space-x-3">
+              <RadioGroupItem value="GOOGLE_ADS" id="dest-ads" />
+              <Label htmlFor="dest-ads" className="font-medium cursor-pointer">
+                Google Ads Only
+                <span className="block text-xs text-muted-foreground font-normal">Conversion tracking only — no GA4 events</span>
+              </Label>
+            </div>
+          </RadioGroup>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDestinationDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmCreate}
+              disabled={bulkCreateMutation.isPending}
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700"
+            >
+              {bulkCreateMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Zap className="h-4 w-4 mr-2" />
+                  Create Trackings
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -132,6 +132,10 @@ model Customer {
   serverSideEnabled Boolean         @default(false)
   stapeContainer    StapeContainer?
 
+  // Health check
+  lastHealthCheckAt DateTime?
+  healthStatus      String?     @default("unchecked") // "healthy" | "issues_found" | "unchecked"
+
   // Tenant relation
   tenantId String
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -392,6 +396,10 @@ model Tracking {
   lastSyncAt   DateTime?
   syncAttempts Int       @default(0)
 
+  // Health verification
+  googleHealth      GoogleHealth @default(UNCHECKED)
+  lastHealthCheckAt DateTime?
+
   // Audit fields
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -520,6 +528,15 @@ enum StapeDomainStatus {
 enum TrackingMode {
   CLIENT_SIDE
   SERVER_SIDE
+}
+
+enum GoogleHealth {
+  HEALTHY
+  MISSING_TRIGGER
+  MISSING_TAG
+  MISSING_CONVERSION
+  WORKSPACE_GONE
+  UNCHECKED
 }
 
 enum UserRole {
@@ -1208,7 +1225,26 @@ enum RecommendationStatus {
   PENDING
   ACCEPTED
   REJECTED
+  CREATING
   CREATED
+  FAILED
+  REPAIR
+}
+
+enum QueueJobStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+  RETRYING
+  PAUSED
+}
+
+enum BatchStatus {
+  PROCESSING
+  COMPLETED
+  PAUSED
+  CANCELLED
 }
 
 model SiteScan {
@@ -1358,4 +1394,61 @@ model TrackingRecommendation {
   @@index([scanId, severity])
   @@index([scanId, status])
   @@map("tracking_recommendations")
+}
+
+model TrackingBatch {
+  id         String      @id @default(cuid())
+  scanId     String
+  customerId String
+  tenantId   String
+  userId     String
+
+  status      BatchStatus @default(PROCESSING)
+  totalJobs   Int         @default(0)
+  completed   Int         @default(0)
+  failed      Int         @default(0)
+
+  pausedAt    DateTime?
+  resumeAfter DateTime?
+  pauseReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  jobs TrackingQueueJob[]
+
+  @@index([tenantId, status])
+  @@index([customerId])
+  @@index([status, resumeAfter])
+  @@map("tracking_batches")
+}
+
+model TrackingQueueJob {
+  id      String        @id @default(cuid())
+  batchId String
+  batch   TrackingBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  trackingId       String
+  recommendationId String
+
+  status      QueueJobStatus @default(QUEUED)
+  step        String? // 'ads_sync' | 'gtm_sync'
+
+  attempts    Int      @default(0)
+  maxAttempts Int      @default(5)
+  nextRetryAt DateTime?
+  lastError   String?  @db.Text
+  errorCode   String?
+
+  priority Int @default(0)
+
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([batchId, status])
+  @@index([status, nextRetryAt])
+  @@index([status, priority, createdAt])
+  @@map("tracking_queue_jobs")
 }

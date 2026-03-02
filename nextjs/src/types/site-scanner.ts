@@ -15,7 +15,7 @@ export type SiteScanStatus =
   | 'CANCELLED';
 
 export type RecommendationSeverity = 'CRITICAL' | 'IMPORTANT' | 'RECOMMENDED' | 'OPTIONAL';
-export type RecommendationStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'CREATED';
+export type RecommendationStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'CREATING' | 'CREATED' | 'FAILED' | 'REPAIR';
 
 // ========================================
 // Scan Models

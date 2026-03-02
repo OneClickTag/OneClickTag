@@ -5,7 +5,6 @@
  */
 
 import { parse } from 'node-html-parser';
-import { chromium } from 'playwright-core';
 import { prisma } from '@/lib/prisma';
 import { SiteScanStatus } from '@prisma/client';
 import {
@@ -21,9 +20,11 @@ import { processRecommendations } from './recommendation-engine';
 import { isScanCancelled } from './site-scanner';
 import { dismissObstacles } from './obstacle-handler';
 import { simulateInteractions } from './interaction-simulator';
-import { detectLoginPage as detectLoginPagePlaywright, serializeCookies, restoreCookies } from './auth-handler';
+import { detectLoginPage as detectLoginPagePlaywright, performLogin, serializeCookies, restoreCookies } from './auth-handler';
 import { createBehavioralOpportunities } from '../constants/behavioral-tracking';
+import { LOGIN_CLASSIFY_PATTERNS, isLoginUrl as isLoginUrlCheck } from '../constants/login-patterns';
 import { broadcastScanProgress, pageCrawledEvent, chunkCompleteEvent } from '@/lib/supabase/scan-progress';
+import { createStealthBrowser, createStealthContext, warmUpSession } from './stealth-config';
 
 // ========================================
 // Types
@@ -80,6 +81,14 @@ export interface ChunkResult {
   obstaclesDismissed?: number;
   interactionsPerformed?: number;
   authenticatedPages?: number;
+  /** Result of login attempt if credentials were provided */
+  authResult?: {
+    attempted: boolean;
+    success: boolean;
+    error?: string;
+    requiresMfa?: boolean;
+    requiresCaptcha?: boolean;
+  };
 }
 
 export interface Phase2ChunkResult {
@@ -147,6 +156,9 @@ export async function processPhase1ChunkPlaywright(
   const newPages: ChunkResult['newPages'] = [];
   let loginDetected = scan.loginDetected;
   let loginUrl = scan.loginUrl;
+  let loginBroadcasted = !!scan.loginDetected; // Don't re-broadcast if already detected in a previous chunk
+  let loginAttempted = false; // Track if we already tried logging in this chunk
+  let authResult: ChunkResult['authResult'] = undefined;
 
   // Edge case: empty queue
   if (toProcess.length === 0) {
@@ -160,12 +172,12 @@ export async function processPhase1ChunkPlaywright(
     };
   }
 
-  // Launch Playwright browser for this chunk
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0',
-    viewport: { width: 1280, height: 720 },
-  });
+  // Launch stealth browser for this chunk
+  const browser = await createStealthBrowser();
+  const context = await createStealthContext(browser);
+
+  // Warm up session (resolve Cloudflare challenges, set cookies)
+  await warmUpSession(context, scan.websiteUrl);
 
   // Restore cookies if available (session persistence between chunks)
   if (scan.sessionCookies) {
@@ -222,12 +234,70 @@ export async function processPhase1ChunkPlaywright(
       const interactionResult = await simulateInteractions(page);
       discovery.totalInteractions += interactionResult.interactions;
 
-      // Detect login page with Playwright
+      // Detect login page with Playwright and attempt login if credentials available
       if (!loginDetected) {
         const loginResult = await detectLoginPagePlaywright(page);
         if (loginResult.isLogin) {
           loginDetected = true;
           loginUrl = loginResult.loginUrl || item.url;
+
+          // Attempt login if credentials are provided and we haven't tried yet
+          if (credentials && !loginAttempted) {
+            loginAttempted = true;
+            console.log(`[ChunkProcessor] Attempting login on ${loginUrl} with provided credentials`);
+
+            try {
+              const result = await performLogin(page, loginResult, credentials.username, credentials.password);
+              authResult = {
+                attempted: true,
+                success: result.success,
+                error: result.error,
+                requiresMfa: result.requiresMfa,
+                requiresCaptcha: result.requiresCaptcha,
+              };
+
+              if (result.success) {
+                console.log(`[ChunkProcessor] Login successful, continuing authenticated crawl`);
+                discovery.authenticatedPagesCount++;
+                // Broadcast auth success so frontend knows
+                broadcastScanProgress(scanId, {
+                  type: 'auth_success',
+                  timestamp: new Date().toISOString(),
+                  data: { loginUrl: loginUrl || undefined, redirectUrl: result.redirectUrl },
+                }).catch(() => {});
+
+                // After successful login, the page may have navigated — update finalUrl
+                const postLoginUrl = page.url();
+                if (postLoginUrl !== item.url) {
+                  crawledSet.add(postLoginUrl);
+                }
+              } else if (result.requiresMfa) {
+                console.log(`[ChunkProcessor] MFA required for login`);
+                broadcastScanProgress(scanId, {
+                  type: 'mfa_required',
+                  timestamp: new Date().toISOString(),
+                  data: { loginUrl: loginUrl || undefined },
+                }).catch(() => {});
+              } else if (result.requiresCaptcha) {
+                console.log(`[ChunkProcessor] CAPTCHA detected on login page`);
+                broadcastScanProgress(scanId, {
+                  type: 'captcha_detected',
+                  timestamp: new Date().toISOString(),
+                  data: { loginUrl: loginUrl || undefined },
+                }).catch(() => {});
+              } else {
+                console.log(`[ChunkProcessor] Login failed: ${result.error}`);
+                broadcastScanProgress(scanId, {
+                  type: 'auth_failed',
+                  timestamp: new Date().toISOString(),
+                  data: { loginUrl: loginUrl || undefined, error: result.error },
+                }).catch(() => {});
+              }
+            } catch (loginError: any) {
+              console.error(`[ChunkProcessor] Login error: ${loginError?.message}`);
+              authResult = { attempted: true, success: false, error: loginError?.message };
+            }
+          }
         }
       }
 
@@ -433,13 +503,14 @@ export async function processPhase1ChunkPlaywright(
         crawledPage.hasCTA,
       )).catch(() => {});
 
-      // Broadcast login detection
-      if (loginDetected && loginUrl === crawledPage.url) {
+      // Broadcast login detection (fires when login is detected on current page OR via link discovery)
+      if (loginDetected && !loginBroadcasted) {
+        loginBroadcasted = true;
         broadcastScanProgress(scanId, {
           type: 'login_detected',
           timestamp: new Date().toISOString(),
           data: {
-            loginUrl: loginUrl,
+            loginUrl: loginUrl || undefined,
             pagesProcessed: crawledSet.size,
             totalDiscovered: crawledSet.size + urlQueue.length,
             phase: 'phase1',
@@ -479,6 +550,16 @@ export async function processPhase1ChunkPlaywright(
             queuedUrls.add(link);
           }
         } catch { /* skip */ }
+
+        // Detect login URLs from discovered links (catch login pages before visiting them)
+        if (!loginDetected && link) {
+          try {
+            if (isLoginUrlCheck(link)) {
+              loginDetected = true;
+              loginUrl = link;
+            }
+          } catch { /* skip */ }
+        }
       }
 
       // Update URL patterns (sample)
@@ -532,6 +613,7 @@ export async function processPhase1ChunkPlaywright(
       obstaclesDismissed: discovery.obstaclesDismissed,
       interactionsPerformed: discovery.totalInteractions,
       authenticatedPages: discovery.authenticatedPagesCount,
+      authResult,
     };
   } finally {
     await browser.close();
@@ -592,6 +674,7 @@ export async function processPhase1Chunk(
   const newPages: ChunkResult['newPages'] = [];
   let loginDetected = scan.loginDetected;
   let loginUrl = scan.loginUrl;
+  let loginBroadcasted = !!scan.loginDetected; // Don't re-broadcast if already detected in a previous chunk
 
   // Edge case: empty queue
   if (toProcess.length === 0) {
@@ -693,13 +776,14 @@ export async function processPhase1Chunk(
         crawledPage.hasCTA,
       )).catch(() => {});
 
-      // Broadcast login detection
-      if (loginDetected && loginUrl === (crawledPage.url)) {
+      // Broadcast login detection (fires when login is detected on current page OR via link discovery)
+      if (loginDetected && !loginBroadcasted) {
+        loginBroadcasted = true;
         broadcastScanProgress(scanId, {
           type: 'login_detected',
           timestamp: new Date().toISOString(),
           data: {
-            loginUrl: loginUrl,
+            loginUrl: loginUrl || undefined,
             pagesProcessed: crawledSet.size,
             totalDiscovered: crawledSet.size + urlQueue.length,
             phase: 'phase1',
@@ -736,6 +820,16 @@ export async function processPhase1Chunk(
             queuedUrls.add(normalized);
           }
         } catch { /* skip */ }
+
+        // Detect login URLs from discovered links (catch login pages before visiting them)
+        if (!loginDetected && normalized) {
+          try {
+            if (isLoginUrlCheck(normalized)) {
+              loginDetected = true;
+              loginUrl = normalized;
+            }
+          } catch { /* skip */ }
+        }
       }
 
       // Update URL patterns (sample)
@@ -1074,7 +1168,7 @@ function classifyPageType(url: string, pageData: any): string | null {
   if (/\/(contact|reach-us)/i.test(path)) return 'contact';
   if (/\/(about|team)/i.test(path)) return 'about';
   if (/\/(blog|article|post|news)/i.test(path)) return 'blog';
-  if (/\/(login|signin|sign-in)/i.test(path)) return 'login';
+  if (LOGIN_CLASSIFY_PATTERNS.some(r => r.test(path))) return 'login';
   if (/\/(signup|register|sign-up)/i.test(path)) return 'signup';
   if (/\/(faq|help|support)/i.test(path)) return 'faq';
   if (/\/(services|solutions)/i.test(path)) return 'services';

@@ -170,6 +170,21 @@ export async function createConversionAction(
 
   if (!response.ok) {
     const error = await response.json();
+
+    // Handle duplicate name — find and reuse existing conversion action
+    const isDuplicate = error?.error?.details?.some?.(
+      (d: any) => d.errors?.some?.((e: any) => e.errorCode?.conversionActionError === 'DUPLICATE_NAME')
+    );
+
+    if (isDuplicate) {
+      console.log(`[Ads] Conversion action "${input.name}" already exists — reusing it`);
+      const existing = await findConversionActionByName(credentials.token!, customerId, input.name);
+      if (existing) {
+        return existing;
+      }
+      // If we can't find it somehow, fall through to throw
+    }
+
     throw new Error(`Failed to create conversion action: ${JSON.stringify(error)}`);
   }
 
@@ -177,12 +192,18 @@ export async function createConversionAction(
   const resourceName = data.results[0].resourceName;
   const conversionActionId = resourceName.split('/').pop();
 
-  // Get the conversion label (tag snippet)
+  // Get the conversion label (tag snippet) — retries internally if not ready
   const conversionLabel = await getConversionLabel(
     credentials.token!,
     customerId,
     conversionActionId
   );
+
+  if (!conversionLabel) {
+    throw new Error(
+      `Conversion action "${input.name}" created (ID: ${conversionActionId}) but conversion label could not be retrieved. Retry should resolve this.`
+    );
+  }
 
   return {
     conversionActionId,
@@ -191,6 +212,23 @@ export async function createConversionAction(
 }
 
 async function getConversionLabel(
+  accessToken: string,
+  customerId: string,
+  conversionActionId: string
+): Promise<string> {
+  // Retry up to 3 times — tag snippets may not be immediately available after creation
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const label = await fetchConversionLabelOnce(accessToken, customerId, conversionActionId);
+    if (label) return label;
+    if (attempt < 2) {
+      console.log(`[Ads] Conversion label not ready yet (attempt ${attempt + 1}/3), retrying in 3s...`);
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+  }
+  return '';
+}
+
+async function fetchConversionLabelOnce(
   accessToken: string,
   customerId: string,
   conversionActionId: string
@@ -234,6 +272,65 @@ async function getConversionLabel(
   }
 
   return '';
+}
+
+async function findConversionActionByName(
+  accessToken: string,
+  customerId: string,
+  name: string
+): Promise<{ conversionActionId: string; conversionLabel: string } | null> {
+  const query = `
+    SELECT
+      conversion_action.id,
+      conversion_action.resource_name,
+      conversion_action.tag_snippets
+    FROM conversion_action
+    WHERE conversion_action.name = '${name.replace(/'/g, "\\'")}'
+    LIMIT 1
+  `;
+
+  const response = await fetch(
+    `https://googleads.googleapis.com/v20/customers/${customerId}/googleAds:searchStream`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'developer-token': GOOGLE_ADS_DEVELOPER_TOKEN,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query }),
+    }
+  );
+
+  if (!response.ok) {
+    console.error('[Ads] Failed to search for existing conversion action');
+    return null;
+  }
+
+  const data = await response.json();
+  const result = data[0]?.results?.[0];
+  if (!result) return null;
+
+  const conversionActionId = String(result.conversionAction.id);
+  let conversionLabel = '';
+
+  const tagSnippets = result.conversionAction.tagSnippets;
+  if (tagSnippets && tagSnippets.length > 0) {
+    const gtagSnippet = tagSnippets.find((s: { type: string }) => s.type === 'WEBPAGE');
+    if (gtagSnippet) {
+      const match = gtagSnippet.eventSnippet?.match(/send_to.*?'(AW-[^']+)'/);
+      if (match) {
+        conversionLabel = match[1];
+      }
+    }
+  }
+
+  // If no label from snippet, fetch it via the dedicated function
+  if (!conversionLabel) {
+    conversionLabel = await getConversionLabel(accessToken, customerId, conversionActionId);
+  }
+
+  return { conversionActionId, conversionLabel };
 }
 
 /**
