@@ -6,7 +6,7 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   experimental: {
-    serverComponentsExternalPackages: ['@prisma/client', 'bcryptjs', 'playwright-core', '@anthropic-ai/sdk'],
+    serverComponentsExternalPackages: ['@prisma/client', 'bcryptjs', 'playwright-core', '@sparticuz/chromium', '@anthropic-ai/sdk'],
   },
   images: {
     domains: ['lh3.googleusercontent.com', 'avatars.githubusercontent.com'],

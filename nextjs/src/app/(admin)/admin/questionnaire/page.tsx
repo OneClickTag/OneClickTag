@@ -48,7 +48,6 @@ import {
   BarChart3,
   MessageSquare,
   CheckSquare,
-  List,
   AlignLeft,
   Star,
   RefreshCw,
@@ -59,7 +58,7 @@ import {
 interface Question {
   id: string;
   question: string;
-  type: 'TEXT' | 'TEXTAREA' | 'SELECT' | 'MULTISELECT' | 'RADIO' | 'CHECKBOX' | 'RATING' | 'SCALE';
+  type: 'TEXT' | 'TEXTAREA' | 'RADIO' | 'CHECKBOX' | 'RATING' | 'SCALE';
   options: string[] | null;
   placeholder: string | null;
   order: number;
@@ -105,8 +104,6 @@ interface ResponseAnalytics {
 const questionTypeOptions = [
   { value: 'TEXT', label: 'Text Input', icon: AlignLeft },
   { value: 'TEXTAREA', label: 'Text Area', icon: MessageSquare },
-  { value: 'SELECT', label: 'Dropdown', icon: List },
-  { value: 'MULTISELECT', label: 'Multi-Select', icon: CheckSquare },
   { value: 'RADIO', label: 'Radio Buttons', icon: CheckSquare },
   { value: 'CHECKBOX', label: 'Checkbox', icon: CheckSquare },
   { value: 'RATING', label: 'Rating', icon: Star },
@@ -200,7 +197,7 @@ export default function AdminQuestionnairePage() {
   // Reorder mutation
   const reorderMutation = useMutation({
     mutationFn: (items: Array<{ id: string; order: number }>) =>
-      api.put('/api/admin/questionnaire/reorder', { items }),
+      api.put('/api/admin/questionnaire/reorder', { questionOrders: items }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'questionnaire'] });
       toast.success('Order updated');
@@ -238,9 +235,12 @@ export default function AdminQuestionnairePage() {
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
-    setEditingQuestion(null);
-    setFormData(defaultFormData);
-    setOptionsText('');
+    // Delay state reset so the dialog close animation doesn't flash "Add Question"
+    setTimeout(() => {
+      setEditingQuestion(null);
+      setFormData(defaultFormData);
+      setOptionsText('');
+    }, 200);
   };
 
   const handleSubmit = () => {
@@ -302,7 +302,7 @@ export default function AdminQuestionnairePage() {
   };
 
   const needsOptions = (type: string) => {
-    return ['SELECT', 'MULTISELECT', 'RADIO', 'CHECKBOX'].includes(type);
+    return ['RADIO', 'CHECKBOX'].includes(type);
   };
 
   return (
@@ -400,7 +400,7 @@ export default function AdminQuestionnairePage() {
                     return (
                       <TableRow key={question.id}>
                         <TableCell>
-                          <div className="flex flex-col gap-1">
+                          <div className="flex flex-col items-center gap-1">
                             <Button
                               variant="ghost"
                               size="sm"
@@ -413,6 +413,15 @@ export default function AdminQuestionnairePage() {
                             <span className="text-center text-sm text-gray-500">
                               {question.order}
                             </span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0"
+                              disabled={index === questions.length - 1}
+                              onClick={() => handleMoveDown(index)}
+                            >
+                              <GripVertical className="h-4 w-4 -rotate-90" />
+                            </Button>
                           </div>
                         </TableCell>
                         <TableCell>

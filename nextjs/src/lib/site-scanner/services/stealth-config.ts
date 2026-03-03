@@ -6,6 +6,9 @@
  */
 
 import { chromium, Browser, BrowserContext } from 'playwright-core';
+import sparticuzChromium from '@sparticuz/chromium';
+
+const IS_PRODUCTION = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
 
 // ========================================
 // Browser Fingerprint Constants
@@ -35,11 +38,20 @@ export const BROWSER_FINGERPRINT = {
 
 /**
  * Launch a headless Chromium with anti-detection flags.
+ * In production (Vercel), uses @sparticuz/chromium which bundles a serverless-compatible binary.
+ * Locally, uses Playwright's default browser discovery.
  */
 export async function createStealthBrowser(): Promise<Browser> {
+  const executablePath = IS_PRODUCTION
+    ? await sparticuzChromium.executablePath()
+    : undefined;
+
   return chromium.launch({
+    executablePath,
     headless: true,
     args: [
+      // Include @sparticuz/chromium args in production (required for serverless)
+      ...(IS_PRODUCTION ? sparticuzChromium.args : []),
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
