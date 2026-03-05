@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApi } from '@/hooks/use-api';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Switch } from '@/components/ui/switch';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Layout,
   RefreshCw,
@@ -16,6 +18,11 @@ import {
   MessageSquare,
   Megaphone,
   Plus,
+  ArrowUp,
+  ArrowDown,
+  Eye,
+  EyeOff,
+  GripVertical,
 } from 'lucide-react';
 
 // Import editors
@@ -31,9 +38,20 @@ interface LandingSection {
   key: string;
   content: Record<string, unknown>;
   isActive: boolean;
+  sortOrder: number;
   createdAt: string;
   updatedAt: string;
 }
+
+const SECTION_META: Record<string, { label: string; icon: React.ReactNode }> = {
+  hero: { label: 'Hero', icon: <Sparkles className="w-4 h-4" /> },
+  features: { label: 'Features', icon: <LayoutGrid className="w-4 h-4" /> },
+  'how-it-works': { label: 'How It Works', icon: <ListOrdered className="w-4 h-4" /> },
+  'social-proof': { label: 'Social Proof', icon: <MessageSquare className="w-4 h-4" /> },
+  cta: { label: 'CTA', icon: <Megaphone className="w-4 h-4" /> },
+};
+
+const BUILT_IN_KEYS = ['hero', 'features', 'how-it-works', 'social-proof', 'cta'];
 
 // Default content for each section
 const defaultContent: Record<string, Record<string, unknown>> = {
@@ -124,7 +142,16 @@ export default function AdminLandingPage() {
   // Toggle active mutation
   const toggleActiveMutation = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
-      api.patch(`/api/admin/landing-page/${id}/toggle-active`, { isActive }),
+      api.put(`/api/admin/landing-page/${id}/toggle-active`, { isActive }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'landing-page'] });
+    },
+  });
+
+  // Reorder mutation
+  const reorderMutation = useMutation({
+    mutationFn: (items: { id: string; sortOrder: number }[]) =>
+      api.put('/api/admin/landing-page/reorder', items),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'landing-page'] });
     },
@@ -198,7 +225,71 @@ export default function AdminLandingPage() {
     await toggleActiveMutation.mutateAsync({ id, isActive });
   };
 
-  const isSaving = createMutation.isPending || updateMutation.isPending;
+  // Get ordered list of built-in sections (from DB order or default)
+  const getOrderedBuiltInSections = () => {
+    const dbSections = sections.filter((s) => BUILT_IN_KEYS.includes(s.key));
+    // For keys not in DB yet, create virtual entries
+    const dbKeys = new Set(dbSections.map((s) => s.key));
+    const virtualSections = BUILT_IN_KEYS.filter((k) => !dbKeys.has(k)).map((key, i) => ({
+      id: `virtual-${key}`,
+      key,
+      content: defaultContent[key] || {},
+      isActive: true,
+      sortOrder: 100 + i, // put virtual ones at the end
+      createdAt: '',
+      updatedAt: '',
+    }));
+    return [...dbSections, ...virtualSections].sort((a, b) => a.sortOrder - b.sortOrder);
+  };
+
+  // Handle section visibility toggle
+  const handleSectionToggle = async (key: string, isActive: boolean) => {
+    const section = getSectionByKey(key);
+    if (section) {
+      await toggleActiveMutation.mutateAsync({ id: section.id, isActive });
+    } else {
+      // Section doesn't exist in DB yet, create it
+      await createMutation.mutateAsync({
+        key,
+        content: defaultContent[key] || {},
+        isActive,
+      });
+    }
+  };
+
+  // Handle section reorder
+  const handleMoveSection = async (key: string, direction: 'up' | 'down') => {
+    const ordered = getOrderedBuiltInSections();
+    const currentIndex = ordered.findIndex((s) => s.key === key);
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= ordered.length) return;
+
+    // Ensure both sections exist in DB before reordering
+    const ensureInDb = async (s: LandingSection) => {
+      if (s.id.startsWith('virtual-')) {
+        const created = await createMutation.mutateAsync({
+          key: s.key,
+          content: defaultContent[s.key] || {},
+          isActive: true,
+        });
+        return created as LandingSection;
+      }
+      return s;
+    };
+
+    const [current, target] = await Promise.all([
+      ensureInDb(ordered[currentIndex]),
+      ensureInDb(ordered[targetIndex]),
+    ]);
+
+    // Swap sort orders
+    await reorderMutation.mutateAsync([
+      { id: current.id, sortOrder: target.sortOrder },
+      { id: target.id, sortOrder: current.sortOrder },
+    ]);
+  };
+
+  const isSaving = createMutation.isPending || updateMutation.isPending || reorderMutation.isPending;
 
   return (
     <div className="space-y-6">
@@ -231,7 +322,69 @@ export default function AdminLandingPage() {
           </div>
         </div>
       ) : (
-        /* Tabs */
+        <>
+        {/* Section Management Panel */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <GripVertical className="w-4 h-4 text-gray-400" />
+              Section Order & Visibility
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {getOrderedBuiltInSections().map((section, index, arr) => {
+                const meta = SECTION_META[section.key];
+                if (!meta) return null;
+                return (
+                  <div
+                    key={section.key}
+                    className={`flex items-center justify-between p-3 rounded-lg border ${
+                      section.isActive ? 'bg-white border-gray-200' : 'bg-gray-50 border-gray-200 opacity-60'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex flex-col gap-0.5">
+                        <button
+                          onClick={() => handleMoveSection(section.key, 'up')}
+                          disabled={index === 0 || reorderMutation.isPending}
+                          className="p-0.5 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <ArrowUp className="w-3.5 h-3.5 text-gray-500" />
+                        </button>
+                        <button
+                          onClick={() => handleMoveSection(section.key, 'down')}
+                          disabled={index === arr.length - 1 || reorderMutation.isPending}
+                          className="p-0.5 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <ArrowDown className="w-3.5 h-3.5 text-gray-500" />
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {meta.icon}
+                        <span className="font-medium text-sm">{meta.label}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {section.isActive ? (
+                        <Eye className="w-4 h-4 text-green-500" />
+                      ) : (
+                        <EyeOff className="w-4 h-4 text-gray-400" />
+                      )}
+                      <Switch
+                        checked={section.isActive}
+                        onCheckedChange={(checked) => handleSectionToggle(section.key, checked)}
+                        disabled={toggleActiveMutation.isPending}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Tabs */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <div className="border-b px-4">
@@ -333,6 +486,7 @@ export default function AdminLandingPage() {
             </div>
           </Tabs>
         </div>
+        </>
       )}
     </div>
   );

@@ -48,7 +48,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     const { id } = await params;
     const body = await request.json();
-    const { key, content, isActive, order, metadata } = body;
+    const { key, content, isActive, sortOrder } = body;
 
     const section = await prisma.landingPageContent.findUnique({ where: { id } });
 
@@ -79,8 +79,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         ...(key !== undefined && { key }),
         ...(content !== undefined && { content }),
         ...(isActive !== undefined && { isActive }),
-        ...(order !== undefined && { order }),
-        ...(metadata !== undefined && { metadata }),
+        ...(sortOrder !== undefined && { sortOrder }),
         updatedBy: session.id,
       },
     });

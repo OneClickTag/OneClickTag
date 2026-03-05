@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
     const sections = await prisma.landingPageContent.findMany({
       where,
-      orderBy: { createdAt: 'asc' },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
     });
 
     return NextResponse.json(sections);
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     requireAdmin(session);
 
     const body = await request.json();
-    const { key, content, isActive } = body;
+    const { key, content, isActive, sortOrder } = body;
 
     if (!key) {
       return NextResponse.json({ error: 'Key is required' }, { status: 400 });
@@ -64,6 +64,7 @@ export async function POST(request: NextRequest) {
         key,
         content,
         isActive: isActive ?? true,
+        sortOrder: sortOrder ?? 0,
         updatedBy: session.id,
       },
     });

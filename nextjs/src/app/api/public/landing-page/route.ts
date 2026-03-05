@@ -6,16 +6,17 @@ export async function GET() {
   try {
     const content = await prisma.landingPageContent.findMany({
       where: { isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
     });
 
-    // Transform to object keyed by section key
-    const contentMap = content.reduce(
-      (acc, item) => {
-        acc[item.key] = item.content;
-        return acc;
-      },
-      {} as Record<string, unknown>
-    );
+    // Transform to object keyed by section key, plus ordered keys array
+    const contentMap: Record<string, unknown> = {};
+    const sectionOrder: string[] = [];
+    for (const item of content) {
+      contentMap[item.key] = item.content;
+      sectionOrder.push(item.key);
+    }
+    contentMap._sectionOrder = sectionOrder;
 
     return NextResponse.json(contentMap);
   } catch (error) {

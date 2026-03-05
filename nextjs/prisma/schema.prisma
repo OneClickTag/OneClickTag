@@ -592,6 +592,7 @@ model LandingPageContent {
   key       String   @unique // 'hero', 'features', 'how-it-works', 'social-proof', 'cta'
   content   Json // Flexible JSON structure for each section
   isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   updatedBy String?

@@ -105,12 +105,15 @@ export interface CtaContent {
   trustBadge?: string;
 }
 
+export type SectionKey = 'hero' | 'features' | 'how-it-works' | 'social-proof' | 'cta';
+
 export interface LandingPageContent {
   hero?: HeroContent;
   features?: FeaturesContent;
   'how-it-works'?: HowItWorksContent;
   'social-proof'?: SocialProofContent;
   cta?: CtaContent;
+  _sectionOrder?: SectionKey[];
 }
 
 export interface Plan {
@@ -213,24 +216,32 @@ export async function getLandingPageContent(): Promise<LandingPageContent> {
   try {
     const sections = await prisma.landingPageContent.findMany({
       where: { isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
     });
 
     const content: LandingPageContent = {};
+    const sectionOrder: SectionKey[] = [];
     for (const section of sections) {
-      const key = section.key;
+      const key = section.key as SectionKey;
       // Use type assertion to handle dynamic key assignment
       if (key === 'hero') {
         content.hero = section.content as unknown as HeroContent;
+        sectionOrder.push('hero');
       } else if (key === 'features') {
         content.features = section.content as unknown as FeaturesContent;
+        sectionOrder.push('features');
       } else if (key === 'how-it-works') {
         content['how-it-works'] = section.content as unknown as HowItWorksContent;
+        sectionOrder.push('how-it-works');
       } else if (key === 'social-proof') {
         content['social-proof'] = section.content as unknown as SocialProofContent;
+        sectionOrder.push('social-proof');
       } else if (key === 'cta') {
         content.cta = section.content as unknown as CtaContent;
+        sectionOrder.push('cta');
       }
     }
+    content._sectionOrder = sectionOrder;
 
     return content;
   } catch (error) {

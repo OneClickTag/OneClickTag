@@ -1,3 +1,4 @@
+import React from 'react';
 import { Metadata } from 'next';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer, FooterConfig } from '@/components/layout/Footer';
@@ -8,7 +9,7 @@ import {
   LandingSocialProof,
   LandingCTA,
 } from '@/components/landing';
-import { getLandingPageContent, getFooterContent, buildPageMetadata } from '@/lib/server/api';
+import { getLandingPageContent, getFooterContent, buildPageMetadata, SectionKey } from '@/lib/server/api';
 
 // Force dynamic rendering to always fetch fresh data from database
 export const dynamic = 'force-dynamic';
@@ -160,12 +161,27 @@ export default async function LandingPage() {
     getFooterContent(),
   ]);
 
-  // Get content with fallbacks
-  const heroContent = content?.hero || defaultHero;
-  const featuresContent = content?.features || defaultFeatures;
-  const howItWorksContent = content?.['how-it-works'] || defaultHowItWorks;
-  const socialProofContent = content?.['social-proof'] || defaultSocialProof;
-  const ctaContent = content?.cta || defaultCta;
+  // Default section order if none specified
+  const defaultSectionOrder: SectionKey[] = ['hero', 'features', 'how-it-works', 'social-proof', 'cta'];
+  const sectionOrder = content?._sectionOrder?.length ? content._sectionOrder : defaultSectionOrder;
+
+  // Default content map
+  const defaults: Record<SectionKey, Record<string, unknown>> = {
+    hero: defaultHero,
+    features: defaultFeatures,
+    'how-it-works': defaultHowItWorks,
+    'social-proof': defaultSocialProof,
+    cta: defaultCta,
+  };
+
+  // Section component map
+  const sectionComponents: Record<SectionKey, (c: Record<string, unknown>) => React.ReactNode> = {
+    hero: (c) => <LandingHero content={c} />,
+    features: (c) => <LandingFeatures content={c} />,
+    'how-it-works': (c) => <LandingHowItWorks content={c} />,
+    'social-proof': (c) => <LandingSocialProof content={c} />,
+    cta: (c) => <LandingCTA content={c} />,
+  };
 
   // Build footer config from server data
   const footerConfig: FooterConfig | undefined = footerData ? {
@@ -185,20 +201,16 @@ export default async function LandingPage() {
       {/* Navigation */}
       <Navbar />
 
-      {/* Hero Section */}
-      <LandingHero content={heroContent} />
-
-      {/* Features Section */}
-      <LandingFeatures content={featuresContent} />
-
-      {/* How It Works Section */}
-      <LandingHowItWorks content={howItWorksContent} />
-
-      {/* Testimonials Section */}
-      <LandingSocialProof content={socialProofContent} />
-
-      {/* CTA Section */}
-      <LandingCTA content={ctaContent} />
+      {/* Render sections in dynamic order - only sections present in content (active) are shown */}
+      {sectionOrder.map((key) => {
+        // If content has _sectionOrder, only render sections that exist in content (i.e., active in DB)
+        // If no _sectionOrder (no DB data), render all defaults
+        const sectionContent = content?.[key] || (content?._sectionOrder ? null : defaults[key]);
+        if (!sectionContent) return null;
+        const render = sectionComponents[key];
+        if (!render) return null;
+        return <div key={key}>{render(sectionContent as Record<string, unknown>)}</div>;
+      })}
 
       {/* Footer */}
       <Footer config={footerConfig} />
