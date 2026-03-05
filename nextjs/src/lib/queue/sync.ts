@@ -410,13 +410,14 @@ async function createTriggerForTracking(
   accountId: string,
   containerId: string,
   workspaceId: string,
-  tracking: { name: string; type: string; selector?: string | null; urlPattern?: string | null }
+  tracking: { name: string; type: string; selector?: string | null; urlPattern?: string | null; config?: unknown }
 ) {
   const triggerConfig: {
     name: string;
     type: string;
     filter?: Array<{ type: string; parameter: Array<{ type: string; key: string; value: string }> }>;
     customEventFilter?: Array<{ type: string; parameter: Array<{ type: string; key: string; value: string }> }>;
+    parameter?: Array<{ type: string; key: string; value: string }>;
   } = {
     name: `${tracking.name} - Trigger`,
     type: 'CLICK',
@@ -425,6 +426,17 @@ async function createTriggerForTracking(
   switch (tracking.type) {
     case 'BUTTON_CLICK':
     case 'LINK_CLICK':
+    case 'PHONE_CALL_CLICK':
+    case 'EMAIL_CLICK':
+    case 'SOCIAL_CLICK':
+    case 'ADD_TO_CART':
+    case 'ADD_TO_WISHLIST':
+    case 'CHECKOUT_START':
+    case 'CHECKOUT_STEP':
+    case 'DOWNLOAD':
+    case 'PDF_DOWNLOAD':
+    case 'FILE_DOWNLOAD':
+    case 'SOCIAL_SHARE':
       triggerConfig.type = 'CLICK';
       if (tracking.selector) {
         triggerConfig.filter = [
@@ -440,6 +452,8 @@ async function createTriggerForTracking(
       break;
 
     case 'PAGE_VIEW':
+    case 'PRODUCT_VIEW':
+    case 'VIEW_CART':
       triggerConfig.type = 'PAGEVIEW';
       if (tracking.urlPattern) {
         triggerConfig.filter = [
@@ -455,7 +469,49 @@ async function createTriggerForTracking(
       break;
 
     case 'FORM_SUBMIT':
+    case 'FORM_START':
+    case 'FORM_ABANDON':
+    case 'SIGNUP':
+    case 'NEWSLETTER_SIGNUP':
+    case 'DEMO_REQUEST':
       triggerConfig.type = 'FORM_SUBMISSION';
+      if (tracking.selector) {
+        triggerConfig.filter = [
+          {
+            type: 'CONTAINS',
+            parameter: [
+              { type: 'TEMPLATE', key: 'arg0', value: '{{Form Element}}' },
+              { type: 'TEMPLATE', key: 'arg1', value: tracking.selector },
+            ],
+          },
+        ];
+      }
+      break;
+
+    case 'SCROLL_DEPTH': {
+      triggerConfig.type = 'SCROLL_DEPTH';
+      const config = tracking.config as Record<string, unknown> | null | undefined;
+      const scrollPercentage = (config?.scrollPercentage as number) || 50;
+      triggerConfig.parameter = [
+        { type: 'TEMPLATE', key: 'verticalThresholdsPercent', value: String(scrollPercentage) },
+        { type: 'TEMPLATE', key: 'verticalThresholdUnits', value: 'PERCENT' },
+        { type: 'TEMPLATE', key: 'verticalThresholdOn', value: 'true' },
+        { type: 'TEMPLATE', key: 'horizontalThresholdOn', value: 'false' },
+        { type: 'TEMPLATE', key: 'triggerStartOption', value: 'WINDOW_LOAD' },
+      ];
+      break;
+    }
+
+    case 'ELEMENT_VISIBILITY':
+      triggerConfig.type = 'ELEMENT_VISIBILITY';
+      if (tracking.selector) {
+        triggerConfig.parameter = [
+          { type: 'TEMPLATE', key: 'elementSelector', value: tracking.selector },
+          { type: 'TEMPLATE', key: 'selectorType', value: 'CSS_SELECTOR' },
+          { type: 'TEMPLATE', key: 'useOnScreenDuration', value: 'false' },
+          { type: 'TEMPLATE', key: 'firingFrequency', value: 'ONCE_PER_PAGE' },
+        ];
+      }
       break;
 
     default:

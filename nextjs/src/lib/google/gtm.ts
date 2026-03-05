@@ -111,6 +111,7 @@ export async function createTrigger(
     type: string;
     filter?: Array<{ type: string; parameter: Array<{ type: string; key: string; value: string }> }>;
     customEventFilter?: Array<{ type: string; parameter: Array<{ type: string; key: string; value: string }> }>;
+    parameter?: Array<{ type: string; key: string; value: string }>;
   }
 ): Promise<tagmanager_v2.Schema$Trigger> {
   const response = await gtm.accounts.containers.workspaces.triggers.create({

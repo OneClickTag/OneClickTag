@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { useApi } from '@/hooks/use-api';
-import { useCustomerTrackings, useCreateTracking, type TrackingType, type TrackingDestination, type CreateTrackingInput } from '@/hooks/use-trackings';
+import { useCustomerTrackings, useCreateTracking, type TrackingType, type TrackingStatus, type TrackingDestination, type CreateTrackingInput } from '@/hooks/use-trackings';
 import { TRACKING_TYPE_FIELD_CONFIG } from '@/lib/tracking-config';
 import { useConnectGoogleAccount, useDisconnectGoogleAccount, useUpdateCustomer, useGtmAccounts, useSetupGtm } from '@/hooks/use-customers';
 import { toast } from 'sonner';
@@ -52,12 +52,26 @@ import {
   Mail,
   Unlink,
   AlertTriangle,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  ArrowUpDown,
+  X,
 } from 'lucide-react';
 import { Customer, StapeDnsRecord } from '@/types/customer';
 import { AutoTrack } from '@/components/autotrack/AutoTrack';
 import { TrackingDetailModal } from '@/components/tracking/TrackingDetailModal';
 import { useHealthProgress } from '@/hooks/use-health-progress';
 import type { Tracking } from '@/hooks/use-trackings';
+import { TRACKING_TYPE_LABELS, TRACKING_STATUS_LABELS } from '@/types/tracking';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 const TRACKING_TYPES: { value: TrackingType; label: string }[] = [
   { value: 'BUTTON_CLICK', label: 'Button Click' },
@@ -97,6 +111,25 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
   const [trackingConversionValue, setTrackingConversionValue] = useState<number | undefined>();
   const [trackingConfig, setTrackingConfig] = useState<Record<string, unknown>>({});
   const [selectedTracking, setSelectedTracking] = useState<Tracking | null>(null);
+
+  // Tracking list filters & pagination
+  const [trackingSearch, setTrackingSearch] = useState('');
+  const [trackingSearchDebounced, setTrackingSearchDebounced] = useState('');
+  const [filterStatus, setFilterStatus] = useState<TrackingStatus | 'ALL'>('ALL');
+  const [filterType, setFilterType] = useState<TrackingType | 'ALL'>('ALL');
+  const [trackingPage, setTrackingPage] = useState(1);
+  const [trackingSortBy, setTrackingSortBy] = useState<string>('createdAt');
+  const [trackingSortOrder, setTrackingSortOrder] = useState<'asc' | 'desc'>('desc');
+  const trackingPageSize = 10;
+
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setTrackingSearchDebounced(trackingSearch);
+      setTrackingPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [trackingSearch]);
 
   // Subscribe to real-time health check updates
   useHealthProgress(id);
@@ -149,7 +182,15 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
   // Use Google-enriched customer data for Settings tab fields
   const settingsCustomer = customerWithGoogle || customer;
 
-  const { data: trackings, isLoading: trackingsLoading } = useCustomerTrackings(id);
+  const { data: trackings, isLoading: trackingsLoading } = useCustomerTrackings(id, {
+    page: trackingPage,
+    limit: trackingPageSize,
+    ...(filterStatus !== 'ALL' && { status: filterStatus }),
+    ...(filterType !== 'ALL' && { type: filterType }),
+    ...(trackingSearchDebounced && { search: trackingSearchDebounced }),
+    sortBy: trackingSortBy,
+    sortOrder: trackingSortOrder,
+  });
   const connectGoogle = useConnectGoogleAccount();
   const disconnectGoogle = useDisconnectGoogleAccount();
   const createTracking = useCreateTracking();
@@ -439,7 +480,74 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
         </TabsList>
 
         <TabsContent value="trackings" className="space-y-4">
-          <div className="flex justify-end">
+          {/* Toolbar: Search + Filters + Create */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+              {/* Search */}
+              <div className="relative flex-1 max-w-sm">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search trackings..."
+                  value={trackingSearch}
+                  onChange={(e) => setTrackingSearch(e.target.value)}
+                  className="pl-8 pr-8"
+                />
+                {trackingSearch && (
+                  <button
+                    onClick={() => setTrackingSearch('')}
+                    className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              {/* Status Filter */}
+              <Select
+                value={filterStatus}
+                onValueChange={(v) => { setFilterStatus(v as TrackingStatus | 'ALL'); setTrackingPage(1); }}
+              >
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All Status</SelectItem>
+                  {(['ACTIVE', 'PENDING', 'CREATING', 'SYNCING', 'FAILED', 'PAUSED'] as TrackingStatus[]).map((s) => (
+                    <SelectItem key={s} value={s}>{TRACKING_STATUS_LABELS[s]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {/* Type Filter */}
+              <Select
+                value={filterType}
+                onValueChange={(v) => { setFilterType(v as TrackingType | 'ALL'); setTrackingPage(1); }}
+              >
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All Types</SelectItem>
+                  {TRACKING_TYPES.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {/* Clear filters */}
+              {(filterStatus !== 'ALL' || filterType !== 'ALL' || trackingSearch) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setFilterStatus('ALL');
+                    setFilterType('ALL');
+                    setTrackingSearch('');
+                    setTrackingPage(1);
+                  }}
+                >
+                  <X className="mr-1 h-4 w-4" />
+                  Clear
+                </Button>
+              )}
+            </div>
             <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
               <DialogTrigger asChild>
                 <Button disabled={!customer.googleAccountId}>
@@ -577,78 +685,235 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
             </Dialog>
           </div>
 
+          {/* Trackings Table */}
           {trackingsLoading ? (
             <div className="space-y-4">
               {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-24 w-full" />
+                <Skeleton key={i} className="h-12 w-full" />
               ))}
             </div>
           ) : trackings?.trackings && trackings.trackings.length > 0 ? (
             <>
-            <div className="grid gap-4">
-              {trackings.trackings.map((tracking) => (
-                <Card
-                  key={tracking.id}
-                  className="cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => setSelectedTracking(tracking as Tracking)}
-                >
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <CardTitle className="text-lg">{tracking.name}</CardTitle>
-                        {tracking.googleHealth === 'HEALTHY' && (
-                          <span className="h-2 w-2 rounded-full bg-green-500" title="Verified on Google" />
-                        )}
-                        {tracking.googleHealth && tracking.googleHealth !== 'HEALTHY' && tracking.googleHealth !== 'UNCHECKED' && (
-                          <span className="h-2 w-2 rounded-full bg-red-500" title="Health issue detected" />
-                        )}
-                      </div>
-                      <Badge
-                        className={
-                          tracking.status === 'ACTIVE'
-                            ? 'bg-green-100 text-green-700'
-                            : tracking.status === 'FAILED'
-                              ? 'bg-red-100 text-red-700'
-                              : tracking.status === 'PENDING'
-                                ? 'bg-yellow-100 text-yellow-700'
-                                : 'bg-gray-100 text-gray-700'
-                        }
+              <Card>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>
+                        <button
+                          className="flex items-center gap-1 hover:text-foreground"
+                          onClick={() => {
+                            if (trackingSortBy === 'name') {
+                              setTrackingSortOrder(trackingSortOrder === 'asc' ? 'desc' : 'asc');
+                            } else {
+                              setTrackingSortBy('name');
+                              setTrackingSortOrder('asc');
+                            }
+                          }}
+                        >
+                          Name
+                          <ArrowUpDown className="h-3 w-3" />
+                        </button>
+                      </TableHead>
+                      <TableHead>
+                        <button
+                          className="flex items-center gap-1 hover:text-foreground"
+                          onClick={() => {
+                            if (trackingSortBy === 'type') {
+                              setTrackingSortOrder(trackingSortOrder === 'asc' ? 'desc' : 'asc');
+                            } else {
+                              setTrackingSortBy('type');
+                              setTrackingSortOrder('asc');
+                            }
+                          }}
+                        >
+                          Type
+                          <ArrowUpDown className="h-3 w-3" />
+                        </button>
+                      </TableHead>
+                      <TableHead>
+                        <button
+                          className="flex items-center gap-1 hover:text-foreground"
+                          onClick={() => {
+                            if (trackingSortBy === 'status') {
+                              setTrackingSortOrder(trackingSortOrder === 'asc' ? 'desc' : 'asc');
+                            } else {
+                              setTrackingSortBy('status');
+                              setTrackingSortOrder('asc');
+                            }
+                          }}
+                        >
+                          Status
+                          <ArrowUpDown className="h-3 w-3" />
+                        </button>
+                      </TableHead>
+                      <TableHead className="hidden md:table-cell">Selector / URL</TableHead>
+                      <TableHead className="hidden lg:table-cell">
+                        <button
+                          className="flex items-center gap-1 hover:text-foreground"
+                          onClick={() => {
+                            if (trackingSortBy === 'createdAt') {
+                              setTrackingSortOrder(trackingSortOrder === 'asc' ? 'desc' : 'asc');
+                            } else {
+                              setTrackingSortBy('createdAt');
+                              setTrackingSortOrder('desc');
+                            }
+                          }}
+                        >
+                          Created
+                          <ArrowUpDown className="h-3 w-3" />
+                        </button>
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {trackings.trackings.map((tracking) => (
+                      <TableRow
+                        key={tracking.id}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => setSelectedTracking(tracking as Tracking)}
                       >
-                        {tracking.status}
-                      </Badge>
-                    </div>
-                    <CardDescription>{tracking.type}</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {tracking.selector && (
-                      <p className="text-sm">
-                        <span className="font-medium">Selector:</span>{' '}
-                        <code className="bg-gray-100 px-1 rounded">{tracking.selector}</code>
-                      </p>
-                    )}
-                    {tracking.lastError && (
-                      <p className="text-sm text-red-600 mt-2">
-                        <span className="font-medium">Error:</span> {tracking.lastError}
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{tracking.name}</span>
+                            {tracking.googleHealth === 'HEALTHY' && (
+                              <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" title="Verified on Google" />
+                            )}
+                            {tracking.googleHealth && tracking.googleHealth !== 'HEALTHY' && tracking.googleHealth !== 'UNCHECKED' && (
+                              <span className="h-2 w-2 rounded-full bg-red-500 shrink-0" title="Health issue detected" />
+                            )}
+                          </div>
+                          {tracking.lastError && (
+                            <p className="text-xs text-red-600 mt-0.5 truncate max-w-[250px]" title={tracking.lastError}>
+                              {tracking.lastError}
+                            </p>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm text-muted-foreground">
+                            {TRACKING_TYPE_LABELS[tracking.type as TrackingType] || tracking.type}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            className={
+                              tracking.status === 'ACTIVE'
+                                ? 'bg-green-100 text-green-700'
+                                : tracking.status === 'FAILED'
+                                  ? 'bg-red-100 text-red-700'
+                                  : tracking.status === 'PENDING'
+                                    ? 'bg-yellow-100 text-yellow-700'
+                                    : tracking.status === 'CREATING' || tracking.status === 'SYNCING'
+                                      ? 'bg-blue-100 text-blue-700'
+                                      : 'bg-gray-100 text-gray-700'
+                            }
+                          >
+                            {TRACKING_STATUS_LABELS[tracking.status as TrackingStatus] || tracking.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          {tracking.selector ? (
+                            <code className="text-xs bg-muted px-1.5 py-0.5 rounded truncate max-w-[200px] block">
+                              {tracking.selector}
+                            </code>
+                          ) : tracking.urlPattern ? (
+                            <code className="text-xs bg-muted px-1.5 py-0.5 rounded truncate max-w-[200px] block">
+                              {tracking.urlPattern}
+                            </code>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          <span className="text-sm text-muted-foreground">
+                            {new Date(tracking.createdAt).toLocaleDateString()}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Card>
 
-            <TrackingDetailModal
-              tracking={selectedTracking}
-              open={!!selectedTracking}
-              onOpenChange={(open) => { if (!open) setSelectedTracking(null); }}
-            />
+              {/* Pagination */}
+              {trackings.totalPages > 1 && (
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {((trackings.page - 1) * trackingPageSize) + 1}–{Math.min(trackings.page * trackingPageSize, trackings.total)} of {trackings.total} trackings
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={trackings.page <= 1}
+                      onClick={() => setTrackingPage((p) => Math.max(1, p - 1))}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Previous
+                    </Button>
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: trackings.totalPages }, (_, i) => i + 1)
+                        .filter((p) => {
+                          // Show first, last, current, and neighbors
+                          return p === 1 || p === trackings.totalPages || Math.abs(p - trackings.page) <= 1;
+                        })
+                        .reduce<(number | 'ellipsis')[]>((acc, p, i, arr) => {
+                          if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push('ellipsis');
+                          acc.push(p);
+                          return acc;
+                        }, [])
+                        .map((item, i) =>
+                          item === 'ellipsis' ? (
+                            <span key={`ellipsis-${i}`} className="px-1 text-muted-foreground">...</span>
+                          ) : (
+                            <Button
+                              key={item}
+                              variant={trackings.page === item ? 'default' : 'outline'}
+                              size="sm"
+                              className="h-8 w-8 p-0"
+                              onClick={() => setTrackingPage(item)}
+                            >
+                              {item}
+                            </Button>
+                          )
+                        )}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={trackings.page >= trackings.totalPages}
+                      onClick={() => setTrackingPage((p) => Math.min(trackings.totalPages, p + 1))}
+                    >
+                      Next
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <TrackingDetailModal
+                tracking={selectedTracking}
+                open={!!selectedTracking}
+                onOpenChange={(open) => { if (!open) setSelectedTracking(null); }}
+              />
             </>
           ) : (
             <Card>
               <CardContent className="py-12 text-center">
                 <Activity className="mx-auto h-12 w-12 text-gray-400" />
-                <h3 className="mt-4 text-lg font-medium">No trackings yet</h3>
+                <h3 className="mt-4 text-lg font-medium">
+                  {(filterStatus !== 'ALL' || filterType !== 'ALL' || trackingSearchDebounced) ? 'No trackings match your filters' : 'No trackings yet'}
+                </h3>
                 <p className="text-muted-foreground mt-2">
-                  {customer.googleAccountId
+                  {(filterStatus !== 'ALL' || filterType !== 'ALL' || trackingSearchDebounced) ? (
+                    <>Try adjusting your filters or{' '}
+                      <button
+                        className="text-primary underline"
+                        onClick={() => { setFilterStatus('ALL'); setFilterType('ALL'); setTrackingSearch(''); setTrackingPage(1); }}
+                      >
+                        clear all filters
+                      </button>.
+                    </>
+                  ) : customer.googleAccountId
                     ? 'Create your first tracking to start monitoring conversions.'
                     : 'Connect a Google account first to create trackings.'}
                 </p>

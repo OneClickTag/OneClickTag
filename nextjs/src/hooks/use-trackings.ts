@@ -95,12 +95,13 @@ export interface TrackingsResponse {
 
 export interface TrackingFilters {
   page?: number;
-  pageSize?: number;
+  limit?: number;
   customerId?: string;
   status?: TrackingStatus;
   type?: TrackingType;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
+  search?: string;
 }
 
 export interface CreateTrackingInput {
@@ -141,8 +142,8 @@ export function useTracking(id: string) {
   });
 }
 
-export function useCustomerTrackings(customerId: string) {
-  return useTrackings({ customerId });
+export function useCustomerTrackings(customerId: string, filters: Omit<TrackingFilters, 'customerId'> = {}) {
+  return useTrackings({ customerId, ...filters });
 }
 
 export function useCreateTracking() {
