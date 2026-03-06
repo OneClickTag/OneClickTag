@@ -486,6 +486,90 @@ export async function resumePausedBatches(): Promise<number> {
 }
 
 /**
+ * Run the processing loop directly (called via waitUntil from API routes).
+ * Same logic as the cron, but without HTTP auth. Uses advisory lock to prevent
+ * concurrent execution with the cron.
+ */
+export async function runProcessingLoop(): Promise<void> {
+  const ADVISORY_LOCK_ID = 42;
+  const MAX_RUNTIME_MS = 25_000;
+  const startTime = Date.now();
+
+  try {
+    const lockResult = await prisma.$queryRawUnsafe<{ locked: boolean }[]>(
+      `SELECT pg_try_advisory_lock(${ADVISORY_LOCK_ID}) as locked`
+    );
+    if (!lockResult[0]?.locked) {
+      console.log('[QueueTrigger] Another instance is already processing, skipping');
+      return;
+    }
+
+    try {
+      await recoverStuckJobs();
+      await resumePausedBatches();
+
+      while (Date.now() - startTime < MAX_RUNTIME_MS) {
+        const job = await prisma.trackingQueueJob.findFirst({
+          where: {
+            status: { in: ['QUEUED', 'RETRYING'] },
+            OR: [
+              { nextRetryAt: null },
+              { nextRetryAt: { lte: new Date() } },
+            ],
+            batch: { status: 'PROCESSING' },
+          },
+          orderBy: [
+            { priority: 'asc' },
+            { createdAt: 'asc' },
+          ],
+          include: {
+            batch: {
+              select: {
+                customerId: true,
+                tenantId: true,
+                userId: true,
+                totalJobs: true,
+                completed: true,
+                failed: true,
+              },
+            },
+          },
+        });
+
+        if (!job) break;
+
+        try {
+          const result = await processQueueJob(job);
+          if (result.quotaError) {
+            console.log(`[QueueTrigger] Quota hit on batch ${job.batchId}`);
+            continue;
+          }
+        } catch (err) {
+          console.error(`[QueueTrigger] Unexpected error processing job ${job.id}:`, err);
+          try {
+            await prisma.trackingQueueJob.update({
+              where: { id: job.id },
+              data: { status: 'QUEUED', step: null, startedAt: null },
+            });
+          } catch { /* best effort */ }
+        }
+
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+
+      await finalizeBatches();
+      console.log(`[QueueTrigger] Processing loop done in ${Date.now() - startTime}ms`);
+    } finally {
+      await prisma.$queryRawUnsafe(
+        `SELECT pg_advisory_unlock(${ADVISORY_LOCK_ID})`
+      );
+    }
+  } catch (error) {
+    console.error('[QueueTrigger] Error:', error instanceof Error ? error.message : error);
+  }
+}
+
+/**
  * Finalize batches that have no more active jobs.
  * Uses actual job counts (not the batch counters) for reliability.
  */

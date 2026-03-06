@@ -7,6 +7,10 @@ import prisma from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { getSessionFromRequest, requireTenant } from '@/lib/auth/session';
 import { TrackingType, TrackingDestination, TrackingStatus } from '@prisma/client';
+import { waitUntil } from '@vercel/functions';
+import { runProcessingLoop } from '@/lib/queue/process-job';
+
+export const maxDuration = 30;
 
 const BulkCreateSchema = z.object({
   recommendationIds: z.array(z.string()).min(1, 'At least one recommendation required'),
@@ -262,8 +266,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return { batchId: batch.id, trackingIds: trackings.map(t => t.id) };
     });
 
-    // Jobs are now processed by the cron (runs every minute).
-    // No fire-and-forget — Vercel kills the function after response is sent.
+    // Trigger processing immediately via waitUntil (keeps function alive after response).
+    // The cron serves as a backup in case this invocation hits quota or times out.
+    waitUntil(runProcessingLoop());
 
     return NextResponse.json({
       batchId: result.batchId,
