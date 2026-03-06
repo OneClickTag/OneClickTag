@@ -113,7 +113,12 @@ export function BulkCreateProgress({ batchId, onClose }: BulkCreateProgressProps
   apiRef.current = api;
   const queryClient = useQueryClient();
   const [cancelling, setCancelling] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [initialData, setInitialData] = useState<any>(null);
+
+  // Stuck detection: if processing but no progress for 30s, show retry button
+  const [isStuck, setIsStuck] = useState(false);
+  const lastProgressRef = useRef({ processed: 0, timestamp: Date.now() });
 
   // Poll batch status from API every 5s as fallback (Supabase Realtime may miss events).
   // Also hydrates initial state for page navigation scenarios.
@@ -133,6 +138,39 @@ export function BulkCreateProgress({ batchId, onClose }: BulkCreateProgressProps
     const interval = setInterval(fetchStatus, 5000);
     return () => { cancelled = true; clearInterval(interval); };
   }, [batchId]);
+
+  // Stuck detection: track last time progress changed
+  useEffect(() => {
+    const currentProcessed = (initialData?.completed || 0) + (initialData?.failed || 0);
+    if (currentProcessed > lastProgressRef.current.processed) {
+      lastProgressRef.current = { processed: currentProcessed, timestamp: Date.now() };
+      setIsStuck(false);
+    }
+  }, [initialData?.completed, initialData?.failed]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - lastProgressRef.current.timestamp;
+      const batchStatus = initialData?.status;
+      if (elapsed > 30_000 && (batchStatus === 'PROCESSING' || batchStatus === 'PAUSED')) {
+        setIsStuck(true);
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [initialData?.status]);
+
+  const handleRetry = useCallback(async () => {
+    setRetrying(true);
+    setIsStuck(false);
+    lastProgressRef.current = { ...lastProgressRef.current, timestamp: Date.now() };
+    try {
+      await api.post(`/api/batches/${batchId}/retry`);
+    } catch (err) {
+      console.error('Failed to retry batch:', err);
+    } finally {
+      setRetrying(false);
+    }
+  }, [batchId, api]);
 
   // Derive status from polled API data (source of truth), overlaid with realtime events.
   // Realtime updates are faster but may miss events; polling ensures we converge.
@@ -245,6 +283,30 @@ export function BulkCreateProgress({ batchId, onClose }: BulkCreateProgressProps
                   </span>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Stuck banner with retry */}
+          {isStuck && !isComplete && (
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-sm text-orange-800">
+                <RotateCw className="h-4 w-4 text-orange-600 shrink-0" />
+                Processing appears stuck. Try retrying.
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="shrink-0 border-orange-300 text-orange-700 hover:bg-orange-100"
+                onClick={handleRetry}
+                disabled={retrying}
+              >
+                {retrying ? (
+                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                ) : (
+                  <RotateCw className="h-3 w-3 mr-1" />
+                )}
+                Retry
+              </Button>
             </div>
           )}
 
