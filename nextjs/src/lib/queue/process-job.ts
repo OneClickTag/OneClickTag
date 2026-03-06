@@ -527,11 +527,11 @@ export async function runProcessingLoop(): Promise<void> {
       await recoverStuckJobs();
       await resumePausedBatches();
 
-      const PARALLEL_JOBS = 4;
-
+      // Process ONE job at a time — Google APIs (GTM, Ads) share the same
+      // workspace and can't handle concurrent modifications reliably.
+      // Self-chaining ensures remaining jobs get processed in subsequent invocations.
       while (Date.now() - startTime < MAX_RUNTIME_MS) {
-        // Pick up to 4 jobs from PROCESSING batches
-        const jobs = await prisma.trackingQueueJob.findMany({
+        const job = await prisma.trackingQueueJob.findFirst({
           where: {
             status: { in: ['QUEUED', 'RETRYING'] },
             OR: [
@@ -544,7 +544,6 @@ export async function runProcessingLoop(): Promise<void> {
             { priority: 'asc' },
             { createdAt: 'asc' },
           ],
-          take: PARALLEL_JOBS,
           include: {
             batch: {
               select: {
@@ -559,36 +558,26 @@ export async function runProcessingLoop(): Promise<void> {
           },
         });
 
-        if (jobs.length === 0) break;
+        if (!job) break;
 
-        // Process up to 4 jobs in parallel
-        const results = await Promise.allSettled(
-          jobs.map(async (job) => {
-            try {
-              return await processQueueJob(job);
-            } catch (err) {
-              console.error(`[QueueTrigger] Unexpected error processing job ${job.id}:`, err);
-              try {
-                await prisma.trackingQueueJob.update({
-                  where: { id: job.id },
-                  data: { status: 'QUEUED', step: null, startedAt: null },
-                });
-              } catch { /* best effort */ }
-              return { success: false };
-            }
-          })
-        );
-
-        // If any job hit quota, the batch is paused — loop will skip it next iteration
-        const hadQuota = results.some(
-          (r) => r.status === 'fulfilled' && r.value.quotaError
-        );
-        if (hadQuota) {
-          console.log('[QueueTrigger] Quota hit, batch paused');
+        try {
+          const result = await processQueueJob(job);
+          if (result.quotaError) {
+            console.log(`[QueueTrigger] Quota hit on batch ${job.batchId}`);
+            continue; // batch paused, loop will skip it
+          }
+        } catch (err) {
+          console.error(`[QueueTrigger] Unexpected error processing job ${job.id}:`, err);
+          try {
+            await prisma.trackingQueueJob.update({
+              where: { id: job.id },
+              data: { status: 'QUEUED', step: null, startedAt: null },
+            });
+          } catch { /* best effort */ }
         }
 
-        // Brief delay between batches of parallel jobs
-        await new Promise((r) => setTimeout(r, 1000));
+        // Small delay between jobs
+        await new Promise((r) => setTimeout(r, 500));
       }
 
       await finalizeBatches();
