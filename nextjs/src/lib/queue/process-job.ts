@@ -113,6 +113,25 @@ type QueueJob = {
 };
 
 // ============================================================================
+// Timeout helper — prevents Google API calls from hanging until Vercel kills us
+// ============================================================================
+
+const SYNC_TIMEOUT_MS = 22_000; // 22s per job (Vercel hard-kills at 30s)
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`${label} timed out after ${ms}ms. Retry should resolve this.`)),
+      ms
+    );
+    promise.then(
+      (val) => { clearTimeout(timer); resolve(val); },
+      (err) => { clearTimeout(timer); reject(err); }
+    );
+  });
+}
+
+// ============================================================================
 // Core job processor — runs Ads then GTM sequentially
 // ============================================================================
 
@@ -171,7 +190,7 @@ export async function processQueueJob(job: QueueJob): Promise<ProcessJobResult> 
         userId: batch.userId,
         action: 'create',
       };
-      await executeAdsSync(adsJob);
+      await withTimeout(executeAdsSync(adsJob), SYNC_TIMEOUT_MS, 'Ads sync');
     }
 
     // GTM sync (needs adsConversionLabel from Ads sync)
@@ -182,7 +201,7 @@ export async function processQueueJob(job: QueueJob): Promise<ProcessJobResult> 
       userId: batch.userId,
       action: 'create',
     };
-    await executeGTMSync(gtmJob);
+    await withTimeout(executeGTMSync(gtmJob), SYNC_TIMEOUT_MS, 'GTM sync');
 
     // Post-sync verification
     const finalTracking = await prisma.tracking.findUnique({
@@ -418,7 +437,7 @@ async function handleJobError(
  * Serverless functions can die mid-execution. 60s threshold.
  */
 export async function recoverStuckJobs(): Promise<number> {
-  const stuckThreshold = new Date(Date.now() - 60 * 1000); // 1 minute
+  const stuckThreshold = new Date(Date.now() - 35 * 1000); // 35s (Vercel kills at 30s)
 
   const result = await prisma.trackingQueueJob.updateMany({
     where: {
@@ -574,6 +593,26 @@ export async function runProcessingLoop(): Promise<void> {
 
       await finalizeBatches();
       console.log(`[QueueTrigger] Processing loop done in ${Date.now() - startTime}ms`);
+
+      // Self-chain: if there are still queued jobs, trigger another invocation
+      const remainingJobs = await prisma.trackingQueueJob.count({
+        where: {
+          status: { in: ['QUEUED', 'RETRYING'] },
+          batch: { status: 'PROCESSING' },
+        },
+      });
+      if (remainingJobs > 0) {
+        console.log(`[QueueTrigger] ${remainingJobs} jobs remaining, chaining next invocation`);
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${process.env.VERCEL_URL}`;
+        if (baseUrl) {
+          fetch(`${baseUrl}/api/internal/process-queue`, {
+            method: 'POST',
+            headers: { 'x-internal-secret': process.env.CRON_SECRET || 'internal' },
+          }).catch((err) => {
+            console.warn('[QueueTrigger] Self-chain fetch failed:', err);
+          });
+        }
+      }
     } finally {
       await prisma.$queryRawUnsafe(
         `SELECT pg_advisory_unlock(${ADVISORY_LOCK_ID})`
