@@ -508,8 +508,11 @@ export async function runProcessingLoop(): Promise<void> {
       await recoverStuckJobs();
       await resumePausedBatches();
 
+      const PARALLEL_JOBS = 4;
+
       while (Date.now() - startTime < MAX_RUNTIME_MS) {
-        const job = await prisma.trackingQueueJob.findFirst({
+        // Pick up to 4 jobs from PROCESSING batches
+        const jobs = await prisma.trackingQueueJob.findMany({
           where: {
             status: { in: ['QUEUED', 'RETRYING'] },
             OR: [
@@ -522,6 +525,7 @@ export async function runProcessingLoop(): Promise<void> {
             { priority: 'asc' },
             { createdAt: 'asc' },
           ],
+          take: PARALLEL_JOBS,
           include: {
             batch: {
               select: {
@@ -536,25 +540,36 @@ export async function runProcessingLoop(): Promise<void> {
           },
         });
 
-        if (!job) break;
+        if (jobs.length === 0) break;
 
-        try {
-          const result = await processQueueJob(job);
-          if (result.quotaError) {
-            console.log(`[QueueTrigger] Quota hit on batch ${job.batchId}`);
-            continue;
-          }
-        } catch (err) {
-          console.error(`[QueueTrigger] Unexpected error processing job ${job.id}:`, err);
-          try {
-            await prisma.trackingQueueJob.update({
-              where: { id: job.id },
-              data: { status: 'QUEUED', step: null, startedAt: null },
-            });
-          } catch { /* best effort */ }
+        // Process up to 4 jobs in parallel
+        const results = await Promise.allSettled(
+          jobs.map(async (job) => {
+            try {
+              return await processQueueJob(job);
+            } catch (err) {
+              console.error(`[QueueTrigger] Unexpected error processing job ${job.id}:`, err);
+              try {
+                await prisma.trackingQueueJob.update({
+                  where: { id: job.id },
+                  data: { status: 'QUEUED', step: null, startedAt: null },
+                });
+              } catch { /* best effort */ }
+              return { success: false };
+            }
+          })
+        );
+
+        // If any job hit quota, the batch is paused — loop will skip it next iteration
+        const hadQuota = results.some(
+          (r) => r.status === 'fulfilled' && r.value.quotaError
+        );
+        if (hadQuota) {
+          console.log('[QueueTrigger] Quota hit, batch paused');
         }
 
-        await new Promise((r) => setTimeout(r, 1500));
+        // Brief delay between batches of parallel jobs
+        await new Promise((r) => setTimeout(r, 1000));
       }
 
       await finalizeBatches();
