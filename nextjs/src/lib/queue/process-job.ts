@@ -6,7 +6,7 @@
  *   2. Jobs for the same customer run sequentially (Google APIs hate concurrency).
  *   3. Jobs for DIFFERENT customers can run in parallel.
  *   4. Quota errors pause the batch with a DB timestamp — cron resumes later.
- *   5. Stuck jobs are recovered aggressively (60s threshold).
+ *   5. Stuck jobs are recovered aggressively (35s threshold).
  *   6. Batch finalization is driven by actual job counts, not counters.
  */
 
@@ -505,20 +505,50 @@ export async function resumePausedBatches(): Promise<number> {
 }
 
 /**
+ * Acquire a row-based lock that auto-expires after LOCK_TTL_SECONDS.
+ * Unlike pg_advisory_lock, this survives serverless function death — if a function
+ * is killed by Vercel and the connection stays alive via PgBouncer, the lock
+ * auto-expires based on the timestamp, so the next invocation can proceed.
+ */
+const LOCK_KEY = 'queue_processor';
+const LOCK_TTL_SECONDS = 35; // Must exceed MAX_RUNTIME_MS (25s) + buffer
+
+async function acquireRowLock(instanceId: string): Promise<boolean> {
+  const result = await prisma.$queryRawUnsafe<{ lock_key: string }[]>(
+    `UPDATE processing_locks
+     SET locked_at = now(), locked_by = $1
+     WHERE lock_key = $2
+       AND (locked_at < now() - interval '${LOCK_TTL_SECONDS} seconds')
+     RETURNING lock_key`,
+    instanceId,
+    LOCK_KEY
+  );
+  return result.length > 0;
+}
+
+async function releaseRowLock(instanceId: string): Promise<void> {
+  await prisma.$queryRawUnsafe(
+    `UPDATE processing_locks
+     SET locked_at = '2000-01-01T00:00:00Z', locked_by = NULL
+     WHERE lock_key = $1 AND locked_by = $2`,
+    LOCK_KEY,
+    instanceId
+  );
+}
+
+/**
  * Run the processing loop directly (called via waitUntil from API routes).
- * Same logic as the cron, but without HTTP auth. Uses advisory lock to prevent
- * concurrent execution with the cron.
+ * Same logic as the cron, but without HTTP auth. Uses a row-based lock with
+ * auto-expiry to prevent concurrent execution — serverless-safe.
  */
 export async function runProcessingLoop(): Promise<void> {
-  const ADVISORY_LOCK_ID = 42;
   const MAX_RUNTIME_MS = 25_000;
   const startTime = Date.now();
+  const instanceId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   try {
-    const lockResult = await prisma.$queryRawUnsafe<{ locked: boolean }[]>(
-      `SELECT pg_try_advisory_lock(${ADVISORY_LOCK_ID}) as locked`
-    );
-    if (!lockResult[0]?.locked) {
+    const acquired = await acquireRowLock(instanceId);
+    if (!acquired) {
       console.log('[QueueTrigger] Another instance is already processing, skipping');
       return;
     }
@@ -603,9 +633,7 @@ export async function runProcessingLoop(): Promise<void> {
         }
       }
     } finally {
-      await prisma.$queryRawUnsafe(
-        `SELECT pg_advisory_unlock(${ADVISORY_LOCK_ID})`
-      );
+      await releaseRowLock(instanceId);
     }
   } catch (error) {
     console.error('[QueueTrigger] Error:', error instanceof Error ? error.message : error);
