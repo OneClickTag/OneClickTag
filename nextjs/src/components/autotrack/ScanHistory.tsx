@@ -50,7 +50,7 @@ export function ScanHistoryList({ scans, onSelectScan, activeScanId }: ScanHisto
 
   if (scans.length === 0) return null;
 
-  const availableStatuses = [...new Set(scans.map(s => s.status))];
+  const availableStatuses = Array.from(new Set(scans.map(s => s.status)));
 
   return (
     <div className="bg-white rounded-lg border p-4">
