@@ -25,6 +25,8 @@ import { createBehavioralOpportunities } from '../constants/behavioral-tracking'
 import { LOGIN_CLASSIFY_PATTERNS, isLoginUrl as isLoginUrlCheck } from '../constants/login-patterns';
 import { broadcastScanProgress, pageCrawledEvent, chunkCompleteEvent } from '@/lib/supabase/scan-progress';
 import { createStealthBrowser, createStealthContext, warmUpSession } from './stealth-config';
+import { fetchWithFallback, createBrowserWithFallback } from './zenrows-client';
+import { createCreditTracker } from './credit-tracker';
 
 // ========================================
 // Types
@@ -89,6 +91,8 @@ export interface ChunkResult {
     requiresMfa?: boolean;
     requiresCaptcha?: boolean;
   };
+  /** ZenRows credits used in this chunk */
+  zenrowsCreditsUsed?: number;
 }
 
 export interface Phase2ChunkResult {
@@ -172,15 +176,12 @@ export async function processPhase1ChunkPlaywright(
     };
   }
 
-  // Launch stealth browser for this chunk
-  const browser = await createStealthBrowser();
-  const context = await createStealthContext(browser);
+  // Launch stealth browser for this chunk (with ZenRows fallback if blocked)
+  const creditTracker = createCreditTracker(scanId);
+  const { browser, context, isRemote, cleanup: cleanupBrowser } = await createBrowserWithFallback(scan.websiteUrl);
 
-  // Warm up session (resolve Cloudflare challenges, set cookies)
-  await warmUpSession(context, scan.websiteUrl);
-
-  // Restore cookies if available (session persistence between chunks)
-  if (scan.sessionCookies) {
+  // Restore cookies if available and using local browser (session persistence between chunks)
+  if (scan.sessionCookies && !isRemote) {
     await restoreCookies(context, scan.sessionCookies as string);
   }
 
@@ -570,8 +571,8 @@ export async function processPhase1ChunkPlaywright(
       }
     }
 
-    // Serialize cookies for session persistence between chunks
-    const serializedCookies = await serializeCookies(context);
+    // Serialize cookies for session persistence between chunks (only for local browser)
+    const serializedCookies = !isRemote ? await serializeCookies(context) : null;
 
     // Determine if there are more pages to process
     const hasMore = urlQueue.length > 0 && crawledSet.size < scan.maxPages;
@@ -614,9 +615,11 @@ export async function processPhase1ChunkPlaywright(
       interactionsPerformed: discovery.totalInteractions,
       authenticatedPages: discovery.authenticatedPagesCount,
       authResult,
+      zenrowsCreditsUsed: creditTracker.totalCredits,
     };
   } finally {
-    await browser.close();
+    await cleanupBrowser();
+    await creditTracker.persist();
   }
 }
 
@@ -627,6 +630,7 @@ export async function processPhase1ChunkPlaywright(
 /**
  * Process a chunk of Phase 1 pages using fetch + node-html-parser (no Playwright).
  * 10-50x faster than Playwright-based crawling. Processes 25 URLs per chunk.
+ * Uses ZenRows fallback when local fetch is blocked by bot detection.
  */
 export async function processPhase1Chunk(
   scanId: string,
@@ -689,6 +693,7 @@ export async function processPhase1Chunk(
   }
 
   let consecutiveFailures = 0;
+  const creditTracker = createCreditTracker(scanId);
 
   for (const item of toProcess) {
     // Check cancellation
@@ -706,8 +711,8 @@ export async function processPhase1Chunk(
 
     // Wrap page crawl in try/catch for error resilience
     try {
-      // Fetch page HTML (no Playwright)
-      const fetchResult = await fetchPage(item.url);
+      // Fetch page HTML with ZenRows fallback if blocked
+      const fetchResult = await fetchWithFallback(item.url, creditTracker);
       if (!fetchResult) {
         // Fetch failed — skip but don't break the loop
         consecutiveFailures++;
@@ -853,6 +858,9 @@ export async function processPhase1Chunk(
     }
   }
 
+  // Persist credit tracker
+  await creditTracker.persist();
+
   // Determine if there are more pages to process
   const hasMore = urlQueue.length > 0 && crawledSet.size < scan.maxPages;
   discovery.totalUrlsDiscovered = crawledSet.size + urlQueue.length;
@@ -886,6 +894,7 @@ export async function processPhase1Chunk(
     newPages,
     loginDetected: loginDetected || undefined,
     loginUrl: loginUrl || undefined,
+    zenrowsCreditsUsed: creditTracker.totalCredits,
   };
 }
 
@@ -895,6 +904,7 @@ export async function processPhase1Chunk(
 
 /**
  * Process a chunk of Phase 2 pages (Playwright element extraction + tracking detection).
+ * Uses ZenRows browser fallback when local Playwright is blocked.
  */
 export async function processPhase2Chunk(
   scanId: string,
@@ -960,8 +970,14 @@ export async function processPhase2Chunk(
 
   const pageUrls = pagesToProcess.map(p => p.url);
 
-  // Extract interactive elements with Playwright
-  const elements = await extractElements(scan.websiteUrl, pageUrls);
+  // Extract interactive elements with Playwright (ZenRows browser fallback if blocked)
+  const { browser: p2Browser, context: p2Context, cleanup: p2Cleanup } = await createBrowserWithFallback(scan.websiteUrl);
+  let elements: Map<string, ExtractedElement[]>;
+  try {
+    elements = await extractElements(scan.websiteUrl, pageUrls, { browser: p2Browser, context: p2Context });
+  } finally {
+    await p2Cleanup();
+  }
 
   // Build CrawledPage objects
   const crawledPages: CrawledPage[] = pagesToProcess.map(sp => ({

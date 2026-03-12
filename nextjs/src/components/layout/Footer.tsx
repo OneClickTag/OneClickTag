@@ -127,7 +127,7 @@ export function Footer({ config: serverConfig }: FooterProps = {}) {
 
   const config = React.useMemo(() => {
     const rawConfig = serverConfig || fetchedConfig
-    if (!rawConfig || (!rawConfig.brandName && !rawConfig.sections?.length)) {
+    if (!rawConfig) {
       return defaultFooterConfig
     }
 

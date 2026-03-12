@@ -1,9 +1,10 @@
 'use client';
 
-import { useMemo, useRef, useEffect } from 'react';
+import { useMemo, useRef, useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { LiveDiscovery } from '@/types/site-scanner';
-import { FileText, MousePointerClick, Lock } from 'lucide-react';
+import { FileText, MousePointerClick, Lock, List, GitBranch } from 'lucide-react';
+import { SiteStructureTree } from './SiteStructureTree';
 
 interface UrlDiscoveryFeedProps {
   discovery: LiveDiscovery;
@@ -34,6 +35,7 @@ export function UrlDiscoveryFeed({ discovery, newPages }: UrlDiscoveryFeedProps)
   const { pageTypes } = discovery;
   const feedRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef(0);
+  const [view, setView] = useState<'feed' | 'tree'>('feed');
 
   const typeEntries = useMemo(() => {
     return Object.entries(pageTypes)
@@ -42,19 +44,50 @@ export function UrlDiscoveryFeed({ discovery, newPages }: UrlDiscoveryFeedProps)
 
   const totalPages = typeEntries.reduce((sum, [, count]) => sum + count, 0);
 
-  // Auto-scroll to top when new pages arrive
+  // Extract domain from first page
+  const domain = useMemo(() => {
+    if (!newPages || newPages.length === 0) return '';
+    try {
+      return new URL(newPages[0].url).hostname;
+    } catch {
+      return '';
+    }
+  }, [newPages]);
+
+  // Auto-scroll to top when new pages arrive (feed view only)
   useEffect(() => {
-    if (newPages && newPages.length > prevCountRef.current && feedRef.current) {
+    if (view === 'feed' && newPages && newPages.length > prevCountRef.current && feedRef.current) {
       feedRef.current.scrollTop = 0;
     }
     prevCountRef.current = newPages?.length || 0;
-  }, [newPages?.length]);
+  }, [newPages?.length, view]);
 
   return (
     <div className="bg-white rounded-lg border p-4 space-y-3 max-h-[400px] flex flex-col">
       <div className="flex items-center justify-between">
         <h4 className="text-xs font-medium text-muted-foreground uppercase">URL Discovery</h4>
-        <span className="text-xs text-muted-foreground">{totalPages} pages found</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">{totalPages} pages found</span>
+          {/* View toggle */}
+          {newPages && newPages.length > 0 && (
+            <div className="flex border rounded-md overflow-hidden">
+              <button
+                className={`p-1 ${view === 'feed' ? 'bg-blue-100 text-blue-700' : 'text-gray-400 hover:text-gray-600'}`}
+                onClick={() => setView('feed')}
+                title="Live Feed"
+              >
+                <List className="h-3.5 w-3.5" />
+              </button>
+              <button
+                className={`p-1 ${view === 'tree' ? 'bg-blue-100 text-blue-700' : 'text-gray-400 hover:text-gray-600'}`}
+                onClick={() => setView('tree')}
+                title="Site Structure"
+              >
+                <GitBranch className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Page type distribution */}
@@ -72,8 +105,19 @@ export function UrlDiscoveryFeed({ discovery, newPages }: UrlDiscoveryFeedProps)
         </div>
       )}
 
-      {/* Live page feed */}
-      {newPages && newPages.length > 0 && (
+      {/* Tree view */}
+      {view === 'tree' && newPages && newPages.length > 0 && (
+        <div className="flex-1 overflow-hidden min-h-0">
+          <SiteStructureTree
+            pages={newPages}
+            domain={domain}
+            maxHeight="280px"
+          />
+        </div>
+      )}
+
+      {/* Feed view */}
+      {view === 'feed' && newPages && newPages.length > 0 && (
         <div ref={feedRef} className="flex-1 overflow-y-auto min-h-0">
           <h5 className="text-xs text-muted-foreground mb-1.5 sticky top-0 bg-white z-10 pb-1">
             Live Feed
@@ -84,13 +128,10 @@ export function UrlDiscoveryFeed({ discovery, newPages }: UrlDiscoveryFeedProps)
                 key={`${page.url}-${i}`}
                 className="flex items-center gap-2 py-1.5 px-2 rounded text-xs"
                 style={{
-                  // Newest items (first 3) get highlight background
                   backgroundColor: i < 3 ? 'rgb(239 246 255)' : 'rgb(249 250 251)',
-                  // Fade in animation for newest items
                   animation: i < 5 ? `fadeSlideIn 0.3s ease-out ${i * 50}ms both` : 'none',
                 }}
               >
-                {/* Live dot for newest items */}
                 {i < 3 && (
                   <span className="relative flex h-1.5 w-1.5 shrink-0">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />

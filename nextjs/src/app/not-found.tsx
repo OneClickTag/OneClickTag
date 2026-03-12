@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Home, ArrowLeft, Search, HelpCircle } from 'lucide-react';
+import { Footer } from '@/components/layout/Footer';
 
 export default function NotFound() {
   return (
@@ -108,10 +109,6 @@ export default function NotFound() {
           </span>
         </div>
 
-        {/* Footer */}
-        <p className="text-center text-sm text-gray-400 mt-6">
-          OneClickTag - Simplifying Google tracking setup
-        </p>
       </div>
 
       {/* Custom animation style */}
@@ -128,6 +125,8 @@ export default function NotFound() {
           animation: spin-slow 20s linear infinite;
         }
       `}</style>
+
+      <Footer />
     </div>
   );
 }

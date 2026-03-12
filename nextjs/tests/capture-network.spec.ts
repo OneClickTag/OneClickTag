@@ -62,7 +62,7 @@ test('Capture network requests on page load', async ({ page }) => {
 
       break;
     } catch (error) {
-      console.log(`❌ Failed to load ${url}: ${error.message}\n`);
+      console.log(`❌ Failed to load ${url}: ${(error as Error).message}\n`);
     }
   }
 

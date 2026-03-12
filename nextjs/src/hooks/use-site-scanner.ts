@@ -45,6 +45,7 @@ export const useScanDetail = (customerId: string, scanId: string | null, poll = 
     enabled: !!customerId && !!scanId,
     staleTime: poll ? 2000 : 10 * 1000,
     refetchInterval: poll ? 3000 : false,
+    placeholderData: (previousData) => previousData,
   });
 };
 

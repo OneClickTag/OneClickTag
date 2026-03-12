@@ -247,12 +247,14 @@ export interface ChunkResult {
   }>;
   loginDetected?: boolean;
   loginUrl?: string;
+  zenrowsCreditsUsed?: number;
 }
 
 export interface Phase2ChunkResult {
   pagesProcessed: number;
   hasMore: boolean;
   newRecommendations: number;
+  zenrowsCreditsUsed?: number;
 }
 
 export interface SiteCredential {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { Loader2, MapIcon, ListChecks, Zap, Wrench } from 'lucide-react';
+import { Loader2, MapIcon, ListChecks, Zap, Wrench, GitBranch } from 'lucide-react';
 import { ScanSummary, TrackingRecommendation } from '@/types/site-scanner';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -15,6 +15,7 @@ import { TrackingReadinessScore } from './TrackingReadinessScore';
 import { TechnologyDetection } from './TechnologyDetection';
 import { RecommendationsList } from './RecommendationsList';
 import { RouteRecommendationTree } from './RouteRecommendationTree';
+import { SiteStructureTree } from './discovery/SiteStructureTree';
 import { RecommendationFilters, FilterState } from './RecommendationFilters';
 import { BulkCreateProgress } from './BulkCreateProgress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -344,6 +345,10 @@ export function ScanResults({ customerId, scan, onCreateTracking, hasGoogleConne
             <ListChecks className="h-4 w-4" />
             All Recommendations ({scan.totalRecommendations || 0})
           </TabsTrigger>
+          <TabsTrigger value="site-structure" className="flex items-center gap-2">
+            <GitBranch className="h-4 w-4" />
+            Site Structure ({scanPages.length})
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="route-map" className="mt-4 space-y-4">
@@ -475,6 +480,28 @@ export function ScanResults({ customerId, scan, onCreateTracking, hasGoogleConne
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 No recommendations found.
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="site-structure" className="mt-4">
+          <div className="bg-white rounded-lg border p-4">
+            {scanPages.length > 0 ? (
+              <SiteStructureTree
+                pages={scanPages.map(p => ({
+                  url: p.url,
+                  title: p.title,
+                  pageType: p.pageType,
+                  hasForm: p.hasForm,
+                  hasCTA: p.hasCTA,
+                }))}
+                domain={(() => { try { return new URL(scan.websiteUrl).hostname; } catch { return scan.websiteUrl; } })()}
+                maxHeight="600px"
+              />
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                No pages discovered yet.
               </div>
             )}
           </div>

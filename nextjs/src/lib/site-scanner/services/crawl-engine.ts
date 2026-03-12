@@ -133,19 +133,27 @@ export async function crawl(
 
 /**
  * Extract elements from a page for tracking detection (Phase 2).
+ * If externalBrowser is provided, uses it instead of creating a new one.
+ * Caller manages cleanup when providing an external browser.
  */
 export async function extractElements(
   websiteUrl: string,
   pageUrls: string[],
+  externalBrowser?: { browser: Browser; context: BrowserContext },
 ): Promise<Map<string, ExtractedElement[]>> {
   let browser: Browser | null = null;
   let context: BrowserContext | null = null;
+  const managedLocally = !externalBrowser;
   const results = new Map<string, ExtractedElement[]>();
 
   try {
-    browser = await createStealthBrowser();
-
-    context = await createStealthContext(browser);
+    if (externalBrowser) {
+      browser = externalBrowser.browser;
+      context = externalBrowser.context;
+    } else {
+      browser = await createStealthBrowser();
+      context = await createStealthContext(browser);
+    }
 
     for (const url of pageUrls) {
       try {
@@ -166,8 +174,10 @@ export async function extractElements(
 
     return results;
   } finally {
-    if (context) await context.close().catch(() => {});
-    if (browser) await browser.close().catch(() => {});
+    if (managedLocally) {
+      if (context) await context.close().catch(() => {});
+      if (browser) await browser.close().catch(() => {});
+    }
   }
 }
 

@@ -17,6 +17,9 @@ import {
   ExternalLink,
   CheckCircle,
   XCircle,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -24,12 +27,22 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 export default function CustomersPage() {
   const router = useRouter();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [sortBy, setSortBy] = useState<string>('createdAt');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const pageSize = 10;
 
   useEffect(() => {
@@ -40,10 +53,23 @@ export default function CustomersPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+    setPage(1);
+  };
+
   const { data, isLoading, refetch } = useCustomers({
     page,
     limit: pageSize,
     search: debouncedSearch || undefined,
+    ...(statusFilter !== 'ALL' && { status: statusFilter }),
+    sortBy,
+    sortOrder,
   });
 
   const deleteCustomer = useDeleteCustomer();
@@ -55,10 +81,21 @@ export default function CustomersPage() {
     }
   };
 
+  const SortIcon = ({ field }: { field: string }) => {
+    if (sortBy !== field) return <ArrowUpDown className="ml-1 h-3 w-3 text-muted-foreground" />;
+    return sortOrder === 'asc'
+      ? <ArrowUp className="ml-1 h-3 w-3" />
+      : <ArrowDown className="ml-1 h-3 w-3" />;
+  };
+
   const columns = [
     {
       accessorKey: 'fullName',
-      header: 'Name',
+      header: () => (
+        <button className="flex items-center hover:text-foreground" onClick={() => handleSort('fullName')}>
+          Name <SortIcon field="fullName" />
+        </button>
+      ),
       cell: ({ row }: { row: { original: { id: string; fullName: string; email: string } } }) => (
         <div>
           <Link
@@ -73,12 +110,20 @@ export default function CustomersPage() {
     },
     {
       accessorKey: 'company',
-      header: 'Company',
+      header: () => (
+        <button className="flex items-center hover:text-foreground" onClick={() => handleSort('company')}>
+          Company <SortIcon field="company" />
+        </button>
+      ),
       cell: ({ row }: { row: { original: { company?: string } } }) => row.original.company || '-',
     },
     {
       accessorKey: 'status',
-      header: 'Status',
+      header: () => (
+        <button className="flex items-center hover:text-foreground" onClick={() => handleSort('status')}>
+          Status <SortIcon field="status" />
+        </button>
+      ),
       cell: ({ row }: { row: { original: { status: string } } }) => (
         <span
           className={`rounded-full px-2 py-1 text-xs font-medium ${
@@ -156,6 +201,23 @@ export default function CustomersPage() {
                 className="pl-10"
               />
             </div>
+            <Select
+              value={statusFilter}
+              onValueChange={(value) => {
+                setStatusFilter(value);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="All Statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All Statuses</SelectItem>
+                <SelectItem value="ACTIVE">Active</SelectItem>
+                <SelectItem value="INACTIVE">Inactive</SelectItem>
+                <SelectItem value="SUSPENDED">Suspended</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardHeader>
         <CardContent>

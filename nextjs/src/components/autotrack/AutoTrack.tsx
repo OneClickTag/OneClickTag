@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { AlertCircle, RefreshCw } from 'lucide-react';
+import { AlertCircle, RefreshCw, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   useScanHistory,
@@ -15,6 +15,7 @@ import {
   useAutoRegister,
 } from '@/hooks/use-site-scanner';
 import { SiteScanStatus, TrackingRecommendation } from '@/types/site-scanner';
+import { useScanUIState, ScanUIPhase } from '@/hooks/use-scan-ui-state';
 import { ScanLauncher } from './ScanLauncher';
 import { ScanDiscoveryDashboard } from './ScanDiscoveryDashboard';
 import { ScanProgress } from './ScanProgress';
@@ -44,7 +45,8 @@ export function AutoTrack({ customerId, customerWebsiteUrl, hasGoogleConnected, 
   // Queries
   const { data: scanHistory } = useScanHistory(customerId);
   const shouldPoll = activeScanId !== null;
-  const { data: scanDetail } = useScanDetail(customerId, activeScanId, shouldPoll);
+  const scanDetailQuery = useScanDetail(customerId, activeScanId, shouldPoll);
+  const scanDetail = scanDetailQuery.data;
 
   // Mutations
   const startScan = useStartScan();
@@ -56,6 +58,19 @@ export function AutoTrack({ customerId, customerWebsiteUrl, hasGoogleConnected, 
 
   // Chunked scan orchestration
   const chunkedScan = useChunkedScan(customerId, activeScanId);
+
+  // Derive UI phase from all state sources
+  const dbStatus = scanDetail?.status as SiteScanStatus | undefined;
+  const { isProcessing, phase: chunkPhase, error: chunkError } = chunkedScan;
+  const uiPhase = useScanUIState({
+    activeScanId,
+    dbStatus,
+    isDbLoading: scanDetailQuery.isLoading,
+    isChunking: isProcessing,
+    chunkPhase,
+    chunkError,
+    hasPreviousData: scanDetailQuery.isPlaceholderData || !!scanDetail,
+  });
 
   // Auto-select the latest active/completed scan on load
   useEffect(() => {
@@ -73,32 +88,22 @@ export function AutoTrack({ customerId, customerWebsiteUrl, hasGoogleConnected, 
   useEffect(() => {
     if (chunkedScan.loginDetected && !showCredentialPrompt && !credentialSkippedRef.current) {
       setShowCredentialPrompt(true);
-      // Don't stop processing - scan continues crawling non-protected pages
-      // while credential prompt is visible. Credentials will be added to
-      // subsequent chunk requests if provided.
     }
-  }, [chunkedScan.loginDetected, showCredentialPrompt, chunkedScan]);
+  }, [chunkedScan.loginDetected, showCredentialPrompt]);
 
-  // Determine current display state from scan detail + chunked state
-  const dbStatus = scanDetail?.status as SiteScanStatus | undefined;
-  const isChunking = chunkedScan.isProcessing;
-  const chunkPhase = chunkedScan.phase;
-
-  // Phase 1 is active when: chunks are processing in phase1, or detecting niche
-  const isPhase1Active = isChunking && (chunkPhase === 'phase1' || chunkPhase === 'detecting_niche');
-  // Phase 2 is active when: chunks processing in phase2, or finalizing
-  const isPhase2Active = isChunking && (chunkPhase === 'phase2' || chunkPhase === 'finalizing');
-  // Niche phase: scan is NICHE_DETECTED and we're not chunking
-  const isNichePhase = !isChunking && (dbStatus === 'NICHE_DETECTED' || dbStatus === 'AWAITING_CONFIRMATION');
-  // Terminal states
-  const isCompleted = dbStatus === 'COMPLETED';
-  const isFailed = dbStatus === 'FAILED' || (!isChunking && !!chunkedScan.error);
-  const isCancelled = dbStatus === 'CANCELLED';
-  // Idle means no active scan or scan is terminal
-  const isIdle = !activeScanId || isCompleted || isFailed || isCancelled;
-  // Scan in CRAWLING but not being processed (e.g. page refresh)
-  const needsResume = !isChunking && !isNichePhase && !isCompleted && !isFailed && !isCancelled &&
-    (dbStatus === 'CRAWLING' || dbStatus === 'DISCOVERING');
+  // Auto-start Phase 1 chunks when scan enters CRAWLING
+  useEffect(() => {
+    if (
+      activeScanId &&
+      (dbStatus === 'CRAWLING' || dbStatus === 'DISCOVERING') &&
+      !isProcessing &&
+      chunkPhase === 'idle' &&
+      !phase1StartedRef.current
+    ) {
+      phase1StartedRef.current = true;
+      chunkedScan.startPhase1();
+    }
+  }, [activeScanId, dbStatus, isProcessing, chunkPhase]);
 
   const handleStartScan = async (websiteUrl?: string, maxPages?: number, maxDepth?: number) => {
     try {
@@ -118,20 +123,6 @@ export function AutoTrack({ customerId, customerWebsiteUrl, hasGoogleConnected, 
     }
   };
 
-  // Auto-start Phase 1 chunks when scan enters CRAWLING
-  useEffect(() => {
-    if (
-      activeScanId &&
-      (dbStatus === 'CRAWLING' || dbStatus === 'DISCOVERING') &&
-      !chunkedScan.isProcessing &&
-      chunkedScan.phase === 'idle' &&
-      !phase1StartedRef.current
-    ) {
-      phase1StartedRef.current = true;
-      chunkedScan.startPhase1();
-    }
-  }, [activeScanId, dbStatus, chunkedScan]);
-
   const handleConfirmNiche = async (niche: string) => {
     if (!activeScanId) return;
     try {
@@ -140,7 +131,6 @@ export function AutoTrack({ customerId, customerWebsiteUrl, hasGoogleConnected, 
         scanId: activeScanId,
         data: { niche },
       });
-      // After niche confirmed, start Phase 2 chunk loop
       chunkedScan.startPhase2();
     } catch (error) {
       console.error('Failed to confirm niche:', error);
@@ -164,12 +154,12 @@ export function AutoTrack({ customerId, customerWebsiteUrl, hasGoogleConnected, 
     if (!activeScanId) return;
     phase1StartedRef.current = false;
     chunkedScan.reset();
-    // The useEffect above will auto-start Phase 1
   };
 
   const handleSelectScan = (scanId: string) => {
-    chunkedScan.reset();
+    chunkedScan.stopProcessing();
     phase1StartedRef.current = false;
+    chunkedScan.reset();
     setActiveScanId(scanId);
     setShowCredentialPrompt(false);
   };
@@ -186,9 +176,7 @@ export function AutoTrack({ customerId, customerWebsiteUrl, hasGoogleConnected, 
 
   const handleSaveCredential = async (username: string, password: string, saveForFuture = true, mfaCode?: string) => {
     if (!activeScanId) return;
-
     try {
-      // Provide credentials to the current scan to resume processing
       await provideCredentials.mutateAsync({
         customerId,
         scanId: activeScanId,
@@ -196,12 +184,7 @@ export function AutoTrack({ customerId, customerWebsiteUrl, hasGoogleConnected, 
         password,
         saveForFuture,
       });
-
-      // Store credentials in chunked scan state for subsequent chunk requests
-      // They will be included in subsequent chunk API calls automatically
       chunkedScan.setCredentials({ username, password });
-
-      // Hide the credential prompt - processing is still running
       setShowCredentialPrompt(false);
     } catch (error) {
       console.error('Failed to provide credentials:', error);
@@ -213,23 +196,17 @@ export function AutoTrack({ customerId, customerWebsiteUrl, hasGoogleConnected, 
     try {
       setAutoRegisterStatus('finding_signup');
       setAutoRegisterError(null);
-
-      // Brief delay then update to 'creating_account' for UX
       setTimeout(() => setAutoRegisterStatus('creating_account'), 2000);
-
       const result = await autoRegister.mutateAsync({
         customerId,
         scanId: activeScanId,
       });
-
       if (result.success && result.credentials) {
         setAutoRegisterStatus('success');
-        // Use the auto-registered credentials for subsequent chunks
         chunkedScan.setCredentials({
           username: result.credentials.email,
           password: result.credentials.password,
         });
-        // Hide prompt after a brief success display
         setTimeout(() => setShowCredentialPrompt(false), 2000);
       } else {
         setAutoRegisterStatus('failed');
@@ -243,16 +220,134 @@ export function AutoTrack({ customerId, customerWebsiteUrl, hasGoogleConnected, 
 
   const pastScans = scanHistory?.filter(s => s.id !== activeScanId) || [];
 
+  // Render based on single UI phase
+  const renderContent = () => {
+    switch (uiPhase) {
+      case 'loading':
+        return (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        );
+
+      case 'phase1':
+      case 'detecting_niche':
+        return (
+          <ScanDiscoveryDashboard
+            websiteUrl={scanDetail?.websiteUrl || customerWebsiteUrl || ''}
+            pagesProcessed={chunkedScan.pagesProcessed}
+            totalPages={chunkedScan.totalPages}
+            discovery={chunkedScan.discovery}
+            isDetectingNiche={uiPhase === 'detecting_niche'}
+            loginDetected={chunkedScan.loginDetected}
+            loginUrl={chunkedScan.loginUrl}
+            newPages={chunkedScan.accumulatedPages}
+            onCancel={handleCancelScan}
+            isCancelling={cancelScan.isPending}
+            onSaveCredential={handleSaveCredential}
+            onSkipCredential={() => {
+              credentialSkippedRef.current = true;
+              setShowCredentialPrompt(false);
+            }}
+            isSavingCredential={provideCredentials.isPending}
+            showCredentialPrompt={showCredentialPrompt}
+            onAutoRegister={handleAutoRegister}
+            isAutoRegistering={autoRegister.isPending}
+            autoRegisterStatus={autoRegisterStatus}
+            autoRegisterError={autoRegisterError}
+            obstaclesDismissed={chunkedScan.obstaclesDismissed}
+            totalInteractions={chunkedScan.totalInteractions}
+            authenticatedPagesCount={chunkedScan.authenticatedPagesCount}
+            scanId={activeScanId}
+          />
+        );
+
+      case 'needs_resume':
+        return (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center justify-between">
+            <div>
+              <h3 className="font-medium text-amber-900">Scan In Progress</h3>
+              <p className="text-sm text-amber-700">
+                This scan was interrupted. Resume to continue processing.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleCancelScan} disabled={cancelScan.isPending}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleResume}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Resume
+              </Button>
+            </div>
+          </div>
+        );
+
+      case 'phase2':
+      case 'finalizing':
+        return (
+          <ScanProgress
+            status={uiPhase === 'finalizing' ? 'ANALYZING' : 'DEEP_CRAWLING'}
+            progress={{
+              pagesScanned: chunkedScan.pagesProcessed,
+              percentage: 0,
+              step: uiPhase === 'finalizing' ? 'Generating recommendations...' : 'Extracting interactive elements...',
+            }}
+            onCancel={handleCancelScan}
+            isCancelling={cancelScan.isPending}
+          />
+        );
+
+      case 'niche_confirm':
+        return (
+          <NicheVerification
+            scan={scanDetail || null}
+            nicheData={null}
+            onConfirm={handleConfirmNiche}
+            isConfirming={confirmNiche.isPending}
+            onCancel={handleCancelScan}
+            isCancelling={cancelScan.isPending}
+          />
+        );
+
+      case 'completed':
+        return scanDetail ? (
+          <ScanResults customerId={customerId} scan={scanDetail} onCreateTracking={onCreateTracking} hasGoogleConnected={hasGoogleConnected} />
+        ) : null;
+
+      case 'failed':
+        return (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertCircle className="h-5 w-5 text-red-500" />
+              <h3 className="font-semibold text-red-800">Scan Failed</h3>
+            </div>
+            <p className="text-sm text-red-700">
+              {chunkedScan.error || scanDetail?.errorMessage || 'An unknown error occurred during the scan.'}
+            </p>
+            <Button variant="outline" size="sm" className="mt-3" onClick={handleReset}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Try Again
+            </Button>
+          </div>
+        );
+
+      case 'cancelled':
+      case 'idle':
+      default:
+        return (
+          <ScanLauncher
+            defaultUrl={customerWebsiteUrl}
+            onStartScan={handleStartScan}
+            isLoading={startScan.isPending}
+          />
+        );
+    }
+  };
+
   return (
     <div className="space-y-4">
-      {/* Show launcher when idle */}
-      {isIdle && (
-        <ScanLauncher
-          defaultUrl={customerWebsiteUrl}
-          onStartScan={handleStartScan}
-          isLoading={startScan.isPending}
-        />
-      )}
+      {renderContent()}
 
       {/* Error from start */}
       {startScan.isError && (
@@ -261,106 +356,6 @@ export function AutoTrack({ customerId, customerWebsiteUrl, hasGoogleConnected, 
           <span className="text-sm text-red-700">
             {(startScan.error as Error)?.message || 'Failed to start scan'}
           </span>
-        </div>
-      )}
-
-      {/* Phase 1: Discovery Dashboard */}
-      {isPhase1Active && (
-        <ScanDiscoveryDashboard
-          websiteUrl={scanDetail?.websiteUrl || customerWebsiteUrl || ''}
-          pagesProcessed={chunkedScan.pagesProcessed}
-          totalPages={chunkedScan.totalPages}
-          discovery={chunkedScan.discovery}
-          isDetectingNiche={chunkPhase === 'detecting_niche'}
-          loginDetected={chunkedScan.loginDetected}
-          loginUrl={chunkedScan.loginUrl}
-          newPages={chunkedScan.accumulatedPages}
-          onCancel={handleCancelScan}
-          isCancelling={cancelScan.isPending}
-          onSaveCredential={handleSaveCredential}
-          onSkipCredential={() => {
-            credentialSkippedRef.current = true;
-            setShowCredentialPrompt(false);
-          }}
-          isSavingCredential={provideCredentials.isPending}
-          showCredentialPrompt={showCredentialPrompt}
-          onAutoRegister={handleAutoRegister}
-          isAutoRegistering={autoRegister.isPending}
-          autoRegisterStatus={autoRegisterStatus}
-          autoRegisterError={autoRegisterError}
-          obstaclesDismissed={chunkedScan.obstaclesDismissed}
-          totalInteractions={chunkedScan.totalInteractions}
-          authenticatedPagesCount={chunkedScan.authenticatedPagesCount}
-          scanId={activeScanId}
-        />
-      )}
-
-      {/* Resume banner for interrupted scans */}
-      {needsResume && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center justify-between">
-          <div>
-            <h3 className="font-medium text-amber-900">Scan In Progress</h3>
-            <p className="text-sm text-amber-700">
-              This scan was interrupted. Resume to continue processing.
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={handleCancelScan} disabled={cancelScan.isPending}>
-              Cancel
-            </Button>
-            <Button size="sm" onClick={handleResume}>
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Resume
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Phase 2: Simpler progress */}
-      {isPhase2Active && (
-        <ScanProgress
-          status={chunkPhase === 'finalizing' ? 'ANALYZING' : 'DEEP_CRAWLING'}
-          progress={{
-            pagesScanned: chunkedScan.pagesProcessed,
-            percentage: 0, // Phase 2 doesn't have a total count upfront
-            step: chunkPhase === 'finalizing' ? 'Generating recommendations...' : 'Extracting interactive elements...',
-          }}
-          onCancel={handleCancelScan}
-          isCancelling={cancelScan.isPending}
-        />
-      )}
-
-      {/* Niche Verification */}
-      {isNichePhase && (
-        <NicheVerification
-          scan={scanDetail || null}
-          nicheData={null}
-          onConfirm={handleConfirmNiche}
-          isConfirming={confirmNiche.isPending}
-          onCancel={handleCancelScan}
-          isCancelling={cancelScan.isPending}
-        />
-      )}
-
-      {/* Results */}
-      {isCompleted && scanDetail && (
-        <ScanResults customerId={customerId} scan={scanDetail} onCreateTracking={onCreateTracking} hasGoogleConnected={hasGoogleConnected} />
-      )}
-
-      {/* Failed */}
-      {isFailed && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <AlertCircle className="h-5 w-5 text-red-500" />
-            <h3 className="font-semibold text-red-800">Scan Failed</h3>
-          </div>
-          <p className="text-sm text-red-700">
-            {chunkedScan.error || scanDetail?.errorMessage || 'An unknown error occurred during the scan.'}
-          </p>
-          <Button variant="outline" size="sm" className="mt-3" onClick={handleReset}>
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Try Again
-          </Button>
         </div>
       )}
 

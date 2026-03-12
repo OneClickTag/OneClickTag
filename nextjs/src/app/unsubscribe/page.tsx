@@ -8,6 +8,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { MailX, CheckCircle, AlertCircle, ArrowRight, Loader2, Mail } from 'lucide-react';
+import { Footer } from '@/components/layout/Footer';
 
 type UnsubscribeStatus = 'loading' | 'confirm' | 'processing' | 'success' | 'already' | 'error' | 'invalid';
 
@@ -337,11 +338,9 @@ export default function UnsubscribePage() {
           </Suspense>
         </div>
 
-        {/* Footer */}
-        <p className="text-center text-sm text-gray-500 mt-6">
-          OneClickTag - Simplifying Google tracking setup
-        </p>
       </div>
+
+      <Footer />
     </div>
   );
 }

@@ -1305,6 +1305,10 @@ model SiteScan {
   totalInteractions       Int   @default(0)
   sessionCookies          Json?
 
+  // ZenRows credit tracking
+  zenrowsCreditsUsed     Int    @default(0)
+  zenrowsCreditBreakdown Json?
+
   // Relations
   pages           ScanPage[]
   recommendations TrackingRecommendation[]
