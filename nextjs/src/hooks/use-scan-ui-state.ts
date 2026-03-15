@@ -110,11 +110,11 @@ export function useScanUIState({
     phase = 'idle';
   }
 
-  // Prevent flashing through idle during transitions
-  // If we were in an active phase and now would go to idle briefly, keep previous phase
+  // Prevent flashing through idle/loading during transitions
+  // If we were in an active phase and now would go to idle or loading briefly, keep previous phase
   const isActivePhase = (p: ScanUIPhase) =>
     !['idle', 'loading', 'completed', 'failed', 'cancelled'].includes(p);
-  if (phase === 'idle' && isActivePhase(prevPhaseRef.current) && activeScanId) {
+  if ((phase === 'idle' || phase === 'loading') && isActivePhase(prevPhaseRef.current) && activeScanId) {
     phase = prevPhaseRef.current;
   }
 

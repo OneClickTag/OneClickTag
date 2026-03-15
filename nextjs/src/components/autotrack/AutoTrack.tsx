@@ -43,7 +43,7 @@ export function AutoTrack({ customerId, customerWebsiteUrl, hasGoogleConnected, 
   const phase1StartedRef = useRef(false);
 
   // Queries
-  const { data: scanHistory } = useScanHistory(customerId);
+  const { data: scanHistory, isLoading: isLoadingHistory } = useScanHistory(customerId);
   const shouldPoll = activeScanId !== null;
   const scanDetailQuery = useScanDetail(customerId, activeScanId, shouldPoll);
   const scanDetail = scanDetailQuery.data;
@@ -222,6 +222,15 @@ export function AutoTrack({ customerId, customerWebsiteUrl, hasGoogleConnected, 
 
   // Render based on single UI phase
   const renderContent = () => {
+    // Show loader while loading initial scan history (prevents flash to ScanLauncher)
+    if (isLoadingHistory && !activeScanId) {
+      return (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+
     switch (uiPhase) {
       case 'loading':
         return (
