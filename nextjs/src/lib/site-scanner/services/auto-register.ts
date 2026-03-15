@@ -1,6 +1,6 @@
-import { Browser, Page } from 'playwright-core';
+import { Page } from 'playwright-core';
 import { randomUUID } from 'crypto';
-import { createStealthBrowser, createStealthContext } from './stealth-config';
+import { createBrowserWithFallback } from './zenrows-client';
 import { humanType, humanClick, humanDelay, spaFill } from './human-interaction';
 import { dismissObstacles } from './obstacle-handler';
 
@@ -64,10 +64,11 @@ export async function autoRegisterAccount(
   loginUrl: string,
   websiteUrl: string,
 ): Promise<AutoRegisterResult> {
-  let browser: Browser | null = null;
+  let cleanupFn: (() => Promise<void>) | null = null;
   try {
-    browser = await createStealthBrowser();
-    const context = await createStealthContext(browser);
+    const browserResult = await createBrowserWithFallback(websiteUrl);
+    cleanupFn = browserResult.cleanup;
+    const context = browserResult.context;
     const page = await context.newPage();
     page.setDefaultTimeout(15000);
 
@@ -215,7 +216,7 @@ export async function autoRegisterAccount(
     console.error('[AutoRegister] Error during auto-registration:', error);
     return { success: false, error: error?.message || 'Auto-registration failed' };
   } finally {
-    if (browser) await browser.close();
+    if (cleanupFn) await cleanupFn();
   }
 }
 
