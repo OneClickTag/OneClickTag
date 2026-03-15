@@ -213,25 +213,48 @@ export function ScanDiscoveryDashboard({
       )}
 
       {/* Discovery panels */}
-      {discovery && (
+      {discovery ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Left column: Tech + Elements */}
           <div className="space-y-4">
             <TechPanel discovery={discovery} />
             <PriorityElementsPanel discovery={discovery} />
           </div>
-          {/* Right column: URL feed */}
           <UrlDiscoveryFeed discovery={discovery} newPages={newPages} />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="space-y-4">
+            <div className="bg-gray-50 rounded-lg border p-4 animate-pulse">
+              <div className="h-4 bg-gray-200 rounded w-32 mb-3" />
+              <div className="space-y-2">
+                <div className="h-3 bg-gray-200 rounded w-full" />
+                <div className="h-3 bg-gray-200 rounded w-3/4" />
+              </div>
+            </div>
+            <div className="bg-gray-50 rounded-lg border p-4 animate-pulse">
+              <div className="h-4 bg-gray-200 rounded w-40 mb-3" />
+              <div className="space-y-2">
+                <div className="h-3 bg-gray-200 rounded w-full" />
+                <div className="h-3 bg-gray-200 rounded w-2/3" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-gray-50 rounded-lg border p-4 animate-pulse">
+            <div className="h-4 bg-gray-200 rounded w-36 mb-3" />
+            <div className="space-y-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="h-3 bg-gray-200 rounded w-full" />
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
       {/* URLs discovered counter */}
-      {discovery && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1 border-t">
-          <Radio className="h-3 w-3 text-blue-500 animate-pulse" />
-          <span>{discovery.totalUrlsDiscovered} total URLs discovered</span>
-        </div>
-      )}
+      <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1 border-t">
+        <Radio className="h-3 w-3 text-blue-500 animate-pulse" />
+        <span>{discovery ? `${discovery.totalUrlsDiscovered} total URLs discovered` : 'Discovering URLs...'}</span>
+      </div>
     </div>
   );
 }
