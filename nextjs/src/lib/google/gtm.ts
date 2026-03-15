@@ -242,16 +242,26 @@ export async function setupWorkspaceEssentials(
   accountId: string,
   containerId: string,
   workspaceId: string
-): Promise<{ allPagesTriggerIds: string[] }> {
-  // 1. Enable built-in variables
-  try {
-    await enableBuiltInVariables(gtm, accountId, containerId, workspaceId);
-  } catch (error) {
-    console.warn('[GTM] Failed to enable built-in variables (non-blocking):', error);
-  }
+): Promise<{
+  allPagesTriggerIds: string[];
+  cachedTriggers: tagmanager_v2.Schema$Trigger[];
+  cachedTags: tagmanager_v2.Schema$Tag[];
+}> {
+  // Run all independent list/setup operations in parallel
+  const [, existingTriggers, existingTags, existingVars] = await Promise.all([
+    // 1. Enable built-in variables
+    enableBuiltInVariables(gtm, accountId, containerId, workspaceId).catch((error) => {
+      console.warn('[GTM] Failed to enable built-in variables (non-blocking):', error);
+    }),
+    // 2. List triggers
+    listTriggers(gtm, accountId, containerId, workspaceId),
+    // 3. List tags
+    listTags(gtm, accountId, containerId, workspaceId),
+    // 4. List variables
+    listVariables(gtm, accountId, containerId, workspaceId).catch(() => [] as tagmanager_v2.Schema$Variable[]),
+  ]);
 
   // 2. Get or create "All Pages" trigger
-  const existingTriggers = await listTriggers(gtm, accountId, containerId, workspaceId);
   let allPagesTrigger = existingTriggers.find(
     (t) => t.name === 'All Pages' || t.name === 'All Pages - OneClickTag'
   );
@@ -268,51 +278,49 @@ export async function setupWorkspaceEssentials(
 
   const allPagesTriggerIds = allPagesTrigger.triggerId ? [allPagesTrigger.triggerId] : [];
 
-  // 3. Get or create "Conversion Linker" tag
-  const existingTags = await listTags(gtm, accountId, containerId, workspaceId);
+  // 3. Get or create "Conversion Linker" tag + 4. "Page Title" variable — in parallel
   const conversionLinker = existingTags.find(
     (t) => t.type === 'gclidw' || t.name === 'Conversion Linker' || t.name === 'Conversion Linker - OneClickTag'
   );
+  const pageTitleVar = existingVars.find(
+    (v) => v.name === 'Page Title' || v.name === 'Page Title - OneClickTag'
+  );
 
-  if (!conversionLinker) {
-    if (allPagesTriggerIds.length > 0) {
-      const tag = await createTag(gtm, accountId, containerId, workspaceId, {
+  const createOps: Promise<unknown>[] = [];
+
+  if (!conversionLinker && allPagesTriggerIds.length > 0) {
+    createOps.push(
+      createTag(gtm, accountId, containerId, workspaceId, {
         name: 'Conversion Linker - OneClickTag',
         type: 'gclidw',
         firingTriggerId: allPagesTriggerIds,
-      });
-      console.log(`[GTM] Created "Conversion Linker - OneClickTag" tag (${tag.tagId})`);
-    } else {
-      console.warn('[GTM] Cannot create Conversion Linker — no All Pages trigger ID');
-    }
-  } else {
+      }).then((tag) => console.log(`[GTM] Created "Conversion Linker - OneClickTag" tag (${tag.tagId})`))
+    );
+  } else if (conversionLinker) {
     console.log(`[GTM] Found existing Conversion Linker tag (${conversionLinker.tagId})`);
   }
 
-  // 4. Get or create "Page Title" custom variable
-  try {
-    const existingVars = await listVariables(gtm, accountId, containerId, workspaceId);
-    const pageTitleVar = existingVars.find(
-      (v) => v.name === 'Page Title' || v.name === 'Page Title - OneClickTag'
-    );
-
-    if (!pageTitleVar) {
-      const variable = await createVariable(gtm, accountId, containerId, workspaceId, {
+  if (!pageTitleVar) {
+    createOps.push(
+      createVariable(gtm, accountId, containerId, workspaceId, {
         name: 'Page Title - OneClickTag',
         type: 'jsm',
         parameter: [
           { type: 'TEMPLATE', key: 'javascript', value: 'function(){return document.title;}' },
         ],
-      });
-      console.log(`[GTM] Created "Page Title - OneClickTag" variable (${variable.variableId})`);
-    } else {
-      console.log(`[GTM] Found existing Page Title variable (${pageTitleVar.variableId})`);
-    }
-  } catch (error) {
-    console.warn('[GTM] Failed to create Page Title variable (non-blocking):', error);
+      })
+        .then((variable) => console.log(`[GTM] Created "Page Title - OneClickTag" variable (${variable.variableId})`))
+        .catch((error) => console.warn('[GTM] Failed to create Page Title variable (non-blocking):', error))
+    );
+  } else {
+    console.log(`[GTM] Found existing Page Title variable (${pageTitleVar.variableId})`);
   }
 
-  return { allPagesTriggerIds };
+  if (createOps.length > 0) {
+    await Promise.all(createOps);
+  }
+
+  return { allPagesTriggerIds, cachedTriggers: existingTriggers, cachedTags: existingTags };
 }
 
 export async function listTriggers(

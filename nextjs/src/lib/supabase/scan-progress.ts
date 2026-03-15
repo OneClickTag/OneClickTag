@@ -51,12 +51,32 @@ export async function broadcastScanProgress(
     }
 
     const channel = supabaseServer.channel(`scan:${scanId}`);
+
+    // Must subscribe before sending — Supabase drops messages from unsubscribed channels
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        supabaseServer.removeChannel(channel);
+        reject(new Error('Channel subscribe timeout'));
+      }, 3000);
+
+      channel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          clearTimeout(timeout);
+          resolve();
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          clearTimeout(timeout);
+          reject(new Error(`Channel subscribe failed: ${status}`));
+        }
+      });
+    });
+
     await channel.send({
       type: 'broadcast',
       event: 'scan_progress',
       payload: event,
     });
-    // Unsubscribe after sending to avoid leaking channels on server
+
+    // Clean up after sending
     supabaseServer.removeChannel(channel);
   } catch (err) {
     console.warn(`[ScanProgress] Failed to broadcast for scan ${scanId}:`, err);

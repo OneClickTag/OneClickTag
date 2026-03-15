@@ -247,36 +247,41 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Update tracking status to CREATING
-    await prisma.tracking.update({
-      where: { id: tracking.id },
-      data: { status: TrackingStatus.CREATING },
-    });
+    // Run Ads sync + GTM sync in parallel for speed
+    // GTM sync will poll DB for adsConversionLabel (set by Ads sync) when it needs it
+    const needsAds = destinations.includes(TrackingDestination.GOOGLE_ADS) || destinations.includes(TrackingDestination.BOTH);
 
-    // Run Ads sync FIRST (awaited) so adsConversionLabel is available for GTM sync
-    let adsJob = null;
-    if (destinations.includes(TrackingDestination.GOOGLE_ADS) || destinations.includes(TrackingDestination.BOTH)) {
-      try {
-        adsJob = await addAdsSyncJob({
+    const syncPromises: Promise<{ id: string; name: string; data: unknown }>[] = [];
+
+    if (needsAds) {
+      syncPromises.push(
+        addAdsSyncJob({
           trackingId: tracking.id,
           customerId,
           tenantId: session.tenantId,
           userId: session.id,
           action: 'create',
-        });
-      } catch (err: any) {
-        console.error('[Tracking] Ads sync failed, continuing with GTM sync:', err.message);
-      }
+        }).catch((err: any) => {
+          console.error('[Tracking] Ads sync failed:', err.message);
+          return { id: `failed-${Date.now()}`, name: 'ads-sync', data: null };
+        })
+      );
     }
 
-    // Then run GTM sync — now has access to adsConversionLabel via DB
-    const gtmJob = await addGTMSyncJob({
-      trackingId: tracking.id,
-      customerId,
-      tenantId: session.tenantId,
-      userId: session.id,
-      action: 'create',
-    });
+    syncPromises.push(
+      addGTMSyncJob({
+        trackingId: tracking.id,
+        customerId,
+        tenantId: session.tenantId,
+        userId: session.id,
+        action: 'create',
+      })
+    );
+
+    const results = await Promise.all(syncPromises);
+
+    const adsJob = needsAds ? results[0] : null;
+    const gtmJob = needsAds ? results[1] : results[0];
 
     return NextResponse.json(
       {

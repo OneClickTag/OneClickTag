@@ -48,12 +48,32 @@ export async function broadcastBatchProgress(
     }
 
     const channel = supabaseServer.channel(`batch:${batchId}`);
+
+    // Must subscribe before sending — Supabase drops messages from unsubscribed channels
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        supabaseServer.removeChannel(channel);
+        reject(new Error('Channel subscribe timeout'));
+      }, 3000);
+
+      channel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          clearTimeout(timeout);
+          resolve();
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          clearTimeout(timeout);
+          reject(new Error(`Channel subscribe failed: ${status}`));
+        }
+      });
+    });
+
     await channel.send({
       type: 'broadcast',
       event: 'batch_progress',
       payload: event,
     });
-    // Unsubscribe after sending to avoid leaking channels on server
+
+    // Clean up after sending
     supabaseServer.removeChannel(channel);
   } catch (err) {
     console.warn(`[BatchProgress] Failed to broadcast for batch ${batchId}:`, err);

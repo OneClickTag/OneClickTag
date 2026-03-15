@@ -24,29 +24,24 @@ import type { GTMSyncJob, AdsSyncJob } from './index';
 export async function executeGTMSync(data: GTMSyncJob): Promise<{ success: boolean }> {
   const { trackingId, customerId, tenantId, userId, action } = data;
 
-  const tracking = await prisma.tracking.findUnique({
-    where: { id: trackingId },
-    include: { customer: true },
-  });
+  // Run initial DB lookups in parallel
+  const [tracking, oauthToken] = await Promise.all([
+    prisma.tracking.findUnique({
+      where: { id: trackingId },
+      include: { customer: true },
+    }),
+    prisma.oAuthToken.findFirst({
+      where: { tenantId, provider: 'google', scope: 'gtm' },
+      select: { userId: true },
+    }),
+  ]);
 
   if (!tracking) {
     throw new Error(`Tracking ${trackingId} not found`);
   }
 
-  // Update status to CREATING
-  await prisma.tracking.update({
-    where: { id: trackingId },
-    data: { status: 'CREATING' },
-  });
-
   try {
-    // Find the userId that actually has the OAuth tokens (may differ from the requesting user)
-    const oauthToken = await prisma.oAuthToken.findFirst({
-      where: { tenantId, provider: 'google', scope: 'gtm' },
-      select: { userId: true },
-    });
     const tokenUserId = oauthToken?.userId || userId;
-
     const gtm = await getGTMClient(tokenUserId, tenantId);
 
     // Get customer's per-customer GTM container
@@ -60,7 +55,6 @@ export async function executeGTMSync(data: GTMSyncJob): Promise<{ success: boole
     let containerId = tracking.gtmContainerId || customer.gtmContainerId || undefined;
 
     if (!containerId || !accountId) {
-      // Fallback: create/find customer's dedicated container
       const { getOrCreateCustomerContainer } = await import('@/lib/google/gtm');
       const result = await getOrCreateCustomerContainer(tokenUserId, tenantId, customerId);
       accountId = result.accountId;
@@ -74,20 +68,27 @@ export async function executeGTMSync(data: GTMSyncJob): Promise<{ success: boole
       workspaceId = await getOrCreateWorkspace(gtm, accountId, containerId, workspaceName);
     }
 
-    // Ensure workspace has essential setup (built-in variables, Conversion Linker, etc.)
-    // This is idempotent — safe to call every time, skips items that already exist
-    try {
-      await setupWorkspaceEssentials(gtm, accountId, containerId, workspaceId);
-    } catch (error) {
-      console.warn('[GTM] Workspace essentials setup failed (non-blocking):', error);
-    }
-
-    if (action === 'create') {
-      // Get customer's GA4 measurement ID for the tag
-      let ga4Property = await prisma.gA4Property.findFirst({
+    // Run workspace essentials + GA4 lookup + stape lookup in parallel
+    // setupWorkspaceEssentials now returns cached triggers/tags lists
+    const [essentialsResult, ga4Property, stapeContainer] = await Promise.all([
+      setupWorkspaceEssentials(gtm, accountId, containerId, workspaceId).catch((error) => {
+        console.warn('[GTM] Workspace essentials setup failed (non-blocking):', error);
+        return null;
+      }),
+      prisma.gA4Property.findFirst({
         where: { customerId, tenantId, isActive: true },
         select: { measurementId: true },
-      });
+      }),
+      prisma.stapeContainer.findUnique({
+        where: { customerId },
+      }),
+    ]);
+
+    // Use cached lists from setupWorkspaceEssentials to avoid redundant API calls
+    const cachedTriggers = essentialsResult?.cachedTriggers || [];
+    const cachedTags = essentialsResult?.cachedTags || [];
+
+    if (action === 'create') {
       let measurementId = ga4Property?.measurementId || undefined;
 
       // Self-healing: if no measurement ID, create GA4 data stream on-demand
@@ -98,48 +99,52 @@ export async function executeGTMSync(data: GTMSyncJob): Promise<{ success: boole
           console.log(`[GTM] On-demand GA4 data stream created: ${measurementId}`);
         } catch (err) {
           console.error('[GTM] On-demand GA4 setup failed:', err);
-          // Let it fall through — createTagForTracking will throw a clear error
         }
       }
 
-      // Create trigger based on tracking type (same for both modes)
-      const trigger = await createTriggerForTracking(gtm, accountId, containerId, workspaceId, tracking);
-
-      // Check if customer has server-side tracking enabled
-      const stapeContainer = await prisma.stapeContainer.findUnique({
-        where: { customerId },
-      });
       const isServerSide = customer.serverSideEnabled && stapeContainer?.status === 'ACTIVE';
 
-      // Create client-side GA4 tag
+      // Create trigger using cached list (avoids redundant listTriggers call)
+      const trigger = await createTriggerForTracking(gtm, accountId, containerId, workspaceId, tracking, cachedTriggers);
+
+      // Create client-side GA4 tag using cached list (avoids redundant listTags call)
       const tag = await createTagForTracking(
         gtm, accountId, containerId, workspaceId, tracking, trigger.triggerId!, measurementId,
-        isServerSide ? `https://${stapeContainer!.serverDomain}` : undefined
+        isServerSide ? `https://${stapeContainer!.serverDomain}` : undefined,
+        cachedTags
       );
 
       // Create client-side Google Ads Conversion tag (awct) if applicable
       let clientAdsTagId: string | undefined;
       if (tracking.destinations.includes('GOOGLE_ADS') || tracking.destinations.includes('BOTH')) {
-        // Re-read tracking to get fresh adsConversionLabel (set by Ads sync which ran first)
-        const freshTracking = await prisma.tracking.findUnique({
-          where: { id: trackingId },
-          select: { adsConversionLabel: true, adsConversionValue: true },
-        });
-        const conversionLabel = freshTracking?.adsConversionLabel;
+        // Read fresh adsConversionLabel (set by Ads sync running in parallel)
+        // Retry up to 3 times with 1s delay if Ads sync hasn't completed yet
+        let conversionLabel: string | null = null;
+        let conversionValue: number | null = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const freshTracking = await prisma.tracking.findUnique({
+            where: { id: trackingId },
+            select: { adsConversionLabel: true, adsConversionValue: true },
+          });
+          conversionLabel = freshTracking?.adsConversionLabel || null;
+          conversionValue = freshTracking?.adsConversionValue ? Number(freshTracking.adsConversionValue) : null;
+          if (conversionLabel) break;
+          if (attempt < 2) {
+            console.log(`[GTM] Waiting for Ads conversion label (attempt ${attempt + 1}/3)...`);
+            await new Promise((r) => setTimeout(r, 1000));
+          }
+        }
 
         if (conversionLabel) {
-          // Parse "AW-123456789/abcDEF" into numeric conversionId and conversionLabel
           const slashIndex = conversionLabel.indexOf('/');
           const rawConversionId = slashIndex > 0 ? conversionLabel.substring(0, slashIndex) : conversionLabel;
-          // Strip "AW-" prefix — GTM awct tag expects just the numeric ID
           const conversionId = rawConversionId.replace(/^AW-/, '');
           const conversionLabelPart = slashIndex > 0 ? conversionLabel.substring(slashIndex + 1) : '';
 
           const adsTagName = `${tracking.name} - Ads Tag`;
 
-          // Check for existing tag (idempotent)
-          const existingTags = await listTags(gtm, accountId, containerId, workspaceId);
-          const existingAdsTag = existingTags.find((t) => t.name === adsTagName);
+          // Use cached tags list instead of re-fetching
+          const existingAdsTag = cachedTags.find((t) => t.name === adsTagName);
 
           if (existingAdsTag) {
             console.log(`[GTM] Found existing Ads tag "${adsTagName}" (${existingAdsTag.tagId})`);
@@ -151,7 +156,7 @@ export async function executeGTMSync(data: GTMSyncJob): Promise<{ success: boole
                 name: adsTagName,
                 conversionId,
                 conversionLabel: conversionLabelPart,
-                conversionValue: freshTracking?.adsConversionValue ? Number(freshTracking.adsConversionValue) : undefined,
+                conversionValue: conversionValue ?? undefined,
                 firingTriggerId: [trigger.triggerId!],
               }
             );
@@ -410,7 +415,8 @@ async function createTriggerForTracking(
   accountId: string,
   containerId: string,
   workspaceId: string,
-  tracking: { name: string; type: string; selector?: string | null; urlPattern?: string | null; config?: unknown }
+  tracking: { name: string; type: string; selector?: string | null; urlPattern?: string | null; config?: unknown },
+  cachedTriggers?: Awaited<ReturnType<typeof listTriggers>>
 ) {
   const triggerConfig: {
     name: string;
@@ -527,8 +533,8 @@ async function createTriggerForTracking(
       ];
   }
 
-  // Check for existing trigger with the same name (idempotent)
-  const existingTriggers = await listTriggers(gtm, accountId, containerId, workspaceId);
+  // Check for existing trigger with the same name (idempotent) — use cached list if available
+  const existingTriggers = cachedTriggers || await listTriggers(gtm, accountId, containerId, workspaceId);
   const existing = existingTriggers.find((t) => t.name === triggerConfig.name);
   if (existing) {
     console.log(`[GTM] Found existing trigger "${triggerConfig.name}" (${existing.triggerId})`);
@@ -546,7 +552,8 @@ async function createTagForTracking(
   tracking: { name: string; ga4EventName?: string | null },
   triggerId: string,
   measurementId?: string,
-  transportUrl?: string
+  transportUrl?: string,
+  cachedTags?: Awaited<ReturnType<typeof listTags>>
 ) {
   if (!measurementId) {
     throw new Error('GA4 Measurement ID is required to create a tracking tag. Please sync GA4 properties first.');
@@ -554,8 +561,8 @@ async function createTagForTracking(
 
   const tagName = `${tracking.name} - Tag`;
 
-  // Check for existing tag with the same name (idempotent)
-  const existingTags = await listTags(gtm, accountId, containerId, workspaceId);
+  // Check for existing tag with the same name (idempotent) — use cached list if available
+  const existingTags = cachedTags || await listTags(gtm, accountId, containerId, workspaceId);
   const existing = existingTags.find((t) => t.name === tagName);
   if (existing) {
     console.log(`[GTM] Found existing tag "${tagName}" (${existing.tagId})`);
