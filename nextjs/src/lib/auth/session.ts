@@ -53,24 +53,30 @@ export async function getSession(): Promise<SessionUser | null> {
   }
 }
 
+// In-memory session cache to avoid repeated Firebase verification + DB lookup
+// Cache key: token hash (first 32 chars), value: session user, TTL: 60s
+const sessionCache = new Map<string, { user: SessionUser; expiresAt: number }>();
+const SESSION_CACHE_TTL = 60_000; // 1 minute
+
 export async function getSessionFromRequest(request: NextRequest): Promise<SessionUser | null> {
   try {
     const authHeader = request.headers.get('authorization');
     const token = authHeader?.replace('Bearer ', '');
 
-    console.log('[Session] Auth header present:', !!authHeader);
-
     if (!token) {
-      console.log('[Session] No token found');
       return null;
     }
 
-    console.log('[Session] Token length:', token.length, 'Token prefix:', token.substring(0, 20));
+    // Check session cache first
+    const cacheKey = token.substring(0, 32);
+    const cached = sessionCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.user;
+    }
 
     let decodedToken;
     try {
       decodedToken = await verifyIdToken(token);
-      console.log('[Session] Token verified, uid:', decodedToken.uid);
     } catch (verifyError) {
       console.error('[Session] Token verification failed:', verifyError);
       return null;
@@ -88,13 +94,11 @@ export async function getSessionFromRequest(request: NextRequest): Promise<Sessi
       },
     });
 
-    console.log('[Session] User found:', !!user);
-
     if (!user || !user.firebaseId) {
       return null;
     }
 
-    return {
+    const sessionUser: SessionUser = {
       id: user.id,
       email: user.email,
       name: user.name,
@@ -102,6 +106,19 @@ export async function getSessionFromRequest(request: NextRequest): Promise<Sessi
       tenantId: user.tenantId,
       firebaseId: user.firebaseId,
     };
+
+    // Cache the session
+    sessionCache.set(cacheKey, { user: sessionUser, expiresAt: Date.now() + SESSION_CACHE_TTL });
+
+    // Evict stale entries periodically (keep cache small)
+    if (sessionCache.size > 100) {
+      const now = Date.now();
+      sessionCache.forEach((entry, key) => {
+        if (entry.expiresAt < now) sessionCache.delete(key);
+      });
+    }
+
+    return sessionUser;
   } catch (error) {
     console.error('[Session] Session verification error:', error);
     return null;

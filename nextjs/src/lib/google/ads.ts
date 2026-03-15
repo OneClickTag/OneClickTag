@@ -279,13 +279,15 @@ async function findConversionActionByName(
   customerId: string,
   name: string
 ): Promise<{ conversionActionId: string; conversionLabel: string } | null> {
+  // Escape both backslashes and single quotes for GAQL safety
+  const escapedName = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
   const query = `
     SELECT
       conversion_action.id,
       conversion_action.resource_name,
       conversion_action.tag_snippets
     FROM conversion_action
-    WHERE conversion_action.name = '${name.replace(/'/g, "\\'")}'
+    WHERE conversion_action.name = '${escapedName}'
     LIMIT 1
   `;
 
@@ -460,7 +462,9 @@ export async function getOrCreateOctLabel(
   const credentials = await oauth2Client.getAccessToken();
 
   try {
-    const query = `SELECT label.resource_name, label.name FROM label WHERE label.name = '${labelName}'`;
+    // Escape both backslashes and single quotes for GAQL safety
+    const escapedName = labelName.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const query = `SELECT label.resource_name, label.name FROM label WHERE label.name = '${escapedName}'`;
     const searchResponse = await fetch(
       `https://googleads.googleapis.com/v20/customers/${adsAccountId}/googleAds:searchStream`,
       {
@@ -490,14 +494,52 @@ export async function getOrCreateOctLabel(
     console.warn(`[Ads] Failed to search for existing labels:`, error);
   }
 
-  // Step 3: Create new label
-  const labelResourceName = await createLabel(userId, tenantId, adsAccountId, labelName);
+  // Step 3: Create new label (handle DUPLICATE_NAME race condition)
+  try {
+    const labelResourceName = await createLabel(userId, tenantId, adsAccountId, labelName);
 
-  await prisma.googleAdsAccount.update({
-    where: { id: adsAccountDbId },
-    data: { octLabelId: labelResourceName },
-  });
+    await prisma.googleAdsAccount.update({
+      where: { id: adsAccountDbId },
+      data: { octLabelId: labelResourceName },
+    });
 
-  console.log(`[Ads] Created OCT label "${labelName}" in account ${adsAccountId}`);
-  return labelResourceName;
+    console.log(`[Ads] Created OCT label "${labelName}" in account ${adsAccountId}`);
+    return labelResourceName;
+  } catch (error) {
+    // If label already exists (race condition or query escape issue), fetch it
+    if (error instanceof Error && error.message.includes('DUPLICATE_NAME')) {
+      console.log(`[Ads] Label "${labelName}" already exists, fetching it...`);
+      const oauth2ClientRetry = await getOAuth2ClientWithTokens(userId, tenantId, 'ads');
+      if (!oauth2ClientRetry) throw new Error('No Google Ads OAuth token found');
+      const retryCredentials = await oauth2ClientRetry.getAccessToken();
+      // Escape both backslashes and single quotes for GAQL safety
+      const escapedRetry = labelName.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      const retryQuery = `SELECT label.resource_name, label.name FROM label WHERE label.name = '${escapedRetry}'`;
+      const retryResponse = await fetch(
+        `https://googleads.googleapis.com/v20/customers/${adsAccountId}/googleAds:searchStream`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${retryCredentials.token}`,
+            'developer-token': GOOGLE_ADS_DEVELOPER_TOKEN,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ query: retryQuery }),
+        }
+      );
+
+      if (retryResponse.ok) {
+        const retryData = await retryResponse.json();
+        const existing = retryData[0]?.results?.[0]?.label;
+        if (existing?.resourceName) {
+          await prisma.googleAdsAccount.update({
+            where: { id: adsAccountDbId },
+            data: { octLabelId: existing.resourceName },
+          });
+          return existing.resourceName;
+        }
+      }
+    }
+    throw error;
+  }
 }

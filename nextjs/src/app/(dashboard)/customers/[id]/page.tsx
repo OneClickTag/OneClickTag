@@ -166,21 +166,16 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
     }
   }, [searchParams, id, queryClient]);
 
-  // Base customer data - always loaded (no Google Ads/GA4 data)
+  // Customer data - always includes Google Ads accounts (needed for settings & tracking creation)
   const { data: customer, isLoading: customerLoading } = useQuery({
     queryKey: ['customer', id],
-    queryFn: () => api.get<Customer>(`/api/customers/${id}`),
-  });
-
-  // Google data - only loaded when Settings tab is active
-  const { data: customerWithGoogle } = useQuery({
-    queryKey: ['customer', id, 'google'],
     queryFn: () => api.get<Customer>(`/api/customers/${id}?includeGoogleAds=true`),
-    enabled: activeTab === 'settings',
+    staleTime: 30_000,
+    enabled: api.tokenReady,
   });
 
-  // Use Google-enriched customer data for Settings tab fields
-  const settingsCustomer = customerWithGoogle || customer;
+  // Use single customer query for all tabs
+  const settingsCustomer = customer;
 
   const { data: trackings, isLoading: trackingsLoading } = useCustomerTrackings(id, {
     page: trackingPage,

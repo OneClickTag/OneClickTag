@@ -129,6 +129,7 @@ export function useTrackings(filters: TrackingFilters = {}) {
     queryKey: ['trackings', filters],
     queryFn: () => api.get<TrackingsResponse>(`/api/trackings?${queryString}`),
     staleTime: 30_000,
+    enabled: api.tokenReady,
   });
 }
 
@@ -138,7 +139,7 @@ export function useTracking(id: string) {
   return useQuery({
     queryKey: ['tracking', id],
     queryFn: () => api.get<Tracking>(`/api/trackings/${id}`),
-    enabled: !!id,
+    enabled: !!id && api.tokenReady,
   });
 }
 

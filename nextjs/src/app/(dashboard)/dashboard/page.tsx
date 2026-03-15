@@ -45,6 +45,8 @@ export default function DashboardPage() {
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['analytics', 'overview'],
     queryFn: () => api.get<AnalyticsOverview>('/api/analytics/overview'),
+    staleTime: 60_000,
+    enabled: api.tokenReady,
   });
 
   if (isError) {

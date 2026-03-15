@@ -102,6 +102,14 @@ export async function executeGTMSync(data: GTMSyncJob): Promise<{ success: boole
         }
       }
 
+      // Validate measurement ID BEFORE creating any GTM resources to prevent orphaned triggers
+      if (!measurementId) {
+        throw new Error(
+          'GA4 Measurement ID is required to create a tracking tag. ' +
+          'Please ensure GA4 properties are connected and synced, or contact support if on-demand setup failed.'
+        );
+      }
+
       const isServerSide = customer.serverSideEnabled && stapeContainer?.status === 'ACTIVE';
 
       // Create trigger using cached list (avoids redundant listTriggers call)
@@ -118,10 +126,10 @@ export async function executeGTMSync(data: GTMSyncJob): Promise<{ success: boole
       let clientAdsTagId: string | undefined;
       if (tracking.destinations.includes('GOOGLE_ADS') || tracking.destinations.includes('BOTH')) {
         // Read fresh adsConversionLabel (set by Ads sync running in parallel)
-        // Retry up to 3 times with 1s delay if Ads sync hasn't completed yet
+        // Retry up to 8 times with 2s delay (max 16s) to allow Ads sync time to complete
         let conversionLabel: string | null = null;
         let conversionValue: number | null = null;
-        for (let attempt = 0; attempt < 3; attempt++) {
+        for (let attempt = 0; attempt < 8; attempt++) {
           const freshTracking = await prisma.tracking.findUnique({
             where: { id: trackingId },
             select: { adsConversionLabel: true, adsConversionValue: true },
@@ -129,9 +137,9 @@ export async function executeGTMSync(data: GTMSyncJob): Promise<{ success: boole
           conversionLabel = freshTracking?.adsConversionLabel || null;
           conversionValue = freshTracking?.adsConversionValue ? Number(freshTracking.adsConversionValue) : null;
           if (conversionLabel) break;
-          if (attempt < 2) {
-            console.log(`[GTM] Waiting for Ads conversion label (attempt ${attempt + 1}/3)...`);
-            await new Promise((r) => setTimeout(r, 1000));
+          if (attempt < 7) {
+            console.log(`[GTM] Waiting for Ads conversion label (attempt ${attempt + 1}/8)...`);
+            await new Promise((r) => setTimeout(r, 2000));
           }
         }
 
@@ -175,17 +183,17 @@ export async function executeGTMSync(data: GTMSyncJob): Promise<{ success: boole
       let sgtmTagId: string | undefined;
       let sgtmTagIdAds: string | undefined;
 
-      if (isServerSide && stapeContainer!.gtmServerContainerId && stapeContainer!.gtmServerAccountId) {
-        const serverContainerId = stapeContainer!.gtmServerContainerId;
-        const serverAccountId = stapeContainer!.gtmServerAccountId;
+      if (isServerSide && stapeContainer && stapeContainer.gtmServerContainerId && stapeContainer.gtmServerAccountId) {
+        const serverContainerId = stapeContainer.gtmServerContainerId;
+        const serverAccountId = stapeContainer.gtmServerAccountId;
 
         // Get or create workspace in server container
         const serverWorkspaceId = await getOrCreateWorkspace(gtm, serverAccountId, serverContainerId);
 
         // Store workspace ID if not saved yet
-        if (!stapeContainer!.gtmServerWorkspaceId) {
+        if (!stapeContainer.gtmServerWorkspaceId) {
           await prisma.stapeContainer.update({
-            where: { id: stapeContainer!.id },
+            where: { id: stapeContainer.id },
             data: { gtmServerWorkspaceId: serverWorkspaceId },
           });
         }

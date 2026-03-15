@@ -50,6 +50,13 @@ export class InvalidCustomerDataError extends Error {
 function mapToResponseDto(customer: Record<string, unknown>): CustomerResponse {
   const connected = !!customer.googleAccountId;
 
+  // Support both full arrays and _count pattern for efficient list queries
+  const counts = customer._count as Record<string, number> | undefined;
+  const ga4Array = customer.ga4Properties as unknown[] | undefined;
+  const adsArray = customer.googleAdsAccounts as unknown[] | undefined;
+  const ga4Count = counts?.ga4Properties ?? ga4Array?.length ?? 0;
+  const adsCount = counts?.googleAdsAccounts ?? adsArray?.length ?? 0;
+
   return {
     id: customer.id as string,
     slug: customer.slug as string,
@@ -81,15 +88,15 @@ function mapToResponseDto(customer: Record<string, unknown>): CustomerResponse {
           email: customer.googleEmail as string | undefined,
           connectedAt: (customer.updatedAt as Date)?.toISOString(),
           hasGTMAccess: !!(customer.gtmContainerId),
-          hasGA4Access: !!((customer.ga4Properties as unknown[])?.length),
-          hasAdsAccess: !!((customer.googleAdsAccounts as unknown[])?.length),
+          hasGA4Access: ga4Count > 0,
+          hasAdsAccess: adsCount > 0,
           gtmError: null,
           ga4Error: null,
           adsError: null,
           gtmAccountId: customer.gtmAccountId as string | null,
           gtmContainerId: customer.gtmContainerId as string | null,
-          ga4PropertyCount: (customer.ga4Properties as unknown[])?.length || 0,
-          adsAccountCount: (customer.googleAdsAccounts as unknown[])?.length || 0,
+          ga4PropertyCount: ga4Count,
+          adsAccountCount: adsCount,
         }
       : undefined,
     createdAt: customer.createdAt as Date,
@@ -244,8 +251,16 @@ export async function findAllCustomers(
       take: limit,
       include: {
         googleAdsAccounts: includeGoogleAds,
-        ga4Properties: true,
-        stapeContainer: true,
+        ga4Properties: {
+          select: { id: true },
+          take: 1,
+        },
+        _count: {
+          select: {
+            googleAdsAccounts: true,
+            ga4Properties: true,
+          },
+        },
       },
     }),
     prisma.customer.count({ where }),

@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { User } from 'firebase/auth';
 import { onAuthChange, getIdToken, logout as firebaseLogout } from '@/lib/auth/firebase-client';
 
@@ -16,6 +16,7 @@ interface AuthContextType {
   user: AuthUser | null;
   firebaseUser: User | null;
   loading: boolean;
+  tokenReady: boolean;
   login: (email: string, password: string, turnstileToken?: string) => Promise<void>;
   loginWithGoogle: (turnstileToken?: string) => Promise<void>;
   register: (email: string, password: string, name: string, turnstileToken?: string) => Promise<void>;
@@ -54,30 +55,77 @@ async function authenticateWithBackend(
   return response.json();
 }
 
+// Cache key for persisted auth session
+const AUTH_CACHE_KEY = 'oneclicktag_auth_session';
+
+function getCachedSession(): { user: AuthUser; accessToken: string; cachedAt: number } | null {
+  try {
+    const raw = localStorage.getItem(AUTH_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    // Cache valid for 30 minutes
+    if (Date.now() - parsed.cachedAt > 30 * 60 * 1000) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function setCachedSession(user: AuthUser, accessToken: string) {
+  try {
+    localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify({ user, accessToken, cachedAt: Date.now() }));
+  } catch { /* ignore */ }
+}
+
+function clearCachedSession() {
+  try { localStorage.removeItem(AUTH_CACHE_KEY); } catch { /* ignore */ }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const restoredFromCache = useRef(false);
+  const firebaseUserRef = useRef<User | null>(null);
+  const [tokenReady, setTokenReady] = useState(false);
+
+  // Instantly restore from localStorage cache on mount — runs before Firebase SDK init
+  useEffect(() => {
+    const cached = getCachedSession();
+    if (cached) {
+      document.cookie = `auth-token=${cached.accessToken}; path=/; max-age=${60 * 60 * 24 * 7}`;
+      setUser(cached.user);
+      setLoading(false);
+      restoredFromCache.current = true;
+    }
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthChange(async (fbUser) => {
       setFirebaseUser(fbUser);
+      firebaseUserRef.current = fbUser;
+      setTokenReady(true);
 
       if (fbUser) {
         try {
-          // Get Firebase ID token and authenticate with backend
+          // Authenticate with backend (background refresh if cached, blocking if not)
           const idToken = await fbUser.getIdToken();
           const data = await authenticateWithBackend(idToken);
-          // Set auth cookie for middleware
-          document.cookie = `auth-token=${data.accessToken}; path=/; max-age=${60 * 60 * 24 * 7}`; // 7 days
+          document.cookie = `auth-token=${data.accessToken}; path=/; max-age=${60 * 60 * 24 * 7}`;
+          setCachedSession(data.user, data.accessToken);
           setUser(data.user);
         } catch (error) {
-          console.error('Failed to authenticate with backend:', error);
-          document.cookie = 'auth-token=; path=/; max-age=0'; // Clear cookie
-          setUser(null);
+          // If we restored from cache, keep it — don't log them out for a transient failure
+          if (!restoredFromCache.current) {
+            console.error('Failed to authenticate with backend:', error);
+            document.cookie = 'auth-token=; path=/; max-age=0';
+            clearCachedSession();
+            setUser(null);
+          }
         }
       } else {
-        document.cookie = 'auth-token=; path=/; max-age=0'; // Clear cookie
+        document.cookie = 'auth-token=; path=/; max-age=0';
+        clearCachedSession();
         setUser(null);
       }
 
@@ -92,10 +140,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const userCredential = await loginWithEmail(email, password);
     const idToken = await userCredential.user.getIdToken();
 
-    // Authenticate with backend
     const data = await authenticateWithBackend(idToken, turnstileToken);
-    // Set auth cookie for middleware
-    document.cookie = `auth-token=${data.accessToken}; path=/; max-age=${60 * 60 * 24 * 7}`; // 7 days
+    document.cookie = `auth-token=${data.accessToken}; path=/; max-age=${60 * 60 * 24 * 7}`;
+    setCachedSession(data.user, data.accessToken);
     setUser(data.user);
   };
 
@@ -104,10 +151,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const userCredential = await firebaseLoginWithGoogle();
     const idToken = await userCredential.user.getIdToken();
 
-    // Authenticate with backend
     const data = await authenticateWithBackend(idToken, turnstileToken);
-    // Set auth cookie for middleware
-    document.cookie = `auth-token=${data.accessToken}; path=/; max-age=${60 * 60 * 24 * 7}`; // 7 days
+    document.cookie = `auth-token=${data.accessToken}; path=/; max-age=${60 * 60 * 24 * 7}`;
+    setCachedSession(data.user, data.accessToken);
     setUser(data.user);
   };
 
@@ -138,13 +184,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     await firebaseLogout();
-    document.cookie = 'auth-token=; path=/; max-age=0'; // Clear cookie
+    document.cookie = 'auth-token=; path=/; max-age=0';
+    clearCachedSession();
     setUser(null);
     setFirebaseUser(null);
   };
 
   const getToken = async () => {
-    return getIdToken();
+    // Try Firebase's current user first, fall back to ref
+    const token = await getIdToken();
+    if (token) return token;
+    if (firebaseUserRef.current) return firebaseUserRef.current.getIdToken();
+    return null;
   };
 
   return (
@@ -153,6 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         firebaseUser,
         loading,
+        tokenReady,
         login,
         loginWithGoogle,
         register,

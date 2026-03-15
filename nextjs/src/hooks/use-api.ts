@@ -9,7 +9,7 @@ interface ApiOptions extends RequestInit {
 }
 
 export function useApi() {
-  const { getToken } = useAuth();
+  const { getToken, tokenReady } = useAuth();
 
   const request = useCallback(
     async <T>(url: string, options: ApiOptions = {}): Promise<T> => {
@@ -85,5 +85,5 @@ export function useApi() {
     [request]
   );
 
-  return { get, post, put, patch, delete: del, request };
+  return { get, post, put, patch, delete: del, request, tokenReady };
 }

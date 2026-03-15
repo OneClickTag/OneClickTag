@@ -152,8 +152,12 @@ export async function GET(request: NextRequest) {
 // ============================================================================
 
 export async function POST(request: NextRequest) {
+  let session;
+  let customerId: string | undefined;
+  let tracking: any;
+
   try {
-    const session = await getSessionFromRequest(request);
+    session = await getSessionFromRequest(request);
     requireTenant(session);
 
     const body = await request.json();
@@ -180,8 +184,10 @@ export async function POST(request: NextRequest) {
       adsConversionValue,
       ga4PropertyId,
       adsAccountId,
-      customerId,
+      customerId: extractedCustomerId,
     } = validatedData.data;
+
+    customerId = extractedCustomerId;
 
     // Verify customer belongs to user
     const customer = await prisma.customer.findFirst({
@@ -215,7 +221,7 @@ export async function POST(request: NextRequest) {
     const effectiveGA4EventName = ga4EventName || getDefaultGA4EventName(type);
 
     // Create tracking record with PENDING status
-    const tracking = await prisma.tracking.create({
+    tracking = await prisma.tracking.create({
       data: {
         name,
         type,
@@ -296,6 +302,18 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error('Error creating tracking:', error);
+
+    // If tracking was created but sync failed, mark it as FAILED
+    if (tracking && customerId && session) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      await prisma.tracking.update({
+        where: { id: tracking.id },
+        data: {
+          status: TrackingStatus.FAILED,
+          lastError: errorMessage,
+        },
+      }).catch(() => null);
+    }
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

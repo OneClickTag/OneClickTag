@@ -59,6 +59,8 @@ export function useCustomers(filters: CustomerFilters = {}) {
     queryKey: ['customers', filters],
     queryFn: () => api.get<CustomersResponse>(`/api/customers?${queryString}`),
     staleTime: 30_000,
+    placeholderData: (prev: CustomersResponse | undefined) => prev,
+    enabled: api.tokenReady,
   });
 }
 
@@ -68,7 +70,8 @@ export function useCustomer(id: string) {
   return useQuery({
     queryKey: ['customer', id],
     queryFn: () => api.get<Customer>(`/api/customers/${id}`),
-    enabled: !!id,
+    enabled: !!id && api.tokenReady,
+    staleTime: 30_000,
   });
 }
 

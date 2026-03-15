@@ -4,7 +4,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionFromRequest, requireTenant } from '@/lib/auth/session';
-import prisma from '@/lib/prisma';
 import {
   findCustomerById,
   findCustomerBySlug,
@@ -175,32 +174,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       customer = await findCustomerBySlug(id, session.tenantId, session.id, includeGoogleAds);
     } else {
       customer = await findCustomerById(id, session.tenantId, session.id, includeGoogleAds);
-    }
-
-    // Augment with GTM fields via raw SQL (Prisma client may have stale schema cache)
-    if (customer.id) {
-      try {
-        const gtmData = await prisma.$queryRawUnsafe<Array<{
-          gtmAccountId: string | null;
-          gtmContainerId: string | null;
-          gtmWorkspaceId: string | null;
-          gtmContainerName: string | null;
-        }>>(
-          `SELECT "gtmAccountId", "gtmContainerId", "gtmWorkspaceId", "gtmContainerName" FROM customers WHERE id = $1`,
-          customer.id
-        );
-        if (gtmData[0]) {
-          customer.gtmContainerId = gtmData[0].gtmContainerId;
-          customer.gtmWorkspaceId = gtmData[0].gtmWorkspaceId;
-          customer.gtmContainerName = gtmData[0].gtmContainerName;
-          // Update googleAccount status based on actual GTM data
-          if (customer.googleAccount) {
-            customer.googleAccount.hasGTMAccess = !!gtmData[0].gtmContainerId;
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to fetch GTM fields via raw SQL:', e);
-      }
     }
 
     return NextResponse.json(customer);
